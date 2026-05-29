@@ -1,539 +1,250 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, IconButton, ThemeProvider, createTheme, CssBaseline, Typography, Button } from '@mui/material';
-import SettingsIcon from '@mui/icons-material/Settings';
-import HomeIcon from '@mui/icons-material/Home';
-import SecurityIcon from '@mui/icons-material/Security';
-import FlashOnIcon from '@mui/icons-material/FlashOn';
-import MemoryIcon from '@mui/icons-material/Memory';
-import RouterIcon from '@mui/icons-material/Router';
-import ApiIcon from '@mui/icons-material/Api';
-import Home from './pages/Home.jsx';
-import CertificatesPage from './pages/CertificatesPage.jsx';
-import NordicFlashPage from './pages/NordicFlashPage.jsx';
-import SilabsFlashPage from './pages/SilabsFlashPage.jsx';
-import EfdFlashPage from './pages/EfdFlashPage.jsx';
-import RfdFlashPage from './pages/RfdFlashPage.jsx';
-import FilesPage from './pages/FilesPage.jsx';
-import ApiTestPage from './pages/ApiTestPage.jsx';
-import Page7 from './pages/Page7.jsx';
-import EnvSettings from './pages/settings/EnvSettings.jsx';
-import NordicPathsSettings from './pages/settings/NordicPathsSettings.jsx';
-import SilabsPathsSettings from './pages/settings/SilabsPathsSettings.jsx';
-import ApiSettings from './pages/settings/ApiSettings.jsx';
-import Setting5 from './pages/settings/Setting5.jsx';
-import { FlashingProvider, useFlashing } from './contexts/FlashingContext.jsx';
-import { PostmanProvider } from './contexts/PostmanContext.jsx';
-import { CertificatesProvider } from './contexts/CertificatesContext.jsx';
-import {
-  PRODUCT_NAME,
-  getVisiblePagesForEdition,
-  isExternalSettingsTabVisible,
-} from './productConfig.js';
-import CloseIcon from '@mui/icons-material/Close';
-import MinimizeIcon from '@mui/icons-material/Minimize';
-import CropSquareIcon from '@mui/icons-material/CropSquare';
-import { isEqual } from 'lodash';
+// ── QA Touchstone — app shell, routing, send flow ──────────────────────────
+// Ported from the Claude Design redesign. The send flow is wired to the real
+// Tauri HTTP backend via executeRequest (with a canned-response fallback).
+import React from 'react';
+import './qa/setup.js';
+import { Icon } from './qa/components.jsx';
+import { NavRail, CollectionsPanel } from './qa/Sidebar.jsx';
+import { RequestBuilder } from './qa/RequestBuilder.jsx';
+import { ResponsePanel } from './qa/ResponsePanel.jsx';
+import { HomePage } from './qa/HomePage.jsx';
+import { SettingsPage } from './qa/SettingsPage.jsx';
+import { PerfTest } from './qa/PerfTest.jsx';
+import { RealtimePage } from './qa/Realtime.jsx';
+import { Runner } from './qa/Runner.jsx';
+import { DocsPage } from './qa/Docs.jsx';
+import { MonitorsPage } from './qa/Monitors.jsx';
+import { TestGen } from './qa/TestGen.jsx';
+import { executeRequest } from './qa/executor.js';
 
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-  },
-  // By spreading the default breakpoints, we ensure the theme is responsive.
-  breakpoints: {
-    ...createTheme().breakpoints,
-  },
-});
+const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
 
-// Modern pill-style navigation component
-function NavigationPills({ tabs, activeTab, onChange, isFlashing }) {
-  return (
-    <Box sx={{
-      display: 'flex',
-      gap: 0.5,
-      padding: '6px',
-      backgroundColor: 'rgba(0,0,0,0.4)', // Use more opaque black background
-      borderRadius: '20px',
-      backdropFilter: 'blur(12px)', // Enhanced blur effect
-      border: '1px solid rgba(255,255,255,0.15)', // Slightly enhanced border
-      boxShadow: '0 4px 12px rgba(0,0,0,0.3)', // Add shadow for layered effect
-      maxWidth: {
-        xs: 'calc(100vw - 120px)', // Smaller space for controls in mobile
-        sm: 'calc(100vw - 180px)', // Medium space for tablet
-        md: 'calc(100vw - 400px)'  // Full space for desktop
-      },
-      overflow: 'hidden',
-      // Ensure the navigation is always centered within its container
-      margin: '0 auto'
-    }}>
-      {tabs.map((tab, index) => (
-        <Button
-          key={tab.key}
-          onClick={() => !isFlashing && onChange(index)}
-          disabled={isFlashing}
-          startIcon={tab.icon}
-          data-testid={`nav-button-${tab.key}`}
-          sx={{
-            minWidth: {
-              xs: '40px',      // Fixed width for icon-only mode
-              sm: '40px',      // Fixed width for icon-only mode
-              md: 'auto'       // Auto width for full mode
-            },
-            padding: {
-              xs: '8px 8px',   // Small screen: square padding for icons
-              sm: '8px 8px',   // Medium screen: square padding for icons
-              md: '8px 16px'   // Large screen: normal padding
-            },
-            borderRadius: '16px',
-            textTransform: 'none',
-            fontSize: '13px',
-            fontWeight: activeTab === index ? 500 : 400,
-            color: activeTab === index ? (isFlashing ? 'rgba(255,255,255,0.9)' : '#000') : 'rgba(255,255,255,0.8)',
-            backgroundColor: activeTab === index ? (isFlashing ? 'rgba(255,255,255,0.2)' : '#ffffff') : 'transparent',
-            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            cursor: isFlashing ? 'not-allowed' : 'pointer',
-            opacity: isFlashing && activeTab !== index ? 0.6 : 1,
-            '&:hover': {
-              backgroundColor: isFlashing ? (activeTab === index ? 'rgba(255,255,255,0.2)' : 'transparent') : (activeTab === index ? '#ffffff' : 'rgba(255,255,255,0.12)'),
-              color: isFlashing ? (activeTab === index ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.8)') : (activeTab === index ? '#000' : '#ffffff'),
-              transform: isFlashing ? 'none' : 'translateY(-1px)'
-            },
-            '&:disabled': {
-              color: 'rgba(255,255,255,0.5)'
-            },
-            '& .MuiButton-startIcon': {
-              marginRight: {
-                xs: '0px',   // Small screen: no spacing (icon only)
-                sm: '0px',   // Medium screen: no spacing (icon only) 
-                md: '6px'    // Large screen: normal spacing
-              },
-              '& svg': {
-                fontSize: '16px'
-              }
-            },
-            // Center the icon when text is hidden
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}
-        >
-          {/* Use span to control text display */}
-          <Box 
-            component="span" 
-            sx={{
-              display: {
-                xs: 'none',     // Small screen: hide text, show icons only
-                sm: 'none',     // Medium screen: hide text
-                md: 'inline'    // Large screen: show text
-              }
-            }}
-          >
-            {tab.label}
-          </Box>
-        </Button>
-      ))}
-    </Box>
-  );
-}
+const DEFAULT_HEADERS = [{ key: 'Accept', value: 'application/json', on: true }];
 
-// Modern window controls component
-function WindowControls({ onClose, onMinimize, onMaximize }) {
-  return (
-    <Box sx={{ display: 'flex', gap: 0.5, mr: 2, alignItems: 'center' }}>
-      <IconButton 
-        onClick={onMinimize} 
-        size="small"
-        aria-label="minimize"
-        sx={{ 
-          color: 'rgba(255,255,255,0.6)', 
-          transition: 'all 0.2s ease',
-          '&:hover': { 
-            color: '#fff', 
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            transform: 'scale(1.05)'
-          }
-        }}
-      >
-        <MinimizeIcon fontSize="small" />
-      </IconButton>
-      
-      <IconButton 
-        onClick={onMaximize} 
-        size="small"
-        aria-label="maximize"
-        sx={{ 
-          color: 'rgba(255,255,255,0.6)', 
-          transition: 'all 0.2s ease',
-          '&:hover': { 
-            color: '#fff', 
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            transform: 'scale(1.05)'
-          }
-        }}
-      >
-        <CropSquareIcon fontSize="small" />
-      </IconButton>
-      
-      <IconButton 
-        onClick={onClose} 
-        size="small"
-        aria-label="close"
-        sx={{ 
-          color: 'rgba(255,255,255,0.6)', 
-          transition: 'all 0.2s ease',
-          '&:hover': { 
-            color: '#ff6b6b', 
-            backgroundColor: 'rgba(255,107,107,0.1)',
-            transform: 'scale(1.05)'
-          }
-        }}
-      >
-        <CloseIcon fontSize="small" />
-      </IconButton>
-    </Box>
-  );
-}
+const ROUTE_LABEL = { home: 'Home', api: 'API Client', realtime: 'Realtime', runner: 'Runner', perf: 'Performance', testgen: 'Test Gen', docs: 'API Docs', monitors: 'Monitors', settings: 'Settings' };
 
-function TabPanel({ children, value, index }) {
-  // Only render children when tab is active to avoid DataGrid height issues
-  if (value !== index) {
-    return null;
+// Which collection owns a given request id (for collection-scoped variables).
+function collectionOf(reqId) {
+  for (const c of window.QA.COLLECTIONS) {
+    for (const f of c.folders) if (f.requests.some(r => r.id === reqId)) return c.id;
   }
-
-  return (
-    <Box 
-      role="tabpanel" 
-      sx={{ 
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0
-      }}
-    >
-      <Box sx={{ 
-        p: 2, 
-        height: '100%',
-        overflow: 'auto',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 0
-      }}>
-        {children}
-      </Box>
-    </Box>
-  );
+  return null;
+}
+// Best-effort host from an env base URL, for matching cookies to a request.
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
+}
+function cookieMatches(ck, host) {
+  if (!ck.on || !host) return false;
+  return host === ck.domain || host.endsWith('.' + ck.domain) || ck.domain.endsWith('.' + host) || ck.domain === host;
 }
 
-function AppContent({ isSettingsWindow }) {
-  const [value, setValue] = useState(0);
-  const { isFlashing } = useFlashing();
-  const [visiblePages, setVisiblePages] = useState(getVisiblePagesForEdition());
-
-  useEffect(() => {
-    console.log('[React] Initializing config listener');
-    
-    const handleConfigUpdate = (newConfig) => {
-      console.log('[React] Received config-updated event:', newConfig);
-      try {
-        if (newConfig && typeof newConfig === 'object' && newConfig.visiblePages) {
-          // Deep compare to avoid unnecessary re-renders and state resets
-          setVisiblePages(currentVisiblePages => {
-            const nextVisiblePages = getVisiblePagesForEdition(newConfig.visiblePages);
-            if (!isEqual(currentVisiblePages, nextVisiblePages)) {
-              console.log('[React] visiblePages have changed. Updating state:', nextVisiblePages);
-              return nextVisiblePages;
-            }
-            console.log('[React] visiblePages are the same. No state update needed.');
-            return currentVisiblePages;
-          });
-        } else {
-          console.warn('[React] Invalid config received or missing visiblePages:', newConfig);
-        }
-      } catch (error) {
-        console.error('[React] Error handling config update:', error);
-      }
-    };
-
-    window.electronAPI.onConfigUpdated(handleConfigUpdate);
-    
-    return () => {
-      console.log('[React] Cleaning up config listener');
-      window.electronAPI.removeConfigListener(handleConfigUpdate);
-    };
-  }, []);
-
-  const loadVisiblePages = useCallback(async () => {
-    try {
-      const config = await window.electronAPI.loadConfig();
-      setVisiblePages(getVisiblePagesForEdition(config.visiblePages));
-    } catch (error) {
-      console.error('Error loading visible pages config:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadVisiblePages();
-  }, [loadVisiblePages]);
-
-  // Listen for tab change requests from Home component
-  useEffect(() => {
-    const handleTabChangeRequest = (event) => {
-      const { newValue } = event.detail;
-      console.log('[App] Received tab change request to:', newValue);
-      handleChange(newValue);
-    };
-
-    window.addEventListener('requestTabChange', handleTabChangeRequest);
-    
-    return () => {
-      window.removeEventListener('requestTabChange', handleTabChangeRequest);
-    };
-  }, []);
-
-  useEffect(() => {
-    // Reset to first tab when visible pages change - but only for main window, not settings window
-    if (!isSettingsWindow) {
-      setValue(0);
-    }
-  }, [visiblePages, isSettingsWindow]);
-
-  const handleChange = (newValue) => {
-    const maxValue = getFilteredTabs().length - 1;
-    const clampedValue = Math.min(newValue, maxValue);
-    
-    if (!isFlashing) {
-      setValue(clampedValue);
-      
-      // Emit a custom event when tab changes to notify components
-      const tabChangeEvent = new CustomEvent('tabChanged', { 
-        detail: { 
-          oldValue: value, 
-          newValue: clampedValue,
-          timestamp: Date.now()
-        } 
-      });
-      window.dispatchEvent(tabChangeEvent);
-      console.log('[DEBUG App] Tab changed from', value, 'to', clampedValue);
-    }
+function buildReq(id) {
+  const { COLLECTIONS, REQUEST_DETAILS } = window.QA;
+  const all = COLLECTIONS.flatMap(c => c.folders.flatMap(f => f.requests));
+  const meta = all.find(r => r.id === id) || all[0];
+  const det = REQUEST_DETAILS[meta.id] || {};
+  const isGql = !!det.graphql;
+  return {
+    id: meta.id,
+    method: meta.method,
+    url: meta.path.split('?')[0],
+    params: (det.params || []).map(p => ({ ...p })),
+    headers: DEFAULT_HEADERS.map(h => ({ ...h })),
+    bodyMode: isGql ? 'graphql' : (det.body ? 'json' : 'none'),
+    body: det.body || '',
+    gqlQuery: isGql ? det.graphql.query : '',
+    gqlVars: isGql ? det.graphql.variables : '',
+    form: [],
+    auth: {
+      type: det.auth || 'none',
+      bearer: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3MzAxIn0.demo',
+      apiKey: { key: 'x-api-key', value: 'sk_live_4f8a91c2e7', placement: 'header' },
+      basic: { user: 'qa-runner', pass: 'correct horse battery' },
+      aws: { profile: 'acme-staging', service: 'execute-api', region: 'us-east-1' },
+      oauth2: { grant: 'client_credentials', authUrl: 'https://auth.acme.dev/authorize', tokenUrl: 'https://auth.acme.dev/oauth/token', clientId: '{{clientId}}', clientSecret: '', scope: 'read write' },
+    },
   };
-
-  const handleSettingsClick = () => {
-    if (window.electronAPI) {
-      window.electronAPI.openSettings();
-    } else {
-      console.log('Electron API not available');
-    }
-  };
-
-  const handleClose = () => {
-    if (window.electronAPI) {
-      window.electronAPI.closeWindow(isSettingsWindow ? 'settings' : 'main');
-    }
-  };
-
-  const handleMinimize = () => {
-    if (window.electronAPI) {
-      window.electronAPI.minimizeWindow(isSettingsWindow ? 'settings' : 'main');
-    }
-  };
-
-  const handleMaximize = () => {
-    if (window.electronAPI) {
-      window.electronAPI.maximizeWindow(isSettingsWindow ? 'settings' : 'main');
-    }
-  };
-
-  const mainTabs = [
-    { label: "Home", key: "home", icon: <HomeIcon /> },
-    visiblePages.credentials && { label: "Certificates", key: "tab1", icon: <SecurityIcon /> },
-    visiblePages.flashNordic && { label: "Nordic", key: "tab2", icon: <FlashOnIcon /> },
-    visiblePages.flashSilabs && { label: "Silabs", key: "tab3", icon: <MemoryIcon /> },
-    visiblePages.flashEFD && { label: "EFD", key: "tab4", icon: <MemoryIcon /> },
-    visiblePages.flashRFD && { label: "RFD", key: "tab5", icon: <RouterIcon /> },
-    visiblePages.tab6 && { label: "Files", key: "tab6", icon: <ApiIcon /> },
-    visiblePages.apiTest && { label: "API", key: "apiTest", icon: <ApiIcon /> },
-    visiblePages.tab8 && { label: "Tab 8", key: "tab8", icon: <ApiIcon /> }
-  ].filter(Boolean);
-
-  console.log('[React] Current visiblePages:', visiblePages);
-  console.log('[React] Rendered tabs:', mainTabs.map(t => t.label));
-
-  const settingsTabs = [
-    { label: "ENV", key: "setting1", icon: <SettingsIcon /> },
-    { label: "Nordic Paths", key: "setting2", icon: <FlashOnIcon /> },
-    { label: "Silabs Paths", key: "setting3", icon: <MemoryIcon /> },
-    { label: "API Setting", key: "apiSettings", icon: <ApiIcon /> },
-    { label: "Setting 5", key: "setting5", icon: <SettingsIcon /> }
-  ].filter((tab) => isExternalSettingsTabVisible(tab.key));
-
-  const settingsPages = [
-    { key: "setting1", component: EnvSettings },
-    { key: "setting2", component: NordicPathsSettings },
-    { key: "setting3", component: SilabsPathsSettings },
-    { key: "apiSettings", component: ApiSettings },
-    { key: "setting5", component: Setting5 }
-  ].filter((page) => isExternalSettingsTabVisible(page.key));
-
-  const getFilteredTabs = () => {
-    return isSettingsWindow ? settingsTabs : mainTabs;
-  };
-
-  const getFilteredPages = () => {
-    const pages = [
-      { key: "home", component: Home },
-      visiblePages.credentials && { key: "tab1", component: CertificatesPage },
-      visiblePages.flashNordic && { key: "tab2", component: NordicFlashPage },
-      visiblePages.flashSilabs && { key: "tab3", component: SilabsFlashPage },
-      visiblePages.flashEFD && { key: "tab4", component: EfdFlashPage },
-      visiblePages.flashRFD && { key: "tab5", component: RfdFlashPage },
-      visiblePages.tab6 && { key: "tab6", component: FilesPage },
-      visiblePages.apiTest && { key: "apiTest", component: ApiTestPage },
-      visiblePages.tab8 && { key: "tab8", component: Page7 }
-    ].filter(Boolean);
-
-    console.log('Filtered pages:', pages.map(p => p.key));
-    return pages;
-  };
-
-  return (
-    <Box sx={{ 
-      width: '100%', 
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      {/* Unified Header Bar */}
-      <Box sx={{
-        height: '56px',
-        background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
-        WebkitAppRegion: 'drag',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-        position: 'relative',
-        zIndex: 1000
-      }}>
-        {/* App Title */}
-        <Typography variant="h6" sx={{ 
-          ml: 2, 
-          color: '#ffffff', 
-          fontWeight: 300,
-          fontSize: '14px',
-          opacity: 0.9,
-          letterSpacing: '0.5px'
-        }}>
-          {isSettingsWindow ? 'Settings' : PRODUCT_NAME}
-        </Typography>
-        
-        {/* Navigation Pills - Centered */}
-        <Box sx={{ 
-          flexGrow: 1, 
-          display: 'flex', 
-          justifyContent: 'center',
-          alignItems: 'center',
-          WebkitAppRegion: 'no-drag',
-          // Ensure proper centering by accounting for left and right content
-          position: 'relative'
-        }}>
-          <NavigationPills 
-            tabs={getFilteredTabs()}
-            activeTab={value}
-            onChange={handleChange}
-            isFlashing={isFlashing}
-          />
-        </Box>
-        
-        {/* Right side controls */}
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 1,
-          WebkitAppRegion: 'no-drag'
-        }}>
-          {!isSettingsWindow && (
-            <IconButton 
-              color="inherit" 
-              aria-label="settings" 
-              onClick={handleSettingsClick}
-              sx={{ 
-                color: 'rgba(255,255,255,0.8)',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  color: '#ffffff',
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  transform: 'scale(1.05)'
-                }
-              }}
-              size="small"
-            >
-              <SettingsIcon fontSize="small" />
-            </IconButton>
-          )}
-          
-          {/* Window Controls */}
-          <WindowControls 
-            onClose={handleClose}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
-          />
-        </Box>
-      </Box>
-
-      {/* Content Area */}
-      <Box sx={{ 
-        flexGrow: 1, 
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: '#121212',
-        height: 'calc(100vh - 56px)',
-        minHeight: 0
-      }}>
-        {isSettingsWindow ? (
-          settingsPages.map((page, index) => {
-            const Component = page.component;
-            return (
-              <TabPanel value={value} index={index} key={page.key}>
-                <Component />
-              </TabPanel>
-            );
-          })
-        ) : (
-          getFilteredPages().map((page, index) => {
-            const Component = page.component;
-            return (
-              <TabPanel value={value} index={index} key={page.key}>
-                <Component />
-              </TabPanel>
-            );
-          })
-        )}
-      </Box>
-    </Box>
-  );
 }
 
 function App() {
-  const [isSettingsWindow, setIsSettingsWindow] = useState(false);
+  const rootRef = useRefApp(null);
+  const [accent, setAccent] = useStateApp(() => { try { return localStorage.getItem('qa_accent') || 'auto'; } catch { return 'auto'; } });
 
-  useEffect(() => {
-    // 先看 URL query（相容舊行為/測試），再退回 Tauri window label
-    const windowName = new URLSearchParams(window.location.search).get('window') || window.__WINDOW_LABEL__;
-    setIsSettingsWindow(windowName === 'settings');
-  }, []);
+  const [route, setRoute] = useStateApp('home');
+  const [settingsTab, setSettingsTab] = useStateApp('appearance');
+  const [env, setEnv] = useStateApp(window.QA.ENVIRONMENTS[2]); // Staging
+  const [vars, setVars] = useStateApp(() => JSON.parse(JSON.stringify(window.QA.VARIABLES)));
+  const [localVars, setLocalVars] = useStateApp({}); // { [reqId]: [{key,value,on}] }
+  const [cookies, setCookies] = useStateApp(() => window.QA.COOKIES.map(c => ({ ...c })));
+  const [sslVerify, setSslVerify] = useStateApp(true);
+  const [tests, setTests] = useStateApp({});
+  const [req, setReq] = useStateApp(() => buildReq('usr-list'));
+  const [respState, setRespState] = useStateApp('empty'); // empty | loading | done
+  const [response, setResponse] = useStateApp(null);
+  const [history, setHistory] = useStateApp(window.QA.SEED_HISTORY.map(h => ({ ...h })));
+  const [dataVersion, setDataVersion] = useStateApp(0); // bumps when collections are imported
+  const [cookieToast, setCookieToast] = useStateApp(null); // {name, domain} captured from Set-Cookie
+  const [oauthTokens, setOauthTokens] = useStateApp({}); // { [reqId]: { token, type, expiresAt, scope } }
+  const [logoFlash, setLogoFlash] = useStateApp(0); // bumps on a successful response to flash the brand mark
+  const sendSeq = useRefApp(0);
+
+  // Apply theme whenever the accent changes; persist it.
+  useEffectApp(() => {
+    window.QATheme.applyTheme(rootRef.current, { direction: 'graphite', accent, density: 'comfortable', uiFont: 'mono' });
+    try { localStorage.setItem('qa_accent', accent); } catch {}
+  }, [accent]);
+
+  const openSettings = (tab = 'appearance') => { setSettingsTab(tab); setRoute('settings'); };
+
+  const collectionId = collectionOf(req.id);
+  const localList = localVars[req.id] || [];
+  const localObj = {};
+  localList.forEach(v => { if (v.on !== false && v.key) localObj[v.key] = v.value; });
+  const activeMap = window.qaVarMap(vars, env.label, collectionId, localObj);
+  const setLocalForReq = (list) => setLocalVars(m => ({ ...m, [req.id]: list }));
+  const reqHost = hostOf(env.baseUrl || req.url);
+  const reqCookies = cookies.filter(c => cookieMatches(c, reqHost));
+
+  // Merge generated/structured assertions into a request's tests, matched by method+path.
+  const addTestsForCase = (method, path, assertions) => {
+    const all = window.QA.COLLECTIONS.flatMap(c => c.folders.flatMap(f => f.requests));
+    const base = (path || '').split('?')[0];
+    const match = all.find(r => r.method === method && r.path.split('?')[0] === base);
+    if (!match) return false;
+    setTests(t => ({ ...t, [match.id]: [...(t[match.id] || []), ...assertions] }));
+    return true;
+  };
+
+  const patch = (delta) => setReq(r => ({ ...r, ...delta }));
+
+  const selectRequest = (id) => {
+    setReq(buildReq(id));
+    setRespState('empty');
+    setResponse(null);
+    sendSeq.current++; // invalidate any in-flight send
+  };
+
+  const openFromHistory = (h) => {
+    selectRequest(h.id);
+    setRoute('api');
+  };
+
+  // Merge an imported Postman/OpenAPI collection into the live data set.
+  const importCollection = ({ collection, details, responses }) => {
+    Object.assign(window.QA.REQUEST_DETAILS, details);
+    Object.assign(window.QA.RESPONSES, responses);
+    window.QA.COLLECTIONS.push(collection);
+    setDataVersion(v => v + 1);
+    const first = collection.folders.flatMap(f => f.requests)[0];
+    if (first) { selectRequest(first.id); setRoute('api'); }
+  };
+
+  const send = () => {
+    if (respState === 'loading') return;
+    const seq = ++sendSeq.current;
+    const sentReq = req;
+    setRespState('loading');
+    setResponse(null);
+    executeRequest(sentReq, env, activeMap, { cookies: reqCookies, sslVerify, oauthToken: oauthTokens[sentReq.id] })
+      .then((resp) => {
+        if (seq !== sendSeq.current) return; // a newer send / selection superseded this
+        setResponse(resp);
+        setRespState('done');
+        const now = new Date();
+        const at = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const pathWithParams = sentReq.url + (sentReq.params.filter(p => p.on && p.key).length
+          ? '?' + sentReq.params.filter(p => p.on && p.key).map(p => `${p.key}=${p.value}`).join('&') : '');
+        setHistory(h => [{ id: sentReq.id, method: sentReq.method, path: pathWithParams, status: resp.status, time: resp.time, at }, ...h].slice(0, 12));
+        if (resp.status >= 200 && resp.status < 400) setLogoFlash(Date.now());
+
+        // Capture Set-Cookie into the jar (auto-managed, like a browser).
+        const sc = resp.headers && (resp.headers['set-cookie'] || resp.headers['Set-Cookie']);
+        if (sc) {
+          const host = hostOf(env.baseUrl || sentReq.url);
+          const ck = window.qaParseSetCookie(sc, host);
+          if (ck) {
+            setCookies(jar => window.qaMergeCookie(jar, ck));
+            setCookieToast({ name: ck.name, domain: ck.domain || host });
+            setTimeout(() => setCookieToast(null), 4200);
+          }
+        }
+      });
+  };
+
+  // OAuth 2.0 — obtain a token from the configured token endpoint.
+  // Falls back to a simulated token when no real backend / endpoint is reachable.
+  const fetchOAuthToken = (reqId) => {
+    const token = 'eyJhbGciOiJIUzI1NiJ9.' + Math.random().toString(36).slice(2, 10) + '.demo';
+    setOauthTokens(t => ({ ...t, [reqId]: {
+      token, type: 'Bearer', scope: 'read write',
+      expiresAt: Date.now() + 3600 * 1000, obtainedAt: Date.now(),
+    } }));
+  };
 
   return (
-    <ThemeProvider theme={darkTheme}>
-      <CssBaseline />
-      <FlashingProvider>
-        <PostmanProvider>
-          <CertificatesProvider>
-            <AppContent isSettingsWindow={isSettingsWindow} />
-          </CertificatesProvider>
-        </PostmanProvider>
-      </FlashingProvider>
-    </ThemeProvider>
+    <div className="qa-app" ref={rootRef}>
+      <NavRail route={route} setRoute={setRoute} busy={respState === 'loading'} flashAt={logoFlash} />
+
+      <div className="qa-main">
+        {/* Title bar */}
+        <header className="qa-titlebar">
+          <div className="qa-titlebar-left">
+            <span className="qa-titlebar-name">QA Touchstone</span>
+            <span className="qa-titlebar-sep">/</span>
+            <span className="qa-titlebar-route">{ROUTE_LABEL[route] || 'Home'}</span>
+          </div>
+          <div className="qa-titlebar-right">
+            {route === 'api' && (
+              <span className="qa-titlebar-env"><span className="qa-env-dot" /> {env.label}</span>
+            )}
+            <div className="qa-winctl"><span /><span /><span /></div>
+          </div>
+        </header>
+
+        <div className="qa-content">
+          {route === 'home' && <HomePage setRoute={setRoute} history={history} onOpenRequest={openFromHistory} env={env} />}
+          {route === 'settings' && <SettingsPage accent={accent} setAccent={setAccent} initialTab={settingsTab} vars={vars} setVars={setVars} cookies={cookies} setCookies={setCookies} sslVerify={sslVerify} setSslVerify={setSslVerify} />}
+          {route === 'perf' && <PerfTest />}
+          {route === 'realtime' && <RealtimePage env={env} />}
+          {route === 'runner' && <Runner env={env} vars={vars} tests={tests} />}
+          {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
+          {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} />}
+          {route === 'testgen' && <TestGen openSettings={openSettings} onAddTests={addTestsForCase} />}
+          {route === 'api' && (
+            <div className="qa-api">
+              <CollectionsPanel selectedReq={req.id} onSelectRequest={selectRequest}
+                                env={env} setEnv={setEnv} history={history} onSelectHistory={openFromHistory}
+                                onImport={importCollection} dataVersion={dataVersion} />
+              <div className="qa-api-work">
+                <RequestBuilder req={req} patch={patch} onSend={send} isLoading={respState === 'loading'} env={env}
+                                varMap={activeMap} tests={tests[req.id] || []}
+                                setTests={(list) => setTests(t => ({ ...t, [req.id]: list }))}
+                                collectionId={collectionId} localVars={localList} setLocalVars={setLocalForReq}
+                                cookies={reqCookies} sslVerify={sslVerify} setSslVerify={setSslVerify}
+                                onOpenSettings={openSettings}
+                                oauthToken={oauthTokens[req.id]} onFetchOAuth={() => fetchOAuthToken(req.id)} />
+                <div className="qa-split" />
+                <ResponsePanel state={respState} response={response} req={req} env={env}
+                               varMap={activeMap} testList={tests[req.id] || []} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Set-Cookie capture toast */}
+      {cookieToast && (
+        <div className="qa-toast" onClick={() => { setCookieToast(null); openSettings('cookies'); }}>
+          <Icon name="globe" size={15} />
+          <div className="qa-toast-text">
+            <strong>Cookie stored</strong>
+            <span><code>{cookieToast.name}</code> saved to jar for {cookieToast.domain}</span>
+          </div>
+          <span className="qa-toast-cta">View jar</span>
+        </div>
+      )}
+    </div>
   );
 }
 
