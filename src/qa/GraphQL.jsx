@@ -1,0 +1,96 @@
+import React from 'react';
+import './setup.js';
+import { Icon } from './components.jsx';
+
+// ── QA Companion — GraphQL editor + schema explorer (mock introspection) ──
+const { useState: useStateGQ } = React;
+
+// One expandable type in the schema explorer.
+function GqlType({ t, onInsert }) {
+  const [open, setOpen] = useStateGQ(t.name === 'Query');
+  return (
+    <div className="gql-type">
+      <button className="gql-type-head" onClick={() => setOpen(o => !o)}>
+        <Icon name="chevron" size={12} className="gql-type-chev" data-open={open ? '1' : '0'} />
+        <span className="gql-type-kind" data-kind={t.kind}>{t.kind === 'ENUM' ? 'enum' : 'type'}</span>
+        <span className="gql-type-name">{t.name}</span>
+        <span className="gql-type-count">{t.fields.length}</span>
+      </button>
+      {open && (
+        <div className="gql-fields">
+          {t.fields.map(f => (
+            <button key={f.name} className="gql-field" onClick={() => onInsert && onInsert(f.name)} title="insert field">
+              <span className="gql-field-name">{f.name}</span>
+              {f.args && <span className="gql-field-args">{f.args}</span>}
+              {f.type && <span className="gql-field-type">{f.type}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchemaExplorer({ schema }) {
+  const [q, setQ] = useStateGQ('');
+  const types = schema.types.filter(t => !q || t.name.toLowerCase().includes(q.toLowerCase()) || t.fields.some(f => f.name.toLowerCase().includes(q.toLowerCase())));
+  return (
+    <div className="gql-schema">
+      <div className="gql-schema-head">
+        <span><Icon name="layers" size={12} /> Schema</span>
+        <span className="qa-meta">{schema.endpoint}</span>
+      </div>
+      <div className="qa-search gql-schema-search">
+        <Icon name="search" size={12} />
+        <input placeholder="Filter types & fields" value={q} onChange={e => setQ(e.target.value)} />
+        {q && <button onClick={() => setQ('')} aria-label="clear"><Icon name="x" size={11} /></button>}
+      </div>
+      <div className="gql-schema-scroll">
+        {types.map(t => <GqlType key={t.name} t={t} />)}
+        {!types.length && <div className="qa-empty-mini">No matching types</div>}
+      </div>
+    </div>
+  );
+}
+
+// The Body-tab content shown when bodyMode === 'graphql'.
+function GraphQLEditor({ req, patch }) {
+  const [showSchema, setShowSchema] = useStateGQ(true);
+  const [sub, setSub] = useStateGQ('query'); // query | variables
+  const schema = window.QA.GRAPHQL_SCHEMA;
+  let varErr = '';
+  if ((req.gqlVars || '').trim()) { try { JSON.parse(req.gqlVars); } catch { varErr = 'Invalid JSON'; } }
+  return (
+    <div className="gql">
+      <div className="gql-main">
+        <div className="gql-bar">
+          <div className="qa-segs qa-segs--mini">
+            <button data-active={sub === 'query' ? '1' : '0'} onClick={() => setSub('query')}>Query</button>
+            <button data-active={sub === 'variables' ? '1' : '0'} onClick={() => setSub('variables')}>
+              Variables{(req.gqlVars || '').trim() ? ' •' : ''}
+            </button>
+          </div>
+          <button className="qa-hist-expbtn" onClick={() => setShowSchema(s => !s)}>
+            <Icon name="layers" size={12} /> {showSchema ? 'Hide' : 'Show'} schema
+          </button>
+        </div>
+        {sub === 'query' && (
+          <textarea className="qa-code-input gql-editor" spellCheck="false" value={req.gqlQuery || ''}
+            onChange={e => patch({ gqlQuery: e.target.value })} placeholder={'query {\n  users {\n    id\n    name\n  }\n}'} />
+        )}
+        {sub === 'variables' && (
+          <>
+            <textarea className="qa-code-input gql-editor" spellCheck="false" value={req.gqlVars || ''}
+              onChange={e => patch({ gqlVars: e.target.value })} placeholder={'{\n  "id": "7301"\n}'} />
+            {varErr && <div className="rn-data-err"><Icon name="x" size={12} /> {varErr}</div>}
+          </>
+        )}
+      </div>
+      {showSchema && <SchemaExplorer schema={schema} />}
+    </div>
+  );
+}
+
+Object.assign(window, { GraphQLEditor, SchemaExplorer });
+
+export { GraphQLEditor, SchemaExplorer };
