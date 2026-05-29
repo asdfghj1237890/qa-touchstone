@@ -16,8 +16,24 @@ import { DocsPage } from './qa/Docs.jsx';
 import { MonitorsPage } from './qa/Monitors.jsx';
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
+import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
+
+// Custom traffic-light window controls. The window is decoration-less
+// (tauri.conf.json `decorations: false`), so close/minimize/maximize are wired
+// here to the Tauri bridge. No-ops gracefully in the browser/dev/test.
+const tauriReady = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+function WindowControls() {
+  const act = (fn) => (e) => { e.stopPropagation(); if (tauriReady()) Promise.resolve(fn()).catch(() => {}); };
+  return (
+    <div className="qa-winctl">
+      <button type="button" className="qa-winctl-btn qa-winctl-close" title="Close" aria-label="Close window" onClick={act(api.closeWindow)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-min" title="Minimize" aria-label="Minimize window" onClick={act(api.minimizeWindow)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-max" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)} />
+    </div>
+  );
+}
 
 const DEFAULT_HEADERS = [{ key: 'Accept', value: 'application/json', on: true }];
 
@@ -188,17 +204,17 @@ function App() {
 
       <div className="qa-main">
         {/* Title bar */}
-        <header className="qa-titlebar">
-          <div className="qa-titlebar-left">
-            <span className="qa-titlebar-name">QA Companion</span>
-            <span className="qa-titlebar-sep">/</span>
-            <span className="qa-titlebar-route">{ROUTE_LABEL[route] || 'Home'}</span>
+        <header className="qa-titlebar" data-tauri-drag-region onDoubleClick={() => { if (tauriReady()) Promise.resolve(api.maximizeWindow()).catch(() => {}); }}>
+          <div className="qa-titlebar-left" data-tauri-drag-region>
+            <span className="qa-titlebar-name" data-tauri-drag-region>QA Companion</span>
+            <span className="qa-titlebar-sep" data-tauri-drag-region>/</span>
+            <span className="qa-titlebar-route" data-tauri-drag-region>{ROUTE_LABEL[route] || 'Home'}</span>
           </div>
-          <div className="qa-titlebar-right">
+          <div className="qa-titlebar-right" data-tauri-drag-region>
             {route === 'api' && (
-              <span className="qa-titlebar-env"><span className="qa-env-dot" /> {env.label}</span>
+              <span className="qa-titlebar-env" data-tauri-drag-region><span className="qa-env-dot" /> {env.label}</span>
             )}
-            <div className="qa-winctl"><span /><span /><span /></div>
+            <WindowControls />
           </div>
         </header>
 
