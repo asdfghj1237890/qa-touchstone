@@ -1,7 +1,7 @@
 import './processShim';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import './styles.css';
+import './qa/qa.css';
 import App from './App.jsx';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import api, { initApi } from './api';
