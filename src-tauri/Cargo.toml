@@ -1,0 +1,37 @@
+[package]
+name = "qa-companion"
+version = "0.13.1"
+description = "QA Companion"
+edition = "2021"
+
+[lib]
+name = "sidewalk_qa_friends_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+parking_lot = "0.12"
+log = "0.4"
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["process", "io-util", "rt-multi-thread", "macros", "time"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+chrono = "0.4"
+regex = "1"
+reqwest = { version = "0.12", features = ["gzip", "deflate", "brotli"] }
+serialport = "4"
+base64 = "0.22"
+wait-timeout = "0.2"
+if-addrs = "0.13"
+dns-lookup = "2"
+
+[features]
+default = []

@@ -1,0 +1,26 @@
+node_modules
+build
+.env
+.cursor/
+Config
+*.DS_Store
+release-executables/win-unpacked
+release-executables/builder-debug.yml
+release-executables/builder-effective-config.yaml
+release-executables/mac-arm64
+release-executables/*.blockmap
+release-executables/*.zip
+release-executables/*.DS_Store
+release-executables/.icon-icns/*.icns
+release-executables/mac
+.cursorrules
+flash_path_data.json
+release-executables/Sidewalk QA Friends.exe
+release-executables/Sidewalk QA Friends-arm64.dmg
+release-executables/Sidewalk QA Friends.dmg
+src/__tests__/test-report
+logs/app.log
+.vscode/settings.json
+sidewalk-operations-hyperion-gamma-swagger-postman.json
+src-tauri/target
+src-tauri/gen
