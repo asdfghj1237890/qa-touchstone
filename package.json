@@ -1,0 +1,152 @@
+{
+  "name": "qa-touchstone",
+  "version": "0.13.1",
+  "private": true,
+  "main": "public/electron.js",
+  "description": "A desktop API client and embedded QA utility for local test workflows.",
+  "scripts": {
+    "dev": "vite",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "build": "vite build",
+    "serve": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text --coverage.reportOnFailure",
+    "test:html": "vitest run --reporter=html",
+    "test:html-view": "(npm run test:html || true) && node scripts/generate-test-index.js && npx vite preview --outDir src/__tests__/test-report --open",
+    "test:coverage-view": "(npm run test:coverage || true) && npx vite preview --outDir src/__tests__/test-report/coverage --open",
+    "test:safe": "vitest run || true",
+    "electron-dev": "concurrently --kill-others --kill-others-on-fail --success first \"cross-env BROWSER=none npm run dev\" \"wait-on http://localhost:3000 && electron . --disable-gpu --enable-software-rasterizer --no-sandbox\"",
+    "clean": "rm -rf node_modules/.cache && rm -rf build",
+    "dist": "npm run test && npm run build && electron-builder",
+    "dist:mac": "npm run test:ci && npm run build && electron-builder --mac",
+    "dist:mac-arm64": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
+    "dist:mac-x64": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
+    "dist:unsigned": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
+    "dist:unsigned-force": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac && codesign --remove-signature release-executables/mac/*.app",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "@electron/remote": "^2.1.2",
+    "@emotion/react": "^11.13.3",
+    "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^7.1.1",
+    "@mui/material": "^7.1.1",
+    "@mui/x-data-grid": "^8.5.1",
+    "@mui/x-tree-view": "^8.5.1",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "aws4": "^1.13.2",
+    "dompurify": "^3.4.7",
+    "electron-is-dev": "^2.0.0",
+    "lodash": "^4.17.21",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.6.2",
+    "serialport": "^12.0.0",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
+    "@babel/plugin-transform-class-properties": "^7.24.7",
+    "@babel/plugin-transform-nullish-coalescing-operator": "^7.24.7",
+    "@babel/plugin-transform-optional-chaining": "^7.24.8",
+    "@babel/plugin-transform-private-methods": "^7.24.7",
+    "@babel/plugin-transform-private-property-in-object": "^7.24.7",
+    "@tauri-apps/cli": "^2.11.2",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^4.5.1",
+    "@vitest/coverage-v8": "^3.2.2",
+    "@vitest/ui": "^3.2.2",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12",
+    "identity-obj-proxy": "^3.0.0",
+    "jsdom": "^26.1.0",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.2",
+    "wait-on": "^8.0.3"
+  },
+  "author": "unuwayne",
+  "license": "ISC",
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "build": {
+    "appId": "com.qatouchstone.desktop",
+    "productName": "QA Touchstone",
+    "directories": {
+      "buildResources": "build-resources",
+      "output": "release-executables"
+    },
+    "files": [
+      "build/**/*",
+      "node_modules/**/*",
+      "public/electron.js",
+      "public/preload.js",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "public/electron.js"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "public/favicon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/favicon512.ico",
+      "identity": null,
+      "signIgnore": ".*",
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "This app needs access to documents folder for managing configuration files and exports.",
+        "NSDownloadsFolderUsageDescription": "This app needs access to downloads folder for importing files and managing downloaded resources."
+      }
+    },
+    "asar": true,
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "homepage": "./",
+  "overrides": {
+    "nth-check": ">=2.0.1",
+    "postcss": ">=8.4.31",
+    "svgo": ">=2.0.0",
+    "css-select": ">=4.0.0"
+  }
+}
