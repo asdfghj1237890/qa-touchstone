@@ -80,6 +80,7 @@ pub fn run() {
             commands::flash::update_flash_path_data,
             commands::flash::get_flash_path_data,
             commands::process::run_command,
+            commands::process::run_program,
             commands::process::stop_command,
             commands::postman::get_postman_collection_path,
             commands::postman::scan_postman_collections,
