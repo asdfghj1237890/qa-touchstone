@@ -212,14 +212,33 @@ function App() {
         setHistory(h => [{ id: sentReq.id, method: sentReq.method, path: pathWithParams, status: resp.status, time: resp.time, at }, ...h].slice(0, 12));
         if (resp.status >= 200 && resp.status < 400) setLogoFlash(Date.now());
 
-        // Capture Set-Cookie into the jar (auto-managed, like a browser). Use
-        // resp.finalUrl (the URL reqwest landed on after auto-following any
-        // redirects) so cross-host or deeper-path redirects scope cookies to
-        // the host the response actually came from. Fall back to the locally
-        // computed request URL when finalUrl isn't available (e.g. the
-        // canned-response dev fallback).
+        // Capture Set-Cookie into the jar (auto-managed, like a browser).
+        // Prefer the per-hop `setCookies` array from Rust (each entry carries
+        // the URL of the response that actually set it) so a redirect chain
+        // across hosts scopes each cookie to the correct host/path. Fall
+        // back to the headers['set-cookie'] string when running against the
+        // canned-response dev fallback that has no per-hop metadata.
+        const perHop = Array.isArray(resp.setCookies) ? resp.setCookies : null;
         const sc = resp.headers && (resp.headers['set-cookie'] || resp.headers['Set-Cookie']);
-        if (sc) {
+        if (perHop && perHop.length) {
+          let firstCk = null;
+          perHop.forEach(({ url, line }) => {
+            if (!line) return;
+            let hopHost = '', hopPath = '/';
+            try { const u = new URL(url || ''); hopHost = u.hostname; hopPath = u.pathname || '/'; }
+            catch { hopHost = hostOf(url || ''); }
+            const ck = window.qaParseSetCookie(line, hopHost, hopPath);
+            if (!ck) return;
+            firstCk = firstCk || ck;
+            setCookies((jar) => window.qaMergeCookie(jar, ck));
+          });
+          if (firstCk) {
+            setCookieToast({ name: firstCk.name, domain: firstCk.domain || '' });
+            setTimeout(() => setCookieToast(null), 4200);
+          }
+        } else if (sc) {
+          // Legacy / canned-response path: no per-hop metadata, derive a
+          // single scope URL the way executor builds the actual request.
           let fullSentUrl = resp.finalUrl || '';
           if (!fullSentUrl) {
             const sentUrlSub = window.qaSubstitute ? window.qaSubstitute(sentReq.url || '', activeMap) : (sentReq.url || '');
@@ -230,8 +249,6 @@ function App() {
           let sentHost = '', sentPath = '/';
           try { const u = new URL(fullSentUrl); sentHost = u.hostname; sentPath = u.pathname || '/'; }
           catch { sentHost = hostOf(fullSentUrl); }
-          // Multi-cookie responses may arrive as newline-joined strings from
-          // the Rust side; parse each header independently.
           const scList = Array.isArray(sc) ? sc : String(sc).split('\n').map((s) => s.trim()).filter(Boolean);
           let firstCk = null;
           scList.forEach((line) => {

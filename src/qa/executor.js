@@ -129,6 +129,10 @@ export async function executeRequest(req, env, varMap, opts = {}) {
         body: tryParse(bodyText),
         headers: result.headers || {},
         finalUrl: result.finalUrl || '',
+        // Per-hop Set-Cookie capture so the renderer can scope each cookie
+        // against the URL of the response that actually set it (a redirect
+        // chain across hosts otherwise scopes everything to the final URL).
+        setCookies: Array.isArray(result.setCookies) ? result.setCookies : [],
       };
     }
     return {
