@@ -43,10 +43,8 @@ fn rewrite_nrfjprog(command: &str) -> String {
     format!("sudo {command}")
 }
 
-fn build_command(command: &str, working_directory: &Option<String>) -> tokio::process::Command {
-    let (program, args) = shell_invocation(command);
-    let mut cmd = tokio::process::Command::new(program);
-    cmd.args(args);
+/// 通用設定 —— pipe stdout/stderr、設工作目錄、Unix 上的 PATH/process group。
+fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<String>) -> tokio::process::Command {
     if let Some(dir) = working_directory {
         if !dir.is_empty() {
             cmd.current_dir(dir);
@@ -64,6 +62,66 @@ fn build_command(command: &str, working_directory: &Option<String>) -> tokio::pr
     }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     cmd
+}
+
+fn build_command(command: &str, working_directory: &Option<String>) -> tokio::process::Command {
+    let (program, args) = shell_invocation(command);
+    let mut cmd = tokio::process::Command::new(program);
+    cmd.args(args);
+    finalize_cmd(cmd, working_directory)
+}
+
+/// Structured-args spawn — no shell interpretation. Use this for trusted
+/// programs (e.g. the bundled k6 binary) to keep injection surface zero.
+fn build_program(program: &str, args: &[String], working_directory: &Option<String>) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new(program);
+    cmd.args(args);
+    finalize_cmd(cmd, working_directory)
+}
+
+/// Shared spawn-stream-wait body used by both run_command (shell string) and
+/// run_program (structured args). Returns the exit code (or -1 if killed).
+async fn spawn_stream_wait(
+    state: &AppState,
+    app: AppHandle,
+    mut cmd: tokio::process::Command,
+) -> Result<i32, String> {
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+    let our_pid = child.id();
+    if let Some(pid) = our_pid {
+        *state.current_process_pid.lock() = Some(pid);
+    }
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let mut handles = Vec::new();
+    if let Some(out) = stdout {
+        let app_c = app.clone();
+        handles.push(tauri::async_runtime::spawn(async move {
+            stream_to_events(out, app_c).await
+        }));
+    }
+    if let Some(err) = stderr {
+        let app_c = app.clone();
+        handles.push(tauri::async_runtime::spawn(async move {
+            stream_to_events(err, app_c).await
+        }));
+    }
+
+    let status = child.wait().await;
+    for h in handles { let _ = h.await; }
+    // 擁有權檢查：只有 current_process_pid 仍是這次寫的值才清掉。
+    if let Some(our) = our_pid {
+        let mut guard = state.current_process_pid.lock();
+        if *guard == Some(our) {
+            *guard = None;
+        }
+    }
+    match status {
+        Ok(s) => Ok(s.code().unwrap_or(-1)),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// 讀一條串流、逐塊 emit command-output（保留 \r 進度更新；不以行為單位緩衝）。
@@ -88,54 +146,24 @@ pub async fn run_command(
     command: String,
     working_directory: Option<String>,
 ) -> Result<i32, String> {
-    let mut cmd = build_command(&command, &working_directory);
-    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    let cmd = build_command(&command, &working_directory);
+    spawn_stream_wait(&state, app, cmd).await
+}
 
-    // 記錄 PID（block scope：parking_lot guard 不跨 await）。捕捉自己的 PID
-    // 以便 wait 結束時做擁有權檢查 —— 若使用者已啟動下一輪 run_command，
-    // current_process_pid 會被新的覆寫，我們不能把它抹掉。
-    let our_pid = child.id();
-    if let Some(pid) = our_pid {
-        *state.current_process_pid.lock() = Some(pid);
-    }
-
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-    let mut handles = Vec::new();
-    if let Some(out) = stdout {
-        let app_c = app.clone();
-        handles.push(tauri::async_runtime::spawn(async move {
-            stream_to_events(out, app_c).await
-        }));
-    }
-    if let Some(err) = stderr {
-        let app_c = app.clone();
-        handles.push(tauri::async_runtime::spawn(async move {
-            stream_to_events(err, app_c).await
-        }));
-    }
-
-    let status = child.wait().await;
-
-    for h in handles {
-        let _ = h.await;
-    }
-    // 擁有權檢查：只有當 current_process_pid 仍是我們這次寫進去的值才清掉，
-    // 否則代表已有新的 run_command 寫入了它的 PID，不能誤抹（會讓 stop_command
-    // 對新 run 失效）。
-    if let Some(our) = our_pid {
-        let mut guard = state.current_process_pid.lock();
-        if *guard == Some(our) {
-            *guard = None;
-        }
-    }
-
-    match status {
-        // 被信號終止（如 Unix 上 stop_command 的 SIGKILL）時 code() 為 None → -1，
-        // 非 spawn 失敗（那會在上方 spawn 時就 Err）。對齊 Electron 把 null code 當非零。
-        Ok(s) => Ok(s.code().unwrap_or(-1)),
-        Err(e) => Err(e.to_string()),
-    }
+/// Structured equivalent of run_command — no shell interpretation, no quoting
+/// pitfalls. Use this for trusted internal binaries; we ship k6.exe and we
+/// know its path, so the cmd /C string indirection is gratuitous attack
+/// surface for that call site.
+#[tauri::command]
+pub async fn run_program(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    program: String,
+    args: Vec<String>,
+    working_directory: Option<String>,
+) -> Result<i32, String> {
+    let cmd = build_program(&program, &args, &working_directory);
+    spawn_stream_wait(&state, app, cmd).await
 }
 
 pub(crate) fn kill_tree(pid: u32) {
@@ -201,5 +229,57 @@ mod tests {
         let status = child.wait().await.unwrap();
         assert_eq!(status.code(), Some(0));
         assert!(s.contains("hello"), "stdout was: {s:?}");
+    }
+
+    // Structured-args path bypasses cmd /C / zsh -c — proves run_program
+    // does not need shell interpretation. Spawning the platform's
+    // built-in echo program lets us verify args are passed positionally.
+    #[tokio::test]
+    async fn build_program_spawns_without_shell() {
+        #[cfg(target_os = "windows")]
+        let (prog, args) = ("cmd", vec!["/C".to_string(), "echo".to_string(), "hi".to_string()]);
+        #[cfg(not(target_os = "windows"))]
+        let (prog, args) = ("/bin/echo", vec!["hi".to_string()]);
+        let mut cmd = build_program(prog, &args, &None);
+        let mut child = cmd.spawn().expect("spawn");
+        let mut out = child.stdout.take().unwrap();
+        let mut s = String::new();
+        let mut buf = [0u8; 1024];
+        loop {
+            let n = out.read(&mut buf).await.unwrap();
+            if n == 0 { break; }
+            s.push_str(&String::from_utf8_lossy(&buf[..n]));
+        }
+        let status = child.wait().await.unwrap();
+        assert_eq!(status.code(), Some(0));
+        assert!(s.contains("hi"), "stdout was: {s:?}");
+    }
+
+    // PID-ownership semantics: even if a second run_command finishes BEFORE
+    // the first (because the first is a longer command), the first's
+    // finalizer must not clobber the second's PID. We simulate by directly
+    // exercising the lock pattern used inside spawn_stream_wait.
+    #[test]
+    fn pid_ownership_does_not_clobber_unrelated_pids() {
+        use parking_lot::Mutex;
+        let guard = Mutex::new(None::<u32>);
+        // run A writes PID 100
+        let our_a: u32 = 100;
+        *guard.lock() = Some(our_a);
+        // run B writes PID 200 (overwriting)
+        let our_b: u32 = 200;
+        *guard.lock() = Some(our_b);
+        // run A finalizes — must NOT clear, since current is B's pid.
+        {
+            let mut g = guard.lock();
+            if *g == Some(our_a) { *g = None; }
+        }
+        assert_eq!(*guard.lock(), Some(our_b), "A's finalizer wrongly cleared B's PID");
+        // run B finalizes — clears its own.
+        {
+            let mut g = guard.lock();
+            if *g == Some(our_b) { *g = None; }
+        }
+        assert_eq!(*guard.lock(), None);
     }
 }

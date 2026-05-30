@@ -113,6 +113,31 @@ pub fn load_cached_postman_collections(app: AppHandle) -> Vec<Value> {
 
 #[tauri::command]
 pub fn save_postman_collection(app: AppHandle, file_path: String, collection_data: Value) -> SaveResult {
+    // Path validation — the renderer can in principle send any absolute path,
+    // so refuse the obviously-bad shapes before writing. Aligns with the
+    // existing fsops guards (read_directory, find_hex_file, read_file_content)
+    // even though those are weaker than full canonicalization.
+    if file_path.is_empty() {
+        return SaveResult { success: false, error: Some("Empty file path.".into()) };
+    }
+    if file_path.contains("..") {
+        return SaveResult { success: false, error: Some("Path traversal not allowed.".into()) };
+    }
+    let path = Path::new(&file_path);
+    if !path.is_absolute() {
+        return SaveResult { success: false, error: Some("Path must be absolute.".into()) };
+    }
+    // Only accept .json — refuses overwriting binaries, scripts, configs etc.
+    if path.extension().and_then(|e| e.to_str()).map(|e| !e.eq_ignore_ascii_case("json")).unwrap_or(true) {
+        return SaveResult { success: false, error: Some("Only .json paths are accepted.".into()) };
+    }
+    // Refuse if the parent directory does not already exist — prevents
+    // mkdir-anywhere accidents.
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            return SaveResult { success: false, error: Some("Parent directory does not exist.".into()) };
+        }
+    }
     if collection_data.get("info").is_none() {
         return SaveResult {
             success: false,
@@ -123,7 +148,7 @@ pub fn save_postman_collection(app: AppHandle, file_path: String, collection_dat
         Ok(s) => s,
         Err(e) => return SaveResult { success: false, error: Some(e.to_string()) },
     };
-    if let Err(e) = std::fs::write(Path::new(&file_path), pretty) {
+    if let Err(e) = std::fs::write(path, pretty) {
         return SaveResult { success: false, error: Some(e.to_string()) };
     }
     // 通知前端刷新（前端會 re-load → 重掃）

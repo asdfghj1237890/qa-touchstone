@@ -111,6 +111,17 @@ export const api = {
       unlisten();
     }
   },
+  // Structured-args spawn: no shell, no quoting. Use this for trusted
+  // binaries (e.g. the bundled k6) — eliminates injection risk that a
+  // shell-string call would carry even with internal-only inputs.
+  runProgramWithRealTimeOutput: async (program, args, workingDirectory, callback) => {
+    const unlisten = await listen('command-output', (e) => callback(e.payload));
+    try {
+      return await invoke('run_program', { program, args, workingDirectory });
+    } finally {
+      unlisten();
+    }
+  },
   stopCommand: () => invoke('stop_command'),
   getPostmanCollectionPath: () => invoke('get_postman_collection_path'),
   scanPostmanCollections: (folderPath) => invoke('scan_postman_collections', { folderPath }),
