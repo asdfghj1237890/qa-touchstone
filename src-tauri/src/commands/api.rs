@@ -217,78 +217,157 @@ pub async fn execute_postman_request(
         Ok(m) => m,
         Err(e) => return err(format!("Invalid method: {e}")),
     };
-    // KNOWN LIMITATION: reqwest follows redirects by default and we only
-    // read headers from the final response, so Set-Cookie headers on 30x
-    // hops never reach the JS cookie jar. Disabling auto-redirect would
-    // break the common "Send" → final response UX (Postman-equivalent).
-    // The proper fix is to manually follow redirects in this command and
-    // surface each hop's Set-Cookie; tracked for a follow-up round.
-    //
     // Honour the UI's SSL toggle. Default behaviour stays "verify" — only
-    // disable verification when the renderer explicitly says so. Falls back
-    // to the no-builder client on construction failure (very unlikely).
+    // disable verification when the renderer explicitly says so. Auto-redirect
+    // is disabled so we can manually follow each 30x hop and collect every
+    // Set-Cookie along the way (browsers + Postman do the same).
     let verify = ssl_verify.unwrap_or(true);
-    let client = if verify {
-        reqwest::Client::new()
-    } else {
-        reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    };
-    let mut rb = client.request(method_enum, parsed.clone());
-    for (k, v) in &out_headers {
-        rb = rb.header(k.as_str(), v.as_str());
-    }
-    if let Some(body) = &post_data {
-        rb = rb.body(body.clone());
-    }
+    let client_builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none());
+    let client_builder = if verify { client_builder } else { client_builder.danger_accept_invalid_certs(true) };
+    let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
 
     let sent_headers: Map<String, Value> =
         out_headers.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
 
-    match rb.send().await {
-        Ok(resp) => {
-            let status = resp.status().as_u16();
-            // The URL reqwest ultimately landed on (after auto-following any
-            // redirects). The renderer uses this — not the originally
-            // requested URL — to scope Set-Cookie capture, so a 302 → final
-            // host's cookie ends up under the right host/path.
-            let final_url = resp.url().to_string();
-            let mut resp_headers = Map::new();
-            // Collect Set-Cookie separately — multiple Set-Cookie headers in
-            // a single response must NOT be collapsed (different name/path
-            // can share a name). Join with `\n` (illegal in header values
-            // per RFC 7230) and the renderer splits them back apart.
-            let mut set_cookie_lines: Vec<String> = Vec::new();
-            for (k, v) in resp.headers().iter() {
-                let val = v.to_str().unwrap_or("").to_string();
-                if k.as_str().eq_ignore_ascii_case("set-cookie") {
-                    set_cookie_lines.push(val);
-                } else {
-                    resp_headers.insert(k.as_str().to_string(), Value::String(val));
-                }
-            }
-            if !set_cookie_lines.is_empty() {
-                resp_headers.insert("set-cookie".to_string(), Value::String(set_cookie_lines.join("\n")));
-            }
-            let body_text = resp.text().await.unwrap_or_default();
-            json!({
-                "success": true,
-                "status": status,
-                "finalUrl": final_url,
-                "headers": resp_headers,
-                "body": body_text,
-                "requestMetadata": {
-                    "sentHeaders": sent_headers,
-                    // 對齊 Electron：metadata 回報 collection 預設 service（非 awsv4 覆寫後的）。
-                    "awsService": if is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" },
-                    "isFileTransferCollection": is_file_transfer_collection.unwrap_or(false)
-                }
-            })
-        }
-        Err(e) => err(e.to_string()),
+    // Headers we MUST NOT forward across an origin boundary on redirect.
+    // Authorization tokens, cookies, SigV4 signature artefacts must never
+    // leak to a host other than the one they were minted for. Matches what
+    // reqwest's built-in Policy does and what browsers do.
+    fn is_sensitive_header(name: &str) -> bool {
+        let lower = name.to_ascii_lowercase();
+        matches!(lower.as_str(),
+            "authorization" | "cookie" | "cookie2" |
+            "proxy-authorization" | "www-authenticate"
+        ) || lower.starts_with("x-amz-")
     }
+
+    const MAX_HOPS: usize = 10;
+    // Each captured cookie is stored alongside the URL of the response that
+    // set it, so the renderer can scope domain/path against the right host
+    // when a redirect chain crosses hosts.
+    let mut all_set_cookies: Vec<(String, String)> = Vec::new();
+    let mut current_url = parsed.clone();
+    let mut current_method = method_enum.clone();
+    let mut current_body = post_data.clone();
+    let mut final_resp: Option<reqwest::Response> = None;
+    // Same-origin per RFC 6454 = (scheme, host, port) match exactly.
+    // Comparing host alone would forward credentials on
+    // `https://api.x` → `http://api.x` or `:8080` → `:9090` and lose the
+    // safety reqwest's built-in policy provided.
+    fn origin_triple(u: &reqwest::Url) -> (String, Option<String>, Option<u16>) {
+        (u.scheme().to_ascii_lowercase(),
+         u.host_str().map(|h| h.to_ascii_lowercase()),
+         u.port_or_known_default())
+    }
+    let original_origin = origin_triple(&current_url);
+    // Sticky: once we cross to another origin, sensitive headers stay
+    // stripped for every subsequent hop — even if a later redirect bounces
+    // back to the original origin.
+    let mut cross_origin = false;
+
+    for hop in 0..=MAX_HOPS {
+        let mut rb = client.request(current_method.clone(), current_url.clone());
+        for (k, v) in &out_headers {
+            if cross_origin && is_sensitive_header(k.as_str()) { continue; }
+            rb = rb.header(k.as_str(), v.as_str());
+        }
+        if let Some(body) = &current_body {
+            rb = rb.body(body.clone());
+        }
+        let resp = match rb.send().await {
+            Ok(r) => r,
+            Err(e) => return err(e.to_string()),
+        };
+        // Capture every Set-Cookie at this hop ALONG WITH the URL of the
+        // response that emitted it — the renderer needs the per-hop URL to
+        // apply RFC 6265 domain/path checks correctly when redirects cross
+        // hosts or change paths.
+        let hop_url = resp.url().to_string();
+        for (k, v) in resp.headers().iter() {
+            if k.as_str().eq_ignore_ascii_case("set-cookie") {
+                all_set_cookies.push((hop_url.clone(), v.to_str().unwrap_or("").to_string()));
+            }
+        }
+        let status = resp.status().as_u16();
+        let is_redirect = matches!(status, 301 | 302 | 303 | 307 | 308);
+        if !is_redirect || hop == MAX_HOPS {
+            final_resp = Some(resp);
+            break;
+        }
+        // Resolve the Location header against the current URL.
+        let loc_str = resp.headers().get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let loc_str = match loc_str {
+            Some(s) if !s.is_empty() => s,
+            _ => { final_resp = Some(resp); break; }
+        };
+        let next_url = match current_url.join(&loc_str) {
+            Ok(u) => u,
+            Err(_) => { final_resp = Some(resp); break; }
+        };
+        // Method rewriting on redirect — match reqwest's default Policy:
+        //   301/302 + POST       → GET, drop body
+        //   301/302 + other      → preserve method + body
+        //   303 + HEAD           → preserve HEAD (browser convention)
+        //   303 + other          → GET, drop body (RFC)
+        //   307/308              → always preserve
+        if (status == 301 || status == 302) && current_method == reqwest::Method::POST {
+            current_method = reqwest::Method::GET;
+            current_body = None;
+        } else if status == 303 && current_method != reqwest::Method::HEAD {
+            current_method = reqwest::Method::GET;
+            current_body = None;
+        }
+        // Sticky cross-origin detection — once the (scheme,host,port) triple
+        // differs from the original we strip sensitive headers from every
+        // subsequent hop.
+        if !cross_origin && origin_triple(&next_url) != original_origin {
+            cross_origin = true;
+        }
+        current_url = next_url;
+    }
+
+    let resp = match final_resp { Some(r) => r, None => return err("Redirect loop produced no response".to_string()) };
+    let status = resp.status().as_u16();
+    let final_url = resp.url().to_string();
+    let mut resp_headers = Map::new();
+    for (k, v) in resp.headers().iter() {
+        // Set-Cookie was already collected per-hop into all_set_cookies; skip
+        // the final-hop duplicate here so the renderer sees each Set-Cookie
+        // exactly once.
+        if k.as_str().eq_ignore_ascii_case("set-cookie") { continue; }
+        resp_headers.insert(k.as_str().to_string(), Value::String(v.to_str().unwrap_or("").to_string()));
+    }
+    // The renderer needs each Set-Cookie alongside the URL of the response
+    // that emitted it so RFC 6265 domain/path checks run against the right
+    // host (cross-host redirects would otherwise scope cookies wrong).
+    let set_cookies_arr: Vec<Value> = all_set_cookies.iter()
+        .map(|(u, line)| json!({"url": u, "line": line}))
+        .collect();
+    if !all_set_cookies.is_empty() {
+        // Also surface as headers["set-cookie"] (newline-joined) so existing
+        // display code paths show the raw values, but cookie capture goes
+        // through `setCookies` above.
+        let joined: Vec<String> = all_set_cookies.iter().map(|(_, line)| line.clone()).collect();
+        resp_headers.insert("set-cookie".to_string(), Value::String(joined.join("\n")));
+    }
+    let body_text = resp.text().await.unwrap_or_default();
+    json!({
+        "success": true,
+        "status": status,
+        "finalUrl": final_url,
+        "headers": resp_headers,
+        "setCookies": set_cookies_arr,
+        "body": body_text,
+        "requestMetadata": {
+            "sentHeaders": sent_headers,
+            // 對齊 Electron：metadata 回報 collection 預設 service（非 awsv4 覆寫後的）。
+            "awsService": if is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" },
+            "isFileTransferCollection": is_file_transfer_collection.unwrap_or(false)
+        }
+    })
 }
 
 #[cfg(test)]
