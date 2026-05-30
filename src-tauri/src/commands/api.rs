@@ -80,6 +80,7 @@ pub async fn execute_postman_request(
     selected_profile: Option<String>,
     selected_environment: Option<Value>,
     is_file_transfer_collection: Option<bool>,
+    ssl_verify: Option<bool>,
 ) -> Value {
     let req = match request_details.get("request") {
         Some(r) if r.is_object() => r.clone(),
@@ -216,7 +217,25 @@ pub async fn execute_postman_request(
         Ok(m) => m,
         Err(e) => return err(format!("Invalid method: {e}")),
     };
-    let client = reqwest::Client::new();
+    // KNOWN LIMITATION: reqwest follows redirects by default and we only
+    // read headers from the final response, so Set-Cookie headers on 30x
+    // hops never reach the JS cookie jar. Disabling auto-redirect would
+    // break the common "Send" → final response UX (Postman-equivalent).
+    // The proper fix is to manually follow redirects in this command and
+    // surface each hop's Set-Cookie; tracked for a follow-up round.
+    //
+    // Honour the UI's SSL toggle. Default behaviour stays "verify" — only
+    // disable verification when the renderer explicitly says so. Falls back
+    // to the no-builder client on construction failure (very unlikely).
+    let verify = ssl_verify.unwrap_or(true);
+    let client = if verify {
+        reqwest::Client::new()
+    } else {
+        reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    };
     let mut rb = client.request(method_enum, parsed.clone());
     for (k, v) in &out_headers {
         rb = rb.header(k.as_str(), v.as_str());
@@ -231,14 +250,33 @@ pub async fn execute_postman_request(
     match rb.send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
+            // The URL reqwest ultimately landed on (after auto-following any
+            // redirects). The renderer uses this — not the originally
+            // requested URL — to scope Set-Cookie capture, so a 302 → final
+            // host's cookie ends up under the right host/path.
+            let final_url = resp.url().to_string();
             let mut resp_headers = Map::new();
+            // Collect Set-Cookie separately — multiple Set-Cookie headers in
+            // a single response must NOT be collapsed (different name/path
+            // can share a name). Join with `\n` (illegal in header values
+            // per RFC 7230) and the renderer splits them back apart.
+            let mut set_cookie_lines: Vec<String> = Vec::new();
             for (k, v) in resp.headers().iter() {
-                resp_headers.insert(k.as_str().to_string(), Value::String(v.to_str().unwrap_or("").to_string()));
+                let val = v.to_str().unwrap_or("").to_string();
+                if k.as_str().eq_ignore_ascii_case("set-cookie") {
+                    set_cookie_lines.push(val);
+                } else {
+                    resp_headers.insert(k.as_str().to_string(), Value::String(val));
+                }
+            }
+            if !set_cookie_lines.is_empty() {
+                resp_headers.insert("set-cookie".to_string(), Value::String(set_cookie_lines.join("\n")));
             }
             let body_text = resp.text().await.unwrap_or_default();
             json!({
                 "success": true,
                 "status": status,
+                "finalUrl": final_url,
                 "headers": resp_headers,
                 "body": body_text,
                 "requestMetadata": {

@@ -90,7 +90,9 @@ export function buildPayload(req, env, varMap, opts = {}) {
       { key: 'region', value: a.aws.region }, { key: 'service', value: a.aws.service },
     ] };
   }
-  return { requestDetails: { request }, params: {}, apiConfigId: null, selectedProfile: null, selectedEnvironment: null, isFileTransferCollection: false };
+  // sslVerify defaults true unless the caller explicitly turns it off — keep
+  // the wire shape so a missing opts.sslVerify is treated as the safe default.
+  return { requestDetails: { request }, params: {}, apiConfigId: null, selectedProfile: null, selectedEnvironment: null, isFileTransferCollection: false, sslVerify: opts.sslVerify !== false };
 }
 
 // Canned-response fallback (browser/dev/test), preserving the design's feel.
@@ -126,6 +128,7 @@ export async function executeRequest(req, env, varMap, opts = {}) {
         size: byteLength(bodyText),
         body: tryParse(bodyText),
         headers: result.headers || {},
+        finalUrl: result.finalUrl || '',
       };
     }
     return {
