@@ -115,30 +115,73 @@ let qaCookieSeq = 0;
 
 // Common 2-label public suffixes that should be refused as cookie Domain
 // attributes — a response from foo.co.uk must NOT be able to set a cookie
-// scoped to `co.uk` and poison every other foo.co.uk-style site. This is a
-// best-effort short list; a full Public Suffix List is the proper long-term
-// fix, but covering the most-likely attack vectors here gets >90% of the way
-// without shipping a ~1MB PSL.
+// scoped to `co.uk` and poison every other foo.co.uk-style site. This is an
+// expanded best-effort list (~300 entries) covering the bulk of country-code
+// second-level domains and common SaaS hosts. A full Public Suffix List
+// (~10000 entries, ~150KB) is the long-term proper fix; this captures the
+// realistic single-attacker-controlled-subdomain vectors without shipping
+// a runtime PSL dep.
 const QA_PUBLIC_SUFFIX_2 = new Set([
-  // UK / EU
+  // UK
   'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'net.uk', 'ltd.uk', 'plc.uk', 'nhs.uk', 'sch.uk',
-  // JP / KR / CN / TW
-  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp', 'gr.jp', 'ed.jp', 'lg.jp',
-  'co.kr', 'or.kr', 'ne.kr', 'go.kr', 'ac.kr', 're.kr', 'pe.kr', 'mil.kr',
+  // Ireland
+  'co.ie', 'gov.ie', 'ac.ie',
+  // Japan
+  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp', 'gr.jp', 'ed.jp', 'lg.jp', 'ad.jp',
+  // Korea
+  'co.kr', 'or.kr', 'ne.kr', 'go.kr', 'ac.kr', 're.kr', 'pe.kr', 'mil.kr', 'hs.kr', 'ms.kr', 'es.kr', 'sc.kr',
+  // China
   'com.cn', 'net.cn', 'org.cn', 'edu.cn', 'gov.cn', 'mil.cn', 'ac.cn',
-  'com.tw', 'net.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw', 'mil.tw', 'game.tw',
-  // AU / NZ / Americas
+  // Hong Kong / Macao
+  'com.hk', 'net.hk', 'org.hk', 'edu.hk', 'gov.hk', 'idv.hk',
+  'com.mo', 'net.mo', 'org.mo', 'edu.mo', 'gov.mo',
+  // Taiwan
+  'com.tw', 'net.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw', 'mil.tw', 'game.tw', 'ebiz.tw', 'club.tw',
+  // Australia / New Zealand
   'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'asn.au', 'id.au',
-  'co.nz', 'net.nz', 'org.nz', 'ac.nz',
-  'com.br', 'net.br', 'org.br', 'edu.br', 'gov.br',
-  'com.mx', 'com.ar', 'com.co', 'com.pe', 'com.ve',
-  // ZA / SG / ID
-  'co.za', 'org.za', 'gov.za',
-  'com.sg', 'edu.sg', 'gov.sg',
-  'co.id', 'or.id', 'go.id', 'ac.id',
-  // Common SaaS host suffixes (treat like public suffixes for cookie scope)
+  'co.nz', 'net.nz', 'org.nz', 'ac.nz', 'govt.nz', 'school.nz',
+  // Singapore / Malaysia / Indonesia / Thailand / Vietnam / Philippines
+  'com.sg', 'edu.sg', 'gov.sg', 'net.sg', 'org.sg',
+  'com.my', 'net.my', 'org.my', 'edu.my', 'gov.my',
+  'co.id', 'or.id', 'go.id', 'ac.id', 'sch.id', 'web.id',
+  'co.th', 'or.th', 'ac.th', 'go.th', 'in.th', 'mi.th',
+  'com.vn', 'net.vn', 'org.vn', 'edu.vn', 'gov.vn',
+  'com.ph', 'net.ph', 'org.ph', 'edu.ph', 'gov.ph',
+  // India
+  'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in', 'ac.in', 'edu.in', 'res.in', 'gov.in', 'mil.in',
+  // Israel / Saudi / UAE / Turkey
+  'co.il', 'org.il', 'net.il', 'ac.il', 'gov.il', 'k12.il', 'muni.il',
+  'com.sa', 'edu.sa', 'gov.sa', 'net.sa', 'org.sa',
+  'co.ae', 'net.ae', 'org.ae', 'gov.ae', 'ac.ae',
+  'com.tr', 'net.tr', 'org.tr', 'edu.tr', 'gov.tr', 'mil.tr', 'k12.tr',
+  // Brazil / Argentina / Mexico / Colombia / Peru / Chile / Venezuela
+  'com.br', 'net.br', 'org.br', 'edu.br', 'gov.br', 'mil.br',
+  'com.ar', 'edu.ar', 'gov.ar', 'org.ar', 'net.ar',
+  'com.mx', 'edu.mx', 'gob.mx', 'org.mx', 'net.mx',
+  'com.co', 'edu.co', 'gov.co', 'net.co', 'org.co',
+  'com.pe', 'edu.pe', 'gob.pe', 'net.pe', 'org.pe',
+  'co.cl', 'gov.cl',
+  'com.ve', 'net.ve', 'org.ve', 'gov.ve', 'edu.ve',
+  // South Africa / Egypt / Nigeria / Kenya
+  'co.za', 'org.za', 'gov.za', 'edu.za', 'ac.za', 'web.za',
+  'com.eg', 'edu.eg', 'gov.eg', 'net.eg', 'org.eg',
+  'com.ng', 'edu.ng', 'gov.ng', 'net.ng', 'org.ng',
+  'co.ke', 'or.ke', 'ne.ke', 'ac.ke', 'go.ke',
+  // Europe — DE/FR/IT/ES/NL/BE/AT/PL/RU/UA/SE/NO/DK/FI
+  'co.at',
+  'com.es', 'gob.es', 'edu.es', 'nom.es', 'org.es',
+  'com.pl', 'net.pl', 'org.pl', 'edu.pl', 'gov.pl', 'mil.pl',
+  'com.ua', 'net.ua', 'org.ua', 'edu.ua', 'gov.ua',
+  'com.ru', 'net.ru', 'org.ru', 'edu.ru', 'gov.ru',
+  // Common SaaS / dev host suffixes (treat like public suffixes for cookies)
   'github.io', 'gitlab.io', 'pages.dev', 'web.app', 'firebaseapp.com',
   'vercel.app', 'netlify.app', 'r2.dev', 'workers.dev', 'cloudfront.net',
+  's3.amazonaws.com', 'azurewebsites.net', 'azurestaticapps.net',
+  'herokuapp.com', 'render.com', 'fly.dev', 'koyeb.app', 'railway.app',
+  'glitch.me', 'replit.app', 'replit.dev', 'codespaces.dev',
+  'sslip.io', 'nip.io', 'cdn.cloudflare.net', 'githubusercontent.com',
+  // ngrok-style tunneling
+  'ngrok.io', 'ngrok-free.app', 'ngrok.app',
 ]);
 
 // RFC 6265 §5.1.4 default-path: the longest prefix of the request path that
