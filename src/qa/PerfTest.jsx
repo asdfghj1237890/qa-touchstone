@@ -1,35 +1,45 @@
 import React from 'react';
 import './setup.js';
 import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
+import api from '../api/index.js';
+import { buildScript } from './k6gen.js';
+import { makeState, feed, snapshot } from './k6parse.js';
 
 // ── QA Touchstone — Performance / Load / Stress (SLO · stages · history) ────
-const { useState: usePF, useRef: useRefPF } = React;
+const { useState: usePF, useRef: useRefPF, useEffect: useEffPF } = React;
 
-const PF_FLAT = window.QA.COLLECTIONS.flatMap(c =>
+// Computed per render (not cached at module load) so imported collections,
+// which are pushed into window.QA.COLLECTIONS at runtime, show up here too.
+const pfTargets = () => window.QA.COLLECTIONS.flatMap(c =>
   c.folders.flatMap(f => f.requests.map(r => ({ value: r.id, label: `${r.method}  ${r.path.split('?')[0]}`, method: r.method }))));
 
+// VU defaults intentionally kept low — these run real traffic via k6, so the
+// previous synthetic-mode peaks (120/200/500) would hammer public demo APIs.
+// Users can crank stages up in the editor for their own infrastructure.
 const TYPE_META = {
-  performance: { label: 'Performance', icon: 'activity', blurb: 'Baseline latency & throughput under expected load.', baseLat: 88, capacity: 9999,
-    stages: [{ d: 8, t: 10 }, { d: 30, t: 10 }, { d: 4, t: 0 }], slo: { p80: 120, p90: 160, p95: 200, p99: 300, err: 1 } },
-  load:        { label: 'Load', icon: 'users', blurb: 'Sustained peak traffic for a fixed duration.', baseLat: 120, capacity: 200,
-    stages: [{ d: 15, t: 120 }, { d: 40, t: 120 }, { d: 8, t: 0 }], slo: { p80: 300, p90: 400, p95: 500, p99: 800, err: 2 } },
-  stress:      { label: 'Stress', icon: 'gauge', blurb: 'Ramp beyond limits to find the breaking point.', baseLat: 140, capacity: 220,
-    stages: [{ d: 12, t: 100 }, { d: 14, t: 300 }, { d: 14, t: 500 }, { d: 8, t: 0 }], slo: { p80: 800, p90: 1100, p95: 1500, p99: 2500, err: 15 } },
+  performance: { label: 'Performance', icon: 'activity', blurb: 'Baseline latency & throughput under expected load.',
+    stages: [{ d: 8, t: 5 }, { d: 30, t: 5 }, { d: 4, t: 0 }], slo: { p80: 200, p90: 300, p95: 400, p99: 600, err: 1 } },
+  load:        { label: 'Load', icon: 'users', blurb: 'Sustained peak traffic for a fixed duration.',
+    stages: [{ d: 15, t: 15 }, { d: 40, t: 15 }, { d: 8, t: 0 }], slo: { p80: 400, p90: 600, p95: 800, p99: 1200, err: 2 } },
+  stress:      { label: 'Stress', icon: 'gauge', blurb: 'Ramp beyond expected to find breaking points.',
+    stages: [{ d: 12, t: 20 }, { d: 14, t: 30 }, { d: 14, t: 40 }, { d: 8, t: 0 }], slo: { p80: 800, p90: 1100, p95: 1500, p99: 2500, err: 10 } },
 };
 const DEFAULT_CONN = { keepAlive: true, timeout: 30000, maxConns: 200 };
 const N_POINTS = 56;
 const PERF_KEY = 'qa_perf_runs';
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
-const vusAt = (el, stages) => {
-  let s = 0, prev = 0;
-  for (let i = 0; i < stages.length; i++) {
-    const d = +stages[i].d || 0, t = +stages[i].t || 0;
-    if (el < s + d) { const f = d > 0 ? (el - s) / d : 1; return prev + (t - prev) * f; }
-    s += d; prev = t;
+
+// Resolve which collection a request id belongs to (kept inline so PerfTest
+// stays decoupled from App.jsx — same logic, different file).
+function pfCollectionOf(reqId) {
+  for (const c of window.QA.COLLECTIONS) {
+    for (const f of c.folders) {
+      if (f.requests.some((r) => r.id === reqId)) return c.id;
+    }
   }
-  return prev;
-};
+  return null;
+}
 
 function downloadFile(name, content, mime) {
   const blob = new Blob([content], { type: mime });
@@ -184,7 +194,7 @@ function Stepper({ value, onChange, min = 0, disabled, width = 110 }) {
                 onChange={e => onChange(Math.max(min, +e.target.value || 0))} />;
 }
 
-function PerfTest() {
+function PerfTest({ env, vars }) {
   const [target, setTarget] = usePF('usr-list');
   const [type, setType] = usePF('load');
   const [stages, setStages] = usePF(() => clone(TYPE_META.load.stages));
@@ -197,8 +207,18 @@ function PerfTest() {
   const [viewIdx, setViewIdx] = usePF(0);
   const [selected, setSelected] = usePF([]);
   const [hMenu, setHMenu] = usePF(false);
-  const timer = useRefPF(null);
+  const [k6Path, setK6Path] = usePF(null);
   const acc = useRefPF({});
+  const flat = pfTargets();
+
+  // Resolve the bundled k6.exe once on mount; cached for the lifetime of the page.
+  useEffPF(() => {
+    let cancelled = false;
+    api.getK6Path()
+      .then((p) => { if (!cancelled) setK6Path(p); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const pickType = (t) => { setType(t); setStages(clone(TYPE_META[t].stages)); setSlo({ ...TYPE_META[t].slo }); };
 
@@ -207,84 +227,194 @@ function PerfTest() {
   const delStage = (i) => setStages(s => s.length > 1 ? s.filter((_, idx) => idx !== i) : s);
 
   const toggleSel = (i) => setSelected(s => s.includes(i) ? s.filter(x => x !== i) : [...s, i]);
+  const total = stages.reduce((s, st) => s + (+st.d || 0), 0);
+  const maxVus = Math.max(0, ...stages.map((st) => +st.t || 0));
+  const running = phase === 'running';
+
+  // Hand off the load to k6 (must be on PATH). The chart and SLO scoring read
+  // real samples streamed back from `k6 run --out json=-`. stop() only flags
+  // the session and asks Rust to kill k6 — the run() loop transitions phase
+  // when it actually finishes, so a quick re-Start can't race the previous
+  // session's finalizer.
+  const stop = () => {
+    if (acc.current) acc.current.stopped = true;
+    try { api.stopCommand(); } catch {}
+  };
+
   const clearHistory = () => {
-    if (timer.current) { clearInterval(timer.current); timer.current = null; }
-    setRuns([]); setSelected([]); setHMenu(false); setLive(null); setPhase('idle');
+    // If a run is in flight, ask it to stop but DO NOT race it: let the
+    // session finalizer transition phase + clear acc.current itself. Wiping
+    // phase to 'idle' here would let the user kick off a new run before the
+    // old one resolves (the old finalizer would then clobber UI / state).
+    stop();
+    setRuns([]); setSelected([]); setHMenu(false);
+    if (!acc.current) { setLive(null); setPhase('idle'); }
     try { localStorage.removeItem(PERF_KEY); } catch {}
   };
 
-  const total = stages.reduce((s, st) => s + (+st.d || 0), 0);
-  const maxVus = Math.max(0, ...stages.map(st => +st.t || 0));
-  const running = phase === 'running';
+  // Abort any in-flight k6 process if the user leaves the Performance route.
+  useEffPF(() => () => {
+    if (acc.current) acc.current.stopped = true;
+    try { api.stopCommand(); } catch {}
+  }, []);
 
-  const stop = () => { if (timer.current) clearInterval(timer.current); timer.current = null; setPhase(p => p === 'running' ? 'done' : p); };
-
-  const run = () => {
+  const run = async () => {
     if (running) { stop(); return; }
-    if (total <= 0) return;
-    const meta = TYPE_META[type];
-    acc.current = { i: 0, totReq: 0, totErr: 0, ok: 0, c4: 0, c5: 0, lat: [], rps: [], broke: null };
-    setProgress(0); setViewIdx(0); setPhase('running');
-    const dt = total / N_POINTS;
-    timer.current = setInterval(() => {
-      const a = acc.current; a.i += 1;
-      const p = a.i / N_POINTS;
-      const elapsed = p * total;
-      const av = vusAt(elapsed, stages);
-      const lf = av / meta.capacity;
-      const noise = (x) => 1 + (Math.random() - 0.5) * x;
-      let lat = meta.baseLat * (1 + 0.8 * lf + (lf > 1 ? 5 * (lf - 1) * (lf - 1) : 0)) * noise(0.15);
-      if (!conn.keepAlive) lat *= 1.15;
-      let errPct = (lf > 1 ? Math.min(65, 45 * (lf - 1)) : 0.2 + 0.6 * lf) * noise(0.4);
-      if (conn.timeout && lat > conn.timeout) { errPct = Math.max(errPct, 60); lat = conn.timeout; }
-      errPct = Math.max(0, errPct);
-      const effVus = Math.min(av, conn.maxConns || av);
-      const rps = Math.max(1, Math.round(effVus * 1000 / lat));
-      const reqTick = Math.round(rps * dt);
-      const errReq = Math.round(reqTick * errPct / 100);
-      a.totReq += reqTick; a.totErr += errReq;
-      a.ok += reqTick - errReq; a.c4 += Math.round(errReq * 0.6); a.c5 += errReq - Math.round(errReq * 0.6);
-      a.lat.push(lat); a.rps.push(rps);
-      if (!a.broke && errPct > 5) a.broke = Math.round(elapsed);
-      const sorted = [...a.lat].sort((x, y) => x - y);
-      const pct = (q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] || 0;
-      const overallErr = a.totReq ? a.totErr / a.totReq * 100 : 0;
-      setProgress(p);
+    if (total <= 0 || !tgt) return;
+
+    const reqEntry = window.QA.COLLECTIONS
+      .flatMap((c) => c.folders.flatMap((f) => f.requests))
+      .find((r) => r.id === tgt.value);
+    if (!reqEntry) return;
+    const det = window.QA.REQUEST_DETAILS[tgt.value] || {};
+
+    // Active variable map (globals → environment → collection). PerfTest
+    // doesn't track per-request locals, so we pass an empty locals map.
+    const envObj = env || { label: 'None', baseUrl: '' };
+    const varsObj = vars || window.QA.VARIABLES;
+    const collectionId = pfCollectionOf(tgt.value);
+    const activeMap = window.qaVarMap ? window.qaVarMap(varsObj, envObj.label, collectionId, {}) : {};
+    const sub = (t) => (window.qaSubstitute ? window.qaSubstitute(t || '', activeMap) : (t || ''));
+
+    // Resolve the URL the same way buildReq + the live executor do: drop the
+    // query from the stored path (det.params is the source of truth after
+    // import), substitute, classify absolute vs relative, then prepend the
+    // env baseUrl for relative URLs and re-append params at the end. Stripping
+    // the query first prevents duplicating it when the importer also parsed
+    // the same `?name=michael` into det.params.
+    const rawPath = (reqEntry.path || '').split('?')[0];
+    const rawUrl = sub(rawPath);
+    const isAbsolute = /^https?:\/\//i.test(rawUrl);
+    let url = isAbsolute ? rawUrl : (sub(envObj.baseUrl || '') + rawUrl);
+    const qParts = (det.params || [])
+      .filter((p) => p && p.on && p.key)
+      .map((p) => `${encodeURIComponent(sub(p.key))}=${encodeURIComponent(sub(p.value || ''))}`);
+    if (qParts.length) url += (url.includes('?') ? '&' : '?') + qParts.join('&');
+    if (!isAbsolute && !/^https?:\/\//i.test(url)) {
+      // No env baseUrl and a relative path → k6 will fail with bad URL. Surface
+      // this up front instead of silently letting k6 produce zero samples.
       setLive({
-        m: { sent: a.totReq, rps, avg: Math.round(a.lat.reduce((s, x) => s + x, 0) / a.lat.length), p80: Math.round(pct(0.80)), p90: Math.round(pct(0.90)), p95: Math.round(pct(0.95)), p99: Math.round(pct(0.99)), err: +overallErr.toFixed(2) },
-        latSeries: [...a.lat], rpsSeries: [...a.rps], dist: { ok: a.ok, c4: a.c4, c5: a.c5 }, broke: a.broke, slo: { ...slo },
+        m: { sent: 0, rps: 0, avg: 0, p80: 0, p90: 0, p95: 0, p99: 0, err: 0 },
+        latSeries: [], rpsSeries: [], dist: { ok: 0, c4: 0, c5: 0 }, broke: null,
+        slo: { ...slo }, error: `Request URL is relative (${url}) and no environment baseUrl is set.`,
       });
-      if (a.i >= N_POINTS) {
-        clearInterval(timer.current); timer.current = null;
-        const p80 = Math.round(pct(0.80)), p90 = Math.round(pct(0.90)), p95 = Math.round(pct(0.95)), p99 = Math.round(pct(0.99));
-        const avg = Math.round(a.lat.reduce((s, x) => s + x, 0) / a.lat.length);
-        const rows = [
-          { label: 'p80 response time', actual: p80, unit: 'ms', limit: slo.p80, pass: p80 <= slo.p80 },
-          { label: 'p90 response time', actual: p90, unit: 'ms', limit: slo.p90, pass: p90 <= slo.p90 },
-          { label: 'p95 response time', actual: p95, unit: 'ms', limit: slo.p95, pass: p95 <= slo.p95 },
-          { label: 'p99 response time', actual: p99, unit: 'ms', limit: slo.p99, pass: p99 <= slo.p99 },
-          { label: 'Error rate', actual: +overallErr.toFixed(2), unit: '%', limit: slo.err, pass: overallErr <= slo.err },
-        ];
-        const pass = rows.every(r => r.pass);
-        const peakRps = Math.max(...a.rps);
-        const summary = {
-          ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          type, typeLabel: meta.label, maxVus, dur: total,
-          m: { sent: a.totReq, rps: peakRps, avg, p80, p90, p95, p99, err: +overallErr.toFixed(2) },
-          latSeries: [...a.lat], rpsSeries: [...a.rps], dist: { ok: a.ok, c4: a.c4, c5: a.c5 }, broke: a.broke,
-          slo: { ...slo }, rows, pass,
-        };
-        setRuns(prev => {
-          const next = [summary, ...prev].slice(0, 8);
-          try { localStorage.setItem(PERF_KEY, JSON.stringify(next)); } catch {}
-          return next;
-        });
-        setViewIdx(0); setPhase('done');
-      }
-    }, 95);
+      setPhase('done');
+      return;
+    }
+
+    const hdrSrc = (det.headers && det.headers.length)
+      ? det.headers
+      : [{ key: 'Accept', value: 'application/json', on: true }];
+    const headers = hdrSrc
+      .filter((h) => h && h.on && h.key)
+      .map((h) => ({ key: sub(h.key), value: sub(h.value || ''), on: true }));
+    const body = det.body ? sub(det.body) : null;
+    const reqShape = { method: tgt.method, url, headers, body };
+
+    let scriptPath;
+    try {
+      scriptPath = await api.writeTempText(buildScript(reqShape, stages, conn), 'js');
+    } catch (e) {
+      setLive({
+        m: { sent: 0, rps: 0, avg: 0, p80: 0, p90: 0, p95: 0, p99: 0, err: 0 },
+        latSeries: [], rpsSeries: [], dist: { ok: 0, c4: 0, c5: 0 }, broke: null,
+        slo: { ...slo }, error: 'Failed to write k6 script: ' + String(e),
+      });
+      setPhase('done');
+      return;
+    }
+
+    const dtMs = (total / N_POINTS) * 1000;
+    const state = makeState(dtMs, N_POINTS);
+    const session = { state, scriptPath, stopped: false, buffer: '' };
+    acc.current = session;
+    setProgress(0); setViewIdx(0); setPhase('running');
+    setLive(snapshot(state, slo));
+
+    let lastFlushMs = 0;
+    const flush = () => {
+      setLive(snapshot(state, slo));
+      const lastFilled = state.bins.reduce((lo, b, i) => (b.count > 0 ? i + 1 : lo), 0);
+      setProgress(Math.min(1, lastFilled / N_POINTS));
+    };
+    const onChunk = (chunk) => {
+      if (session.stopped) return;
+      session.buffer += String(chunk || '');
+      const nl = session.buffer.lastIndexOf('\n');
+      if (nl < 0) return;
+      const ready = session.buffer.slice(0, nl);
+      session.buffer = session.buffer.slice(nl + 1);
+      for (const line of ready.split(/\r?\n/)) if (line) feed(state, line);
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (now - lastFlushMs > 150) { lastFlushMs = now; flush(); }
+    };
+
+    const k6 = k6Path || 'k6';
+    // k6 v2.0+ replaced --no-summary with --summary-mode disabled.
+    // --out json=- streams ndjson Point records to stdout (verified manually).
+    const cmd = `"${k6}" run --quiet --summary-mode disabled --out json=- "${scriptPath}"`;
+    let runErr = null;
+    let exitCode = null;
+    try {
+      exitCode = await api.runCommandWithRealTimeOutput(cmd, undefined, onChunk);
+    } catch (e) {
+      runErr = e;
+    }
+    // Always best-effort: delete the temp script.
+    api.cleanupTempFile(scriptPath).catch(() => {});
+
+    if (session.buffer) {
+      for (const line of session.buffer.split(/\r?\n/)) if (line) feed(state, line);
+    }
+    const stoppedByUser = session.stopped;
+    // Only release the slot if this session still owns it — guards against a
+    // user quickly re-pressing Start before the previous run's finally lands.
+    if (acc.current === session) acc.current = null;
+    if (stoppedByUser) {
+      // User aborted — don't record a partial run as if it completed.
+      setLive(null); setProgress(0); setPhase('idle');
+      return;
+    }
+    // run_command resolves with the numeric exit code; non-zero is a failure
+    // even though the await did not throw.
+    if (!runErr && exitCode != null && exitCode !== 0) {
+      runErr = `k6 exited with code ${exitCode}`;
+    }
+    const final = snapshot(state, slo);
+    if (runErr && final.m.sent === 0) {
+      setLive({ ...final, error: 'k6 produced no metrics. ' + String(runErr) });
+      setPhase('done');
+      return;
+    }
+    const { p80, p90, p95, p99, err } = final.m;
+    const sentSomething = final.m.sent > 0;
+    const rows = [
+      { label: 'p80 response time', actual: p80, unit: 'ms', limit: slo.p80, pass: sentSomething && p80 <= slo.p80 },
+      { label: 'p90 response time', actual: p90, unit: 'ms', limit: slo.p90, pass: sentSomething && p90 <= slo.p90 },
+      { label: 'p95 response time', actual: p95, unit: 'ms', limit: slo.p95, pass: sentSomething && p95 <= slo.p95 },
+      { label: 'p99 response time', actual: p99, unit: 'ms', limit: slo.p99, pass: sentSomething && p99 <= slo.p99 },
+      { label: 'Error rate', actual: err, unit: '%', limit: slo.err, pass: sentSomething && err <= slo.err },
+    ];
+    const pass = sentSomething && !runErr && rows.every((r) => r.pass);
+    const summary = {
+      ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type, typeLabel: TYPE_META[type].label, maxVus, dur: total,
+      m: final.m, latSeries: final.latSeries, rpsSeries: final.rpsSeries,
+      dist: final.dist, broke: final.broke, slo: { ...slo }, rows, pass,
+      error: runErr ? String(runErr) : null,
+    };
+    setLive(runErr ? { ...final, error: String(runErr) } : final);
+    setProgress(1);
+    setRuns((prev) => {
+      const next = [summary, ...prev].slice(0, 8);
+      try { localStorage.setItem(PERF_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setViewIdx(0);
+    setPhase('done');
   };
 
-  const tgt = PF_FLAT.find(r => r.value === target) || PF_FLAT[0];
+  const tgt = flat.find(r => r.value === target) || flat[0];
   const shown = running ? live : (runs[viewIdx] || live);
   const baseline = running ? null : (runs[viewIdx + 1] || null);
   const dist = shown ? shown.dist : { ok: 0, c4: 0, c5: 0 };
@@ -311,7 +441,7 @@ function PerfTest() {
         </div>
 
         <label className="qa-side-label" style={{ marginTop: 16 }}>Target request</label>
-        <Dropdown value={target} options={PF_FLAT} onChange={setTarget} />
+        <Dropdown value={target} options={flat} onChange={setTarget} />
 
         <div className="pf-sec-label"><span>Load stages</span><span className="qa-meta">{total}s · peak {maxVus} VUs</span></div>
         <div className="pf-stages">

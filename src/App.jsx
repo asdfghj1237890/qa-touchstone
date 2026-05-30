@@ -20,12 +20,37 @@ import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
 
-// Custom traffic-light window controls. The window is decoration-less
-// (tauri.conf.json `decorations: false`), so close/minimize/maximize are wired
-// here to the Tauri bridge. No-ops gracefully in the browser/dev/test.
+// Custom window controls. The window is decoration-less (tauri.conf.json
+// `decorations: false`), so close/minimize/maximize are wired here to the Tauri
+// bridge. No-ops gracefully in the browser/dev/test.
 const tauriReady = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+
+// Controls follow the host OS: Windows gets right-aligned square
+// minimize/maximize/close buttons (close hovers red); every other platform
+// keeps the macOS-style colored traffic lights.
+const isWindowsOS = () => {
+  if (typeof navigator === 'undefined') return false;
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
+  return /windows|win32|win64/i.test(platform);
+};
+
 function WindowControls() {
   const act = (fn) => (e) => { e.stopPropagation(); if (tauriReady()) Promise.resolve(fn()).catch(() => {}); };
+  if (isWindowsOS()) {
+    return (
+      <div className="qa-winctl qa-winctl-win">
+        <button type="button" className="qa-winctl-wbtn" title="Minimize" aria-label="Minimize window" onClick={act(api.minimizeWindow)}>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0" y="4.5" width="10" height="1" fill="currentColor" /></svg>
+        </button>
+        <button type="button" className="qa-winctl-wbtn" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)}>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
+        </button>
+        <button type="button" className="qa-winctl-wbtn qa-winctl-wclose" title="Close" aria-label="Close window" onClick={act(api.closeWindow)}>
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" strokeWidth="1" fill="none" /></svg>
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="qa-winctl">
       <button type="button" className="qa-winctl-btn qa-winctl-close" title="Close" aria-label="Close window" onClick={act(api.closeWindow)} />
@@ -50,9 +75,31 @@ function collectionOf(reqId) {
 function hostOf(url) {
   try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
 }
-function cookieMatches(ck, host) {
-  if (!ck.on || !host) return false;
-  return host === ck.domain || host.endsWith('.' + ck.domain) || ck.domain.endsWith('.' + host) || ck.domain === host;
+function cookieMatches(ck, requestUrl) {
+  if (!ck.on || !requestUrl || !ck.domain) return false;
+  let parsed;
+  try { parsed = new URL(requestUrl); } catch { return false; }
+  const host = parsed.hostname;
+  // RFC 6265 domain match: cookie scoped to ck.domain matches the same host
+  // OR any subdomain — never the parent. (Reversed direction was a bug.)
+  if (!(host === ck.domain || host.endsWith('.' + ck.domain))) return false;
+  // RFC 6265 path match: request path equals cookie path, OR request path
+  // starts with cookie path AND the boundary char is '/'.
+  const path = parsed.pathname || '/';
+  const ckPath = ck.path || '/';
+  const pathMatch = (
+    path === ckPath ||
+    (path.startsWith(ckPath) && (ckPath.endsWith('/') || path[ckPath.length] === '/'))
+  );
+  if (!pathMatch) return false;
+  // Secure: only send over https.
+  if (ck.secure && parsed.protocol !== 'https:') return false;
+  // Expires: drop expired cookies (best-effort; non-parseable strings stay).
+  if (ck.expires) {
+    const exp = Date.parse(ck.expires);
+    if (isFinite(exp) && exp < Date.now()) return false;
+  }
+  return true;
 }
 
 function buildReq(id) {
@@ -119,8 +166,16 @@ function App() {
   localList.forEach(v => { if (v.on !== false && v.key) localObj[v.key] = v.value; });
   const activeMap = window.qaVarMap(vars, env.label, collectionId, localObj);
   const setLocalForReq = (list) => setLocalVars(m => ({ ...m, [req.id]: list }));
-  const reqHost = hostOf(env.baseUrl || req.url);
-  const reqCookies = cookies.filter(c => cookieMatches(c, reqHost));
+  // Cookie selection: build the URL the request will actually hit so the
+  // matcher can apply RFC 6265's domain/path/Secure rules. Absolute imported
+  // URLs run as-is (no env.baseUrl host leakage); relative URLs get the
+  // active env's baseUrl prefixed so the cookie's host/path/scheme decision
+  // is taken on the actual outgoing target.
+  const reqUrlForHost = window.qaSubstitute ? window.qaSubstitute(req.url || '', activeMap) : (req.url || '');
+  const reqIsAbsolute = /^https?:\/\//i.test(reqUrlForHost);
+  const reqUrlForCookie = reqIsAbsolute ? reqUrlForHost : ((env.baseUrl || '') + reqUrlForHost);
+  const reqHost = hostOf(reqUrlForCookie);
+  const reqCookies = cookies.filter(c => cookieMatches(c, reqUrlForCookie));
 
   // Merge generated/structured assertions into a request's tests, matched by method+path.
   const addTestsForCase = (method, path, assertions) => {
@@ -174,10 +229,15 @@ function App() {
         setHistory(h => [{ id: sentReq.id, method: sentReq.method, path: pathWithParams, status: resp.status, time: resp.time, at }, ...h].slice(0, 12));
         if (resp.status >= 200 && resp.status < 400) setLogoFlash(Date.now());
 
-        // Capture Set-Cookie into the jar (auto-managed, like a browser).
+        // Capture Set-Cookie into the jar (auto-managed, like a browser). The
+        // capture host must match the host the request actually reached —
+        // mirror the outgoing-cookie logic so an absolute imported URL doesn't
+        // store its Set-Cookie under env.baseUrl's host.
         const sc = resp.headers && (resp.headers['set-cookie'] || resp.headers['Set-Cookie']);
         if (sc) {
-          const host = hostOf(env.baseUrl || sentReq.url);
+          const sentUrlSub = window.qaSubstitute ? window.qaSubstitute(sentReq.url || '', activeMap) : (sentReq.url || '');
+          const sentIsAbsolute = /^https?:\/\//i.test(sentUrlSub);
+          const host = hostOf(sentIsAbsolute ? sentUrlSub : (env.baseUrl || sentUrlSub));
           const ck = window.qaParseSetCookie(sc, host);
           if (ck) {
             setCookies(jar => window.qaMergeCookie(jar, ck));
@@ -221,7 +281,7 @@ function App() {
         <div className="qa-content">
           {route === 'home' && <HomePage setRoute={setRoute} history={history} onOpenRequest={openFromHistory} env={env} />}
           {route === 'settings' && <SettingsPage accent={accent} setAccent={setAccent} initialTab={settingsTab} vars={vars} setVars={setVars} cookies={cookies} setCookies={setCookies} sslVerify={sslVerify} setSslVerify={setSslVerify} />}
-          {route === 'perf' && <PerfTest />}
+          {route === 'perf' && <PerfTest env={env} vars={vars} />}
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
