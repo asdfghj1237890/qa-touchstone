@@ -1,0 +1,101 @@
+{
+  "info": {
+    "name": "Public APIs — Callable Demo",
+    "description": "A hand-picked set of free, no-auth, HTTPS GET endpoints (inspired by github.com/public-apis/public-apis). Every request returns real JSON — import this and press Send to exercise the live HTTP engine. Each endpoint was verified to return 200 + JSON on 2026-05-30.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Animals",
+      "item": [
+        { "name": "Random cat fact", "request": { "method": "GET", "header": [], "url": "https://catfact.ninja/fact" } },
+        { "name": "Cat breeds", "request": { "method": "GET", "header": [], "url": "https://catfact.ninja/breeds" } },
+        { "name": "Random dog image", "request": { "method": "GET", "header": [], "url": "https://dog.ceo/api/breeds/image/random" } },
+        { "name": "All dog breeds", "request": { "method": "GET", "header": [], "url": "https://dog.ceo/api/breeds/list/all" } },
+        { "name": "Random duck image", "request": { "method": "GET", "header": [], "url": "https://random-d.uk/api/random" } },
+        { "name": "Random fox image", "request": { "method": "GET", "header": [], "url": "https://randomfox.ca/floof/" } }
+      ]
+    },
+    {
+      "name": "Fun & Jokes",
+      "item": [
+        { "name": "Random joke", "request": { "method": "GET", "header": [], "url": "https://official-joke-api.appspot.com/random_joke" } },
+        { "name": "Chuck Norris joke", "request": { "method": "GET", "header": [], "url": "https://api.chucknorris.io/jokes/random" } },
+        { "name": "Yes or no (+ gif)", "request": { "method": "GET", "header": [], "url": "https://yesno.wtf/api" } },
+        { "name": "Random useless fact", "request": { "method": "GET", "header": [], "url": "https://uselessfacts.jsph.pl/api/v2/facts/random" } },
+        { "name": "Random advice", "request": { "method": "GET", "header": [], "url": "https://api.adviceslip.com/advice" } },
+        { "name": "Kanye West quote", "request": { "method": "GET", "header": [], "url": "https://api.kanye.rest" } }
+      ]
+    },
+    {
+      "name": "Quotes & Words",
+      "item": [
+        { "name": "Daily affirmation", "request": { "method": "GET", "header": [], "url": "https://www.affirmations.dev/" } },
+        { "name": "Zen quote", "request": { "method": "GET", "header": [], "url": "https://zenquotes.io/api/random" } }
+      ]
+    },
+    {
+      "name": "Developer Tools",
+      "item": [
+        { "name": "GitHub user (octocat)", "request": { "method": "GET", "header": [], "url": "https://api.github.com/users/octocat" } },
+        { "name": "httpbin echo (GET)", "request": { "method": "GET", "header": [], "url": "https://httpbin.org/get" } },
+        { "name": "JSONPlaceholder todo", "request": { "method": "GET", "header": [], "url": "https://jsonplaceholder.typicode.com/todos/1" } },
+        { "name": "Your public IP", "request": { "method": "GET", "header": [], "url": "https://api.ipify.org?format=json" } },
+        { "name": "DummyJSON product", "request": { "method": "GET", "header": [], "url": "https://dummyjson.com/products/1" } }
+      ]
+    },
+    {
+      "name": "HTTP Methods (httpbin echo)",
+      "item": [
+        { "name": "POST echo", "request": { "method": "POST", "header": [], "body": { "mode": "raw", "raw": "{ \"name\": \"QA Touchstone\", \"id\": 42 }" }, "url": "https://httpbin.org/post" } },
+        { "name": "PUT echo", "request": { "method": "PUT", "header": [], "body": { "mode": "raw", "raw": "{ \"name\": \"QA Touchstone\", \"active\": true }" }, "url": "https://httpbin.org/put" } },
+        { "name": "PATCH echo", "request": { "method": "PATCH", "header": [], "body": { "mode": "raw", "raw": "{ \"active\": false }" }, "url": "https://httpbin.org/patch" } },
+        { "name": "DELETE echo", "request": { "method": "DELETE", "header": [], "url": "https://httpbin.org/delete" } }
+      ]
+    },
+    {
+      "name": "Geography",
+      "item": [
+        { "name": "US ZIP lookup (33162)", "request": { "method": "GET", "header": [], "url": "https://api.zippopotam.us/us/33162" } },
+        { "name": "Sunrise & sunset", "request": { "method": "GET", "header": [], "url": "https://api.sunrise-sunset.org/json?lat=36.72016&lng=-4.42034" } }
+      ]
+    },
+    {
+      "name": "People & Names",
+      "item": [
+        { "name": "Predict age by name", "request": { "method": "GET", "header": [], "url": "https://api.agify.io/?name=michael" } },
+        { "name": "Predict gender by name", "request": { "method": "GET", "header": [], "url": "https://api.genderize.io/?name=alice" } },
+        { "name": "Predict nationality by name", "request": { "method": "GET", "header": [], "url": "https://api.nationalize.io/?name=john" } },
+        { "name": "Random user profile", "request": { "method": "GET", "header": [], "url": "https://randomuser.me/api/" } }
+      ]
+    },
+    {
+      "name": "Science & Space",
+      "item": [
+        { "name": "SpaceX latest launch", "request": { "method": "GET", "header": [], "url": "https://api.spacexdata.com/v4/launches/latest" } },
+        { "name": "NASA image library (moon)", "request": { "method": "GET", "header": [], "url": "https://images-api.nasa.gov/search?q=moon" } }
+      ]
+    },
+    {
+      "name": "Finance & Crypto",
+      "item": [
+        { "name": "Bitcoin price (CoinGecko)", "request": { "method": "GET", "header": [], "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd" } },
+        { "name": "Currency exchange rates", "request": { "method": "GET", "header": [], "url": "https://api.frankfurter.app/latest" } }
+      ]
+    },
+    {
+      "name": "Anime & Games",
+      "item": [
+        { "name": "Anime info (Jikan)", "request": { "method": "GET", "header": [], "url": "https://api.jikan.moe/v4/anime/1" } },
+        { "name": "Pokémon info (Ditto)", "request": { "method": "GET", "header": [], "url": "https://pokeapi.co/api/v2/pokemon/ditto" } }
+      ]
+    },
+    {
+      "name": "Weather & Utility",
+      "item": [
+        { "name": "Current weather (Open-Meteo)", "request": { "method": "GET", "header": [], "url": "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true" } },
+        { "name": "Generate UUID v4", "request": { "method": "GET", "header": [], "url": "https://www.uuidtools.com/api/generate/v4" } }
+      ]
+    }
+  ]
+}
