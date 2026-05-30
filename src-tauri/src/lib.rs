@@ -10,6 +10,7 @@ mod serial_xfer;
 mod state;
 
 use state::AppState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,14 +23,31 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
-        // 設定視窗為靜態單例：關閉時改為隱藏，避免被銷毀後 open_settings 永遠找不到它。
-        .on_window_event(|window, event| {
-            if window.label() == "settings" {
+        .on_window_event(|window, event| match window.label() {
+            // 設定視窗為靜態單例：關閉時改為隱藏，避免被銷毀後 open_settings 永遠找不到它。
+            "settings" => {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
                 }
             }
+            // 關閉主視窗即結束整個程序（含被隱藏、永不銷毀的 settings 視窗），
+            // 否則隱藏視窗會讓「所有視窗皆關閉」條件永遠不成立、程序殘留。
+            // 先樹狀殺掉任何進行中的子程序（例如 PerfTest 跑的 k6），
+            // 否則 Windows 下父程序退出不會自動清理子程序。
+            "main" => {
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
+                    let app = window.app_handle();
+                    if let Some(state) = app.try_state::<AppState>() {
+                        let pid_opt = state.current_process_pid.lock().take();
+                        if let Some(pid) = pid_opt {
+                            commands::process::kill_tree(pid);
+                        }
+                    }
+                    app.exit(0);
+                }
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::get_platform,
@@ -53,6 +71,9 @@ pub fn run() {
             commands::fsops::read_directory,
             commands::fsops::find_hex_file,
             commands::fsops::read_file_content,
+            commands::fsops::write_temp_text,
+            commands::fsops::cleanup_temp_file,
+            commands::fsops::get_k6_path,
             commands::certs::scan_certificates,
             commands::certs::get_certificates_path,
             commands::certs::get_selected_certificate,
