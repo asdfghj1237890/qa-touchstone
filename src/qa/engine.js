@@ -107,7 +107,49 @@ function qaParseAssertion(str) {
 }
 
 // Parse a Set-Cookie header value into a cookie jar entry. Returns null if empty.
-function qaParseSetCookie(headerValue, fallbackHost) {
+// Monotonic suffix so cookies captured in the same millisecond get distinct
+// ids. The Settings UI uses cookie.id as a React key and edit/delete target;
+// without this, two Set-Cookie lines for the same name in one response could
+// collide and confuse the jar editor.
+let qaCookieSeq = 0;
+
+// Common 2-label public suffixes that should be refused as cookie Domain
+// attributes — a response from foo.co.uk must NOT be able to set a cookie
+// scoped to `co.uk` and poison every other foo.co.uk-style site. This is a
+// best-effort short list; a full Public Suffix List is the proper long-term
+// fix, but covering the most-likely attack vectors here gets >90% of the way
+// without shipping a ~1MB PSL.
+const QA_PUBLIC_SUFFIX_2 = new Set([
+  // UK / EU
+  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'me.uk', 'net.uk', 'ltd.uk', 'plc.uk', 'nhs.uk', 'sch.uk',
+  // JP / KR / CN / TW
+  'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'go.jp', 'gr.jp', 'ed.jp', 'lg.jp',
+  'co.kr', 'or.kr', 'ne.kr', 'go.kr', 'ac.kr', 're.kr', 'pe.kr', 'mil.kr',
+  'com.cn', 'net.cn', 'org.cn', 'edu.cn', 'gov.cn', 'mil.cn', 'ac.cn',
+  'com.tw', 'net.tw', 'org.tw', 'gov.tw', 'edu.tw', 'idv.tw', 'mil.tw', 'game.tw',
+  // AU / NZ / Americas
+  'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'asn.au', 'id.au',
+  'co.nz', 'net.nz', 'org.nz', 'ac.nz',
+  'com.br', 'net.br', 'org.br', 'edu.br', 'gov.br',
+  'com.mx', 'com.ar', 'com.co', 'com.pe', 'com.ve',
+  // ZA / SG / ID
+  'co.za', 'org.za', 'gov.za',
+  'com.sg', 'edu.sg', 'gov.sg',
+  'co.id', 'or.id', 'go.id', 'ac.id',
+  // Common SaaS host suffixes (treat like public suffixes for cookie scope)
+  'github.io', 'gitlab.io', 'pages.dev', 'web.app', 'firebaseapp.com',
+  'vercel.app', 'netlify.app', 'r2.dev', 'workers.dev', 'cloudfront.net',
+]);
+
+// RFC 6265 §5.1.4 default-path: the longest prefix of the request path that
+// ends with `/`, or `/` if the path has no `/` segments to draw from.
+function qaCookieDefaultPath(requestPath) {
+  if (!requestPath || requestPath[0] !== '/') return '/';
+  const last = requestPath.lastIndexOf('/');
+  return last <= 0 ? '/' : requestPath.slice(0, last);
+}
+
+function qaParseSetCookie(headerValue, fallbackHost, fallbackPath) {
   if (!headerValue) return null;
   const parts = headerValue.split(';').map(s => s.trim());
   const [nameVal, ...attrs] = parts;
@@ -115,26 +157,50 @@ function qaParseSetCookie(headerValue, fallbackHost) {
   if (eq < 0) return null;
   const name = nameVal.slice(0, eq).trim();
   const value = nameVal.slice(eq + 1).trim();
-  const ck = { id: 'ck-' + name + '-' + Date.now().toString(36), name, value, domain: fallbackHost || '', path: '/', expires: '', httpOnly: false, secure: false, sameSite: 'Lax', on: true };
-  attrs.forEach(a => {
+  // hostOnly defaults true; flipped false when a valid Domain attr is parsed.
+  // path defaults to RFC 6265's default-path derived from the request path.
+  const ck = { id: 'ck-' + name + '-' + Date.now().toString(36) + '-' + (qaCookieSeq++).toString(36), name, value, domain: fallbackHost || '', path: qaCookieDefaultPath(fallbackPath || '/'), expires: '', httpOnly: false, secure: false, sameSite: 'Lax', hostOnly: true, on: true };
+  for (const a of attrs) {
     const [k, v] = a.split('=');
     const key = k.toLowerCase();
-    if (key === 'domain') ck.domain = (v || '').replace(/^\./, '');
+    if (key === 'domain') {
+      const dom = (v || '').replace(/^\./, '').toLowerCase();
+      if (!dom) continue;
+      // Reject single-label (public-suffix-ish) Domain attrs like `com` —
+      // without a Public Suffix List this is the practical guard against
+      // poisoning every .com host. Browsers reject these outright.
+      if (!dom.includes('.')) return null;
+      // Reject common 2-label public suffixes (co.uk, github.io, …). Not a
+      // complete PSL but covers the realistic attack vectors.
+      if (QA_PUBLIC_SUFFIX_2.has(dom)) return null;
+      // RFC 6265 §5.3 step 6: reject the entire cookie if the Domain
+      // attribute does not domain-match the response host. Otherwise a
+      // response from evil.test could seed a cookie scoped to staging.api…
+      if (!fallbackHost || !(fallbackHost === dom || fallbackHost.endsWith('.' + dom))) {
+        return null;
+      }
+      ck.domain = dom;
+      ck.hostOnly = false;
+    }
     else if (key === 'path') ck.path = v || '/';
     else if (key === 'secure') ck.secure = true;
     else if (key === 'httponly') ck.httpOnly = true;
     else if (key === 'samesite') ck.sameSite = v || 'Lax';
-    else if (key === 'max-age' && v) { const d = new Date(Date.now() + (+v) * 1000); ck.expires = d.toISOString().slice(0, 10); }
-    else if (key === 'expires' && v) { const d = new Date(v); if (!isNaN(d)) ck.expires = d.toISOString().slice(0, 10); }
-  });
+    // Keep the full ISO datetime. Truncating to YYYY-MM-DD meant a cookie
+    // with Max-Age=3600 set at noon became "expired" at midnight UTC.
+    else if (key === 'max-age' && v) { const d = new Date(Date.now() + (+v) * 1000); ck.expires = d.toISOString(); }
+    else if (key === 'expires' && v) { const d = new Date(v); if (!isNaN(d)) ck.expires = d.toISOString(); }
+  }
   return ck;
 }
 
-// Merge a newly-captured cookie into an existing jar (replace by name+domain).
+// Merge a newly-captured cookie into an existing jar. The identity key is
+// name+domain+path per RFC 6265 — without path, a cookie scoped to `/admin`
+// would silently overwrite the `/`-scoped cookie of the same name.
 function qaMergeCookie(jar, ck) {
   if (!ck) return jar;
-  const i = jar.findIndex(c => c.name === ck.name && c.domain === ck.domain);
-  if (i >= 0) { const next = jar.slice(); next[i] = { ...next[i], value: ck.value, expires: ck.expires || next[i].expires, secure: ck.secure, httpOnly: ck.httpOnly, sameSite: ck.sameSite, on: true }; return next; }
+  const i = jar.findIndex(c => c.name === ck.name && c.domain === ck.domain && (c.path || '/') === (ck.path || '/'));
+  if (i >= 0) { const next = jar.slice(); next[i] = { ...next[i], value: ck.value, expires: ck.expires || next[i].expires, secure: ck.secure, httpOnly: ck.httpOnly, sameSite: ck.sameSite, hostOnly: ck.hostOnly, on: true }; return next; }
   return [...jar, ck];
 }
 
@@ -175,3 +241,5 @@ function qaParseDataFile(text, filename) {
 }
 
 Object.assign(window, { qaDynamic, QA_DYNAMICS, qaVarMap, qaVarSources, QA_SCOPES, qaSubstitute, qaHasVars, qaUnknownVars, qaGetPath, qaAssertLabel, qaEval, qaRunAssertions, qaParseAssertion, qaParseSetCookie, qaMergeCookie, qaParseDataFile });
+
+export { qaParseSetCookie, qaMergeCookie, qaCookieDefaultPath };

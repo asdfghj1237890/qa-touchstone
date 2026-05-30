@@ -13,6 +13,7 @@ import { PerfTest } from './qa/PerfTest.jsx';
 import { RealtimePage } from './qa/Realtime.jsx';
 import { Runner } from './qa/Runner.jsx';
 import { DocsPage } from './qa/Docs.jsx';
+import { cookieMatches } from './qa/cookies.js';
 import { MonitorsPage } from './qa/Monitors.jsx';
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
@@ -75,32 +76,7 @@ function collectionOf(reqId) {
 function hostOf(url) {
   try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
 }
-function cookieMatches(ck, requestUrl) {
-  if (!ck.on || !requestUrl || !ck.domain) return false;
-  let parsed;
-  try { parsed = new URL(requestUrl); } catch { return false; }
-  const host = parsed.hostname;
-  // RFC 6265 domain match: cookie scoped to ck.domain matches the same host
-  // OR any subdomain — never the parent. (Reversed direction was a bug.)
-  if (!(host === ck.domain || host.endsWith('.' + ck.domain))) return false;
-  // RFC 6265 path match: request path equals cookie path, OR request path
-  // starts with cookie path AND the boundary char is '/'.
-  const path = parsed.pathname || '/';
-  const ckPath = ck.path || '/';
-  const pathMatch = (
-    path === ckPath ||
-    (path.startsWith(ckPath) && (ckPath.endsWith('/') || path[ckPath.length] === '/'))
-  );
-  if (!pathMatch) return false;
-  // Secure: only send over https.
-  if (ck.secure && parsed.protocol !== 'https:') return false;
-  // Expires: drop expired cookies (best-effort; non-parseable strings stay).
-  if (ck.expires) {
-    const exp = Date.parse(ck.expires);
-    if (isFinite(exp) && exp < Date.now()) return false;
-  }
-  return true;
-}
+// cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
 
 function buildReq(id) {
   const { COLLECTIONS, REQUEST_DETAILS } = window.QA;
@@ -167,15 +143,22 @@ function App() {
   const activeMap = window.qaVarMap(vars, env.label, collectionId, localObj);
   const setLocalForReq = (list) => setLocalVars(m => ({ ...m, [req.id]: list }));
   // Cookie selection: build the URL the request will actually hit so the
-  // matcher can apply RFC 6265's domain/path/Secure rules. Absolute imported
-  // URLs run as-is (no env.baseUrl host leakage); relative URLs get the
-  // active env's baseUrl prefixed so the cookie's host/path/scheme decision
-  // is taken on the actual outgoing target.
+  // matcher can apply RFC 6265's domain/path/Secure rules. env.baseUrl is
+  // substituted the same way the live executor does it — otherwise a
+  // baseUrl like `{{apiHost}}` would never produce a parseable URL and we
+  // would silently send no cookies on requests that the executor still
+  // delivers successfully.
   const reqUrlForHost = window.qaSubstitute ? window.qaSubstitute(req.url || '', activeMap) : (req.url || '');
   const reqIsAbsolute = /^https?:\/\//i.test(reqUrlForHost);
-  const reqUrlForCookie = reqIsAbsolute ? reqUrlForHost : ((env.baseUrl || '') + reqUrlForHost);
+  const envBaseSub = window.qaSubstitute ? window.qaSubstitute(env.baseUrl || '', activeMap) : (env.baseUrl || '');
+  const reqUrlForCookie = reqIsAbsolute ? reqUrlForHost : (envBaseSub + reqUrlForHost);
   const reqHost = hostOf(reqUrlForCookie);
-  const reqCookies = cookies.filter(c => cookieMatches(c, reqUrlForCookie));
+  // RFC 6265 §5.4: cookies with longer paths must precede shorter-path ones
+  // in the Cookie header. Many servers read the first occurrence of a name,
+  // so without this sort our /admin cookie would lose to / when both match.
+  const reqCookies = cookies
+    .filter((c) => cookieMatches(c, reqUrlForCookie))
+    .sort((a, b) => (b.path || '/').length - (a.path || '/').length);
 
   // Merge generated/structured assertions into a request's tests, matched by method+path.
   const addTestsForCase = (method, path, assertions) => {
@@ -229,19 +212,36 @@ function App() {
         setHistory(h => [{ id: sentReq.id, method: sentReq.method, path: pathWithParams, status: resp.status, time: resp.time, at }, ...h].slice(0, 12));
         if (resp.status >= 200 && resp.status < 400) setLogoFlash(Date.now());
 
-        // Capture Set-Cookie into the jar (auto-managed, like a browser). The
-        // capture host must match the host the request actually reached —
-        // mirror the outgoing-cookie logic so an absolute imported URL doesn't
-        // store its Set-Cookie under env.baseUrl's host.
+        // Capture Set-Cookie into the jar (auto-managed, like a browser). Use
+        // resp.finalUrl (the URL reqwest landed on after auto-following any
+        // redirects) so cross-host or deeper-path redirects scope cookies to
+        // the host the response actually came from. Fall back to the locally
+        // computed request URL when finalUrl isn't available (e.g. the
+        // canned-response dev fallback).
         const sc = resp.headers && (resp.headers['set-cookie'] || resp.headers['Set-Cookie']);
         if (sc) {
-          const sentUrlSub = window.qaSubstitute ? window.qaSubstitute(sentReq.url || '', activeMap) : (sentReq.url || '');
-          const sentIsAbsolute = /^https?:\/\//i.test(sentUrlSub);
-          const host = hostOf(sentIsAbsolute ? sentUrlSub : (env.baseUrl || sentUrlSub));
-          const ck = window.qaParseSetCookie(sc, host);
-          if (ck) {
-            setCookies(jar => window.qaMergeCookie(jar, ck));
-            setCookieToast({ name: ck.name, domain: ck.domain || host });
+          let fullSentUrl = resp.finalUrl || '';
+          if (!fullSentUrl) {
+            const sentUrlSub = window.qaSubstitute ? window.qaSubstitute(sentReq.url || '', activeMap) : (sentReq.url || '');
+            const sentIsAbsolute = /^https?:\/\//i.test(sentUrlSub);
+            const envBaseSubCap = window.qaSubstitute ? window.qaSubstitute(env.baseUrl || '', activeMap) : (env.baseUrl || '');
+            fullSentUrl = sentIsAbsolute ? sentUrlSub : (envBaseSubCap + sentUrlSub);
+          }
+          let sentHost = '', sentPath = '/';
+          try { const u = new URL(fullSentUrl); sentHost = u.hostname; sentPath = u.pathname || '/'; }
+          catch { sentHost = hostOf(fullSentUrl); }
+          // Multi-cookie responses may arrive as newline-joined strings from
+          // the Rust side; parse each header independently.
+          const scList = Array.isArray(sc) ? sc : String(sc).split('\n').map((s) => s.trim()).filter(Boolean);
+          let firstCk = null;
+          scList.forEach((line) => {
+            const ck = window.qaParseSetCookie(line, sentHost, sentPath);
+            if (!ck) return;
+            firstCk = firstCk || ck;
+            setCookies((jar) => window.qaMergeCookie(jar, ck));
+          });
+          if (firstCk) {
+            setCookieToast({ name: firstCk.name, domain: firstCk.domain || sentHost });
             setTimeout(() => setCookieToast(null), 4200);
           }
         }
