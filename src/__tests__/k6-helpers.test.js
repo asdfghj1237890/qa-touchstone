@@ -49,6 +49,22 @@ describe('k6gen.buildScript', () => {
     expect(s).toContain(`"X-Keep":"yes"`);
     expect(s).not.toContain('X-Skip');
   });
+
+  it('honours conn.keepAlive=false by emitting noConnectionReuse', () => {
+    const off = buildScript({ method: 'GET', url: 'https://x', headers: [], body: null }, [{ d: 1, t: 1 }], { keepAlive: false });
+    expect(off).toContain('noConnectionReuse: true');
+    const on = buildScript({ method: 'GET', url: 'https://x', headers: [], body: null }, [{ d: 1, t: 1 }], { keepAlive: true });
+    expect(on).not.toContain('noConnectionReuse');
+  });
+
+  it('emits per-stage targets verbatim — capping is the caller\'s job', () => {
+    // buildScript no longer applies conn.maxConns; PerfTest caps stages
+    // before calling so the UI / history / exports stay aligned with what
+    // k6 actually runs.
+    const s = buildScript({ method: 'GET', url: 'https://x', headers: [], body: null }, [{ d: 5, t: 50 }, { d: 10, t: 5 }], { maxConns: 10 });
+    expect(s).toContain(`{ duration: '5s', target: 50 }`);
+    expect(s).toContain(`{ duration: '10s', target: 5 }`);
+  });
 });
 
 describe('k6parse.feed + snapshot', () => {

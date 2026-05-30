@@ -238,7 +238,16 @@ function PerfTest({ env, vars }) {
 
   const toggleSel = (i) => setSelected(s => s.includes(i) ? s.filter(x => x !== i) : [...s, i]);
   const total = stages.reduce((s, st) => s + (+st.d || 0), 0);
-  const maxVus = Math.max(0, ...stages.map((st) => +st.t || 0));
+  // Apply the Max-connections cap up front so the script, the chart, the
+  // history row, and the CSV/JSON exports all agree on the effective peak.
+  // Capping inside k6gen alone would mean "Peak 50 VUs" in the report while
+  // k6 actually ran 10.
+  const connCap = +conn.maxConns > 0 ? Math.floor(+conn.maxConns) : Infinity;
+  const effStages = stages.map((st) => ({
+    ...st,
+    t: Math.max(0, Math.min(connCap, Math.floor(+st.t || 0))),
+  }));
+  const maxVus = Math.max(0, ...effStages.map((st) => +st.t || 0));
   const running = phase === 'running';
 
   // Hand off the load to k6 (must be on PATH). The chart and SLO scoring read
@@ -329,7 +338,7 @@ function PerfTest({ env, vars }) {
 
     let scriptPath;
     try {
-      scriptPath = await api.writeTempText(buildScript(reqShape, stages, conn), 'js');
+      scriptPath = await api.writeTempText(buildScript(reqShape, effStages, conn), 'js');
     } catch (e) {
       if (mountedRef.current) {
         setLive({
@@ -377,11 +386,12 @@ function PerfTest({ env, vars }) {
     const k6 = k6Path || 'k6';
     // k6 v2.0+ replaced --no-summary with --summary-mode disabled.
     // --out json=- streams ndjson Point records to stdout (verified manually).
-    const cmd = `"${k6}" run --quiet --summary-mode disabled --out json=- "${scriptPath}"`;
+    // Use structured-args spawn (run_program) — no shell, no quoting bugs.
+    const args = ['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', scriptPath];
     let runErr = null;
     let exitCode = null;
     try {
-      exitCode = await api.runCommandWithRealTimeOutput(cmd, undefined, onChunk);
+      exitCode = await api.runProgramWithRealTimeOutput(k6, args, undefined, onChunk);
     } catch (e) {
       runErr = e;
     }

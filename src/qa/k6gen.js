@@ -4,6 +4,9 @@
 // hand to `k6 run`.
 
 function fmtStages(stages) {
+  // Caller is responsible for any maxConns capping — PerfTest applies the
+  // cap before building the script so the UI / history / exports report
+  // the same effective VUs that k6 actually runs.
   return (stages || []).map((s) => {
     const d = Math.max(0, Math.floor(+s.d || 0));
     const t = Math.max(0, Math.floor(+s.t || 0));
@@ -27,10 +30,14 @@ export function buildScript({ method, url, headers, body }, stages, conn = {}) {
   const headerObj = fmtHeaders(headers, hasBody);
   const timeoutSec = Math.max(1, Math.floor((+conn.timeout || 30000) / 1000));
   const bodyExpr = hasBody ? JSON.stringify(body) : 'null';
+  // keepAlive=false → tell k6 to open a fresh TCP connection per iteration.
+  // The k6 default reuses connections; flipping to noConnectionReuse exposes
+  // the realistic cost of TLS handshake / TCP setup on every request.
+  const noReuse = conn.keepAlive === false ? 'noConnectionReuse: true,\n  ' : '';
   return `import http from 'k6/http';
 
 export const options = {
-  stages: [${fmtStages(stages)}],
+  ${noReuse}stages: [${fmtStages(stages)}],
   summaryTrendStats: ['avg','min','med','max','p(80)','p(90)','p(95)','p(99)'],
 };
 
