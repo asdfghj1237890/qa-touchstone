@@ -131,7 +131,7 @@ function RealtimeClient({ env }) {
             <span className="rt-msg-arrow">{m.dir === 'in' ? '↓' : m.dir === 'out' ? '↑' : '•'}</span>
             <div className="rt-msg-body">
               {m.event && <span className="rt-msg-event">{m.event}</span>}
-              <code dangerouslySetInnerHTML={{ __html: m.body[0] === '{' ? window.highlightJson(m.body) : m.body }} />
+              <code dangerouslySetInnerHTML={{ __html: m.body[0] === '{' ? window.highlightJson(m.body) : String(m.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') }} />
             </div>
             <span className="rt-msg-at">{m.at}</span>
           </div>

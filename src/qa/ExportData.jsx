@@ -5,7 +5,10 @@ import './setup.js';
 
 // Turn a path like "/v1/users?limit=5" + base URL into a Postman url object.
 function pmUrlObject(baseUrl, path, params) {
-  const raw = (baseUrl || '') + path;
+  // Imported absolute URLs already carry their host; don't prepend baseUrl
+  // (mirrors the executor / PerfTest URL build).
+  const isAbsolute = /^https?:\/\//i.test(path || '');
+  const raw = isAbsolute ? (path || '') : ((baseUrl || '') + path);
   let host = [], segs = [], protocol = 'https';
   try {
     const u = new URL(raw.includes('://') ? raw : 'https://placeholder' + (path.startsWith('/') ? path : '/' + path));

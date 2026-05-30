@@ -17,7 +17,7 @@ function DocRequest({ r, env, onOpenRequest }) {
     <div className="doc-req" id={'doc-' + r.id}>
       <div className="doc-req-head">
         <span className="doc-method" style={{ color: docMethodColor(r.method) }}>{r.method}</span>
-        <code className="doc-path">{(env.baseUrl || '') + r.path}</code>
+        <code className="doc-path">{/^https?:\/\//i.test(r.path || '') ? r.path : ((env.baseUrl || '') + r.path)}</code>
         <button className="qa-link doc-open" onClick={() => onOpenRequest(r.id)}>Open in client →</button>
       </div>
       <div className="doc-req-name">{r.name}</div>
@@ -135,7 +135,8 @@ function buildDocsHtml(col, env) {
     const pTable = params.length ? `<table><tr><th>Name</th><th>Example</th><th>Required</th></tr>${params.map(p => `<tr><td><code>${esc(p.key)}</code></td><td>${esc(p.value || '—')}</td><td>${p.on === false ? 'optional' : 'yes'}</td></tr>`).join('')}</table>` : '';
     const body = det.body ? `<h4>Request body</h4><pre>${esc(det.body)}</pre>` : '';
     const respHtml = resp && resp.body != null ? `<h4>Example response <b style="color:${sc(resp.status)}">${resp.status} ${esc(resp.statusText)}</b></h4><pre>${esc(JSON.stringify(resp.body, null, 2))}</pre>` : '';
-    return `<section><div class="rh"><span class="m" style="color:${mc(r.method)}">${r.method}</span> <code>${esc((env.baseUrl || '') + r.path)}</code></div><div class="rn">${esc(r.name)}</div><div class="auth">Auth: ${esc(docAuthLabel(det.auth))}</div>${pTable}${body}${respHtml}</section>`;
+    const fullUrl = /^https?:\/\//i.test(r.path || '') ? r.path : ((env.baseUrl || '') + r.path);
+    return `<section><div class="rh"><span class="m" style="color:${mc(r.method)}">${esc(r.method)}</span> <code>${esc(fullUrl)}</code></div><div class="rn">${esc(r.name)}</div><div class="auth">Auth: ${esc(docAuthLabel(det.auth))}</div>${pTable}${body}${respHtml}</section>`;
   }).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(col.name)} — API docs</title><style>
   body{margin:0;background:#15181c;color:#e6edf3;font-family:'Google Sans Code',ui-monospace,monospace;font-size:13px;padding:40px}

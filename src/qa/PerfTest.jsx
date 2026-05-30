@@ -209,6 +209,16 @@ function PerfTest({ env, vars }) {
   const [hMenu, setHMenu] = usePF(false);
   const [k6Path, setK6Path] = usePF(null);
   const acc = useRefPF({});
+  // Synchronous guard against fast double-clicks on Start. Phase-based
+  // `running` only flips after React commits — between two rapid clicks the
+  // second can still pass the gate, await writeTempText, then race the first
+  // to set acc.current. This ref is set in the same tick as the gate check.
+  const startingRef = useRefPF(false);
+  // Tracks whether the component is still mounted across `await` gaps. If we
+  // navigate away in the small window before acc.current is assigned, the
+  // existing useEffect-cleanup has nothing to stop — we'd still launch k6
+  // and setState on an unmounted component.
+  const mountedRef = useRefPF(true);
   const flat = pfTargets();
 
   // Resolve the bundled k6.exe once on mount; cached for the lifetime of the page.
@@ -253,14 +263,20 @@ function PerfTest({ env, vars }) {
   };
 
   // Abort any in-flight k6 process if the user leaves the Performance route.
+  // Also flip mountedRef so the run() coroutine can bail after its await
+  // points even if acc.current hasn't been assigned yet.
   useEffPF(() => () => {
+    mountedRef.current = false;
     if (acc.current) acc.current.stopped = true;
     try { api.stopCommand(); } catch {}
   }, []);
 
   const run = async () => {
     if (running) { stop(); return; }
+    if (startingRef.current) return;
     if (total <= 0 || !tgt) return;
+    startingRef.current = true;
+    try {
 
     const reqEntry = window.QA.COLLECTIONS
       .flatMap((c) => c.folders.flatMap((f) => f.requests))
@@ -315,12 +331,21 @@ function PerfTest({ env, vars }) {
     try {
       scriptPath = await api.writeTempText(buildScript(reqShape, stages, conn), 'js');
     } catch (e) {
-      setLive({
-        m: { sent: 0, rps: 0, avg: 0, p80: 0, p90: 0, p95: 0, p99: 0, err: 0 },
-        latSeries: [], rpsSeries: [], dist: { ok: 0, c4: 0, c5: 0 }, broke: null,
-        slo: { ...slo }, error: 'Failed to write k6 script: ' + String(e),
-      });
-      setPhase('done');
+      if (mountedRef.current) {
+        setLive({
+          m: { sent: 0, rps: 0, avg: 0, p80: 0, p90: 0, p95: 0, p99: 0, err: 0 },
+          latSeries: [], rpsSeries: [], dist: { ok: 0, c4: 0, c5: 0 }, broke: null,
+          slo: { ...slo }, error: 'Failed to write k6 script: ' + String(e),
+        });
+        setPhase('done');
+      }
+      return;
+    }
+    // The user might have navigated away while writeTempText was awaited.
+    // Don't launch k6 against a dead component — clean up the temp file
+    // we already created and bail out before assigning acc.current.
+    if (!mountedRef.current) {
+      api.cleanupTempFile(scriptPath).catch(() => {});
       return;
     }
 
@@ -370,6 +395,9 @@ function PerfTest({ env, vars }) {
     // Only release the slot if this session still owns it — guards against a
     // user quickly re-pressing Start before the previous run's finally lands.
     if (acc.current === session) acc.current = null;
+    // If the user navigated away while k6 was running, the cleanup effect has
+    // already fired — don't push state into an unmounted component.
+    if (!mountedRef.current) return;
     if (stoppedByUser) {
       // User aborted — don't record a partial run as if it completed.
       setLive(null); setProgress(0); setPhase('idle');
@@ -412,6 +440,10 @@ function PerfTest({ env, vars }) {
     });
     setViewIdx(0);
     setPhase('done');
+    } finally {
+      // Release the synchronous start guard so a future Start can re-fire.
+      startingRef.current = false;
+    }
   };
 
   const tgt = flat.find(r => r.value === target) || flat[0];
