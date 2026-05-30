@@ -22,10 +22,15 @@ function histEntry(h) {
     responseHeaders: resp ? resp.headers : {}, responseBody: resp ? resp.body : null,
   };
 }
+function histEsc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 function histReportHtml(data) {
   const sc = window.QATheme.statusColor;
-  const rows = data.map(d => `<tr><td>${d.at}</td><td class="m">${d.method}</td><td>${d.path}</td><td style="color:${sc(d.status)};font-weight:700">${d.status}</td><td>${d.timeMs}ms</td><td>${d.sizeBytes} B</td></tr>`).join('');
-  const bodies = data.map(d => `<div class="call"><div class="ch"><span class="m">${d.method}</span> ${d.path} <b style="color:${sc(d.status)}">${d.status} ${d.statusText}</b></div>${d.responseBody != null ? `<pre>${window.highlightJson(JSON.stringify(d.responseBody, null, 2))}</pre>` : '<div class="muted">no body</div>'}</div>`).join('');
+  const rows = data.map(d => `<tr><td>${histEsc(d.at)}</td><td class="m">${histEsc(d.method)}</td><td>${histEsc(d.path)}</td><td style="color:${sc(d.status)};font-weight:700">${histEsc(d.status)}</td><td>${histEsc(d.timeMs)}ms</td><td>${histEsc(d.sizeBytes)} B</td></tr>`).join('');
+  const bodies = data.map(d => `<div class="call"><div class="ch"><span class="m">${histEsc(d.method)}</span> ${histEsc(d.path)} <b style="color:${sc(d.status)}">${histEsc(d.status)} ${histEsc(d.statusText)}</b></div>${d.responseBody != null ? `<pre>${window.highlightJson(JSON.stringify(d.responseBody, null, 2))}</pre>` : '<div class="muted">no body</div>'}</div>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>QA Companion — API history (${data.length} calls)</title>
 <style>
   body{margin:0;background:#15181c;color:#e6edf3;font-family:'Google Sans Code',ui-monospace,monospace;font-size:13px;padding:32px}

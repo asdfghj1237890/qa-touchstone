@@ -10,8 +10,11 @@ const { useState: useStateCG } = React;
 // {{variable}} substitution.
 function qaEffectiveRequest(req, env, varMap, cookies, resolve) {
   const sub = (s) => resolve ? window.qaSubstitute(s, varMap || {}) : s;
-  const base = sub((env && env.baseUrl) || '');
-  let url = base + sub(req.url || '');
+  const reqUrlSub = sub(req.url || '');
+  // Absolute imported URLs must NOT get env.baseUrl prepended (mirrors the
+  // executor and PerfTest URL build).
+  const isAbsolute = /^https?:\/\//i.test(reqUrlSub);
+  let url = isAbsolute ? reqUrlSub : (sub((env && env.baseUrl) || '') + reqUrlSub);
 
   // Query params (+ apiKey-in-query)
   const qp = (req.params || []).filter(p => p.on && p.key).map(p => [sub(p.key), sub(p.value)]);

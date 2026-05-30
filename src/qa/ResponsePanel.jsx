@@ -77,7 +77,7 @@ function reqReportObj(req, env, response) {
   return {
     generatedAt: new Date().toISOString(),
     request: {
-      method: req.method, url: (env.baseUrl || '') + req.url, environment: env.label,
+      method: req.method, url: (/^https?:\/\//i.test(req.url || '') ? req.url : ((env.baseUrl || '') + req.url)), environment: env.label,
       params, headers, auth,
       body: req.bodyMode === 'json' && req.body ? safeParse(req.body) : (req.bodyMode === 'none' ? null : req.body),
     },
@@ -88,12 +88,22 @@ function reqReportObj(req, env, response) {
   };
 }
 
+// HTML-escape attacker-influenced strings before interpolating into the
+// generated report. highlightJson already escapes the JSON pre blocks, but
+// raw response headers / URL / env label etc. are user-or-server-controlled
+// and must be escaped here.
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function reqReportHtml(req, env, response) {
   const o = reqReportObj(req, env, response);
   const sc = window.QATheme.statusColor(response.status);
   const hl = (obj) => window.highlightJson(JSON.stringify(obj, null, 2));
-  const hrows = (h) => Object.entries(h).map(([k, v]) => `<tr><td class="k">${k}</td><td>${String(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">none</td></tr>';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>QA Companion — ${req.method} ${o.request.url}</title>
+  const hrows = (h) => Object.entries(h || {}).map(([k, v]) => `<tr><td class="k">${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`).join('') || '<tr><td colspan="2" class="muted">none</td></tr>';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>QA Companion — ${escHtml(req.method)} ${escHtml(o.request.url)}</title>
 <style>
   body{margin:0;background:#15181c;color:#e6edf3;font-family:'Google Sans Code',ui-monospace,monospace;font-size:13px;padding:32px}
   .wrap{max-width:820px;margin:0 auto}h1{font-size:16px;margin:0 0 16px;word-break:break-all}
@@ -106,9 +116,9 @@ function reqReportHtml(req, env, response) {
   .qa-j-key{color:#a9c7f2}.qa-j-str{color:#8fd6a6}.qa-j-num{color:#e6c07a}.qa-j-bool{color:#c2a6ef}.qa-j-null{color:#626d77;font-style:italic}
   .foot{color:#626d77;font-size:11px;margin-top:26px}
 </style></head><body><div class="wrap">
-  <h1><span class="meth">${req.method}</span>${o.request.url}</h1>
-  <div class="status" style="color:${sc}"><span class="dot" style="background:${sc}"></span>${response.status} ${response.statusText}</div>
-  <div class="meta">Environment <b>${env.label}</b> · ${response.time} ms · ${fmtBytes(response.size)} · auth <b>${o.request.auth.type}</b></div>
+  <h1><span class="meth">${escHtml(req.method)}</span>${escHtml(o.request.url)}</h1>
+  <div class="status" style="color:${sc}"><span class="dot" style="background:${sc}"></span>${escHtml(response.status)} ${escHtml(response.statusText)}</div>
+  <div class="meta">Environment <b>${escHtml(env.label)}</b> · ${escHtml(response.time)} ms · ${escHtml(fmtBytes(response.size))} · auth <b>${escHtml(o.request.auth.type)}</b></div>
   <h2>Request headers</h2><table>${hrows(o.request.headers)}</table>
   ${Object.keys(o.request.params).length ? `<h2>Query params</h2><table>${hrows(o.request.params)}</table>` : ''}
   ${o.request.body != null ? `<h2>Request body</h2><pre>${hl(o.request.body)}</pre>` : ''}
@@ -162,7 +172,7 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
 
   const reqPreview = {
     method: req.method,
-    url: (env.baseUrl || '') + req.url,
+    url: /^https?:\/\//i.test(req.url || '') ? req.url : ((env.baseUrl || '') + req.url),
     auth: req.auth.type,
     headers: req.headers.filter(h => h.on && h.key).reduce((o, h) => (o[h.key] = h.value, o), {}),
     body: req.bodyMode === 'json' && req.body ? safeParse(req.body) : undefined,

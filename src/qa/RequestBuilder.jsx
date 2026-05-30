@@ -313,7 +313,9 @@ function RequestBuilder({ req, patch, onSend, isLoading, env, varMap, tests, set
   const [tab, setTab] = useStateRB('params');
   const [methodOpen, setMethodOpen] = useStateRB(false);
   const [codeOpen, setCodeOpen] = useStateRB(false);
-  const fullUrl = (env.baseUrl || '') + req.url;
+  // Imported absolute URLs already carry their host; don't prepend env.baseUrl
+  // (mirrors the executor + CodeGen + report URL build).
+  const fullUrl = /^https?:\/\//i.test(req.url || '') ? req.url : ((env.baseUrl || '') + req.url);
   const resolvedUrl = window.qaSubstitute(fullUrl, varMap || {});
   const showResolved = window.qaHasVars(fullUrl);
 
