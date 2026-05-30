@@ -32,7 +32,7 @@ const sub = (t, map) => window.qaSubstitute(t, map || {});
 
 // Build the Postman-style payload the Rust command expects, with all
 // variables already resolved on the client.
-function buildPayload(req, env, varMap, opts = {}) {
+export function buildPayload(req, env, varMap, opts = {}) {
   const map = varMap || {};
   const headers = [];
 
@@ -76,7 +76,11 @@ function buildPayload(req, env, varMap, opts = {}) {
     headers.push({ key: 'Content-Type', value: contentType });
   }
 
-  const base = sub((env.baseUrl || '') + req.url, map);
+  // Substitute first, then classify: `{{apiHost}}/v1` with apiHost=https://x
+  // should be treated as absolute and NOT prefixed with env.baseUrl.
+  const reqUrlSub = sub(req.url || '', map);
+  const isAbsolute = /^https?:\/\//i.test(reqUrlSub);
+  const base = isAbsolute ? reqUrlSub : sub(env.baseUrl || '', map) + reqUrlSub;
   const url = base + (query.length ? (base.includes('?') ? '&' : '?') + query.join('&') : '');
 
   const request = { method: req.method, url, header: headers };

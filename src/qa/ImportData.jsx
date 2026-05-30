@@ -19,7 +19,13 @@ function qaDetectFormat(obj) {
 // ── Postman v2.1 → internal shape ──────────────────────────────────────────
 function pmUrlToPath(url) {
   if (!url) return '/';
-  if (typeof url === 'string') { try { return new URL(url).pathname + (new URL(url).search || ''); } catch { return url.replace(/^https?:\/\/[^/]+/, '') || url; } }
+  // Absolute URLs are kept whole so multi-host collections stay callable; only
+  // relative URLs are reduced to a path (the env base is prepended at send time).
+  if (typeof url === 'string') {
+    if (/^https?:\/\//i.test(url)) return url;
+    return url.replace(/^https?:\/\/[^/]+/, '') || url;
+  }
+  if (url.raw && /^https?:\/\//i.test(url.raw)) return url.raw;
   let path = Array.isArray(url.path) ? '/' + url.path.join('/') : (url.path || '');
   if (!path && url.raw) { try { path = new URL(url.raw).pathname; } catch { path = url.raw; } }
   const q = Array.isArray(url.query) ? url.query.filter(x => !x.disabled && x.key).map(x => `${x.key}=${x.value || ''}`).join('&') : '';
@@ -35,11 +41,27 @@ function parsePostman(obj) {
       if (it.item) { const fr = []; walk(it.item, fr); if (fr.length) folders.push({ name: it.name || 'Folder', requests: fr }); }
       else if (it.request) {
         const r = it.request;
+        // Postman tolerates `request` as either a string URL or a full object.
+        // Normalize so the URL source we parse is the same for path and query.
+        const urlSpec = typeof r === 'string' ? r : r.url;
         const method = (typeof r === 'string' ? 'GET' : r.method) || 'GET';
-        const path = pmUrlToPath(typeof r === 'string' ? r : r.url);
+        const path = pmUrlToPath(urlSpec);
         const id = qaUid('req');
         const headers = (r.header || []).filter(h => !h.disabled).map(h => ({ key: h.key, value: h.value || '', on: true }));
-        const query = (r.url && Array.isArray(r.url.query)) ? r.url.query.filter(q => !q.disabled && q.key).map(q => ({ key: q.key, value: q.value || '', on: true })) : [];
+        // Object url uses url.query; string url carries query inside the ?…
+        // portion of the path. Parse both so buildReq's params editor (and the
+        // executor's query rebuild) carries the parameters through.
+        let query;
+        if (typeof urlSpec === 'string') {
+          const qIdx = urlSpec.indexOf('?');
+          const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+          query = qIdx < 0 ? [] : urlSpec.slice(qIdx + 1).split('&').filter(Boolean).map((kv) => {
+            const eq = kv.indexOf('=');
+            return eq < 0 ? { key: dec(kv), value: '', on: true } : { key: dec(kv.slice(0, eq)), value: dec(kv.slice(eq + 1)), on: true };
+          });
+        } else {
+          query = (urlSpec && Array.isArray(urlSpec.query)) ? urlSpec.query.filter(q => !q.disabled && q.key).map(q => ({ key: q.key, value: q.value || '', on: true })) : [];
+        }
         let body = null;
         if (r.body && r.body.mode === 'raw' && r.body.raw) body = r.body.raw;
         details[id] = { params: query, headers, body, auth: r.auth ? r.auth.type : 'none' };

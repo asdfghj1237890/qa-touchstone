@@ -52,7 +52,7 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
                 <button key={i} className="qa-recent-row" onClick={() => onOpenRequest(h)}>
                   <MethodBadge method={h.method} size="sm" />
                   <span className="qa-recent-path">{h.path}</span>
-                  <span style={{ color: window.QATheme.statusColor(h.status), fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700 }}>{h.status}</span>
+                  <span className="qa-recent-status" style={{ color: window.QATheme.statusColor(h.status) }}>{h.status}</span>
                   <span className="qa-recent-time">{h.time}ms</span>
                 </button>
               ))}

@@ -26,6 +26,37 @@ describe('App (redesign shell)', () => {
     expect(screen.getByText('Credentials & Env')).toBeInTheDocument();
   });
 
+  it('renders macOS-style traffic-light controls on non-Windows platforms', () => {
+    const prev = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
+    Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'macOS' }, configurable: true });
+    try {
+      render(<App />);
+      expect(screen.getByRole('button', { name: 'Close window' })
+        .classList.contains('qa-winctl-close')).toBe(true);
+      expect(document.querySelector('.qa-winctl-win')).toBeNull();
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'userAgentData', prev);
+      else delete navigator.userAgentData;
+    }
+  });
+
+  it('renders Windows-style controls in minimize/maximize/close order on Windows', () => {
+    const prev = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
+    Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'Windows' }, configurable: true });
+    try {
+      render(<App />);
+      expect(document.querySelector('.qa-winctl-win')).not.toBeNull();
+      const order = [...document.querySelectorAll('.qa-winctl-win button')]
+        .map((b) => b.getAttribute('aria-label'));
+      expect(order).toEqual(['Minimize window', 'Maximize window', 'Close window']);
+      expect(screen.getByRole('button', { name: 'Close window' })
+        .classList.contains('qa-winctl-wclose')).toBe(true);
+    } finally {
+      if (prev) Object.defineProperty(navigator, 'userAgentData', prev);
+      else delete navigator.userAgentData;
+    }
+  });
+
   it('exposes all nine nav-rail destinations', () => {
     render(<App />);
     RAIL_LABELS.forEach((label) => {
