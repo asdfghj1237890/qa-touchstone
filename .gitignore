@@ -24,3 +24,5 @@ logs/app.log
 qa-touchstone-swagger-postman.json
 src-tauri/target
 src-tauri/gen
+# Bundled k6 binary (~61 MB) — downloaded by setup, packaged into the .exe
+src-tauri/resources/k6.exe

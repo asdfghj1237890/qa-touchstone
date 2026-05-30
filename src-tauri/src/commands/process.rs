@@ -91,8 +91,11 @@ pub async fn run_command(
     let mut cmd = build_command(&command, &working_directory);
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
-    // 記錄 PID（block scope：parking_lot guard 不跨 await）
-    if let Some(pid) = child.id() {
+    // 記錄 PID（block scope：parking_lot guard 不跨 await）。捕捉自己的 PID
+    // 以便 wait 結束時做擁有權檢查 —— 若使用者已啟動下一輪 run_command，
+    // current_process_pid 會被新的覆寫，我們不能把它抹掉。
+    let our_pid = child.id();
+    if let Some(pid) = our_pid {
         *state.current_process_pid.lock() = Some(pid);
     }
 
@@ -117,7 +120,15 @@ pub async fn run_command(
     for h in handles {
         let _ = h.await;
     }
-    *state.current_process_pid.lock() = None;
+    // 擁有權檢查：只有當 current_process_pid 仍是我們這次寫進去的值才清掉，
+    // 否則代表已有新的 run_command 寫入了它的 PID，不能誤抹（會讓 stop_command
+    // 對新 run 失效）。
+    if let Some(our) = our_pid {
+        let mut guard = state.current_process_pid.lock();
+        if *guard == Some(our) {
+            *guard = None;
+        }
+    }
 
     match status {
         // 被信號終止（如 Unix 上 stop_command 的 SIGKILL）時 code() 為 None → -1，
@@ -127,7 +138,7 @@ pub async fn run_command(
     }
 }
 
-fn kill_tree(pid: u32) {
+pub(crate) fn kill_tree(pid: u32) {
     #[cfg(target_os = "windows")]
     {
         // /T 連子程序、/F 強制
