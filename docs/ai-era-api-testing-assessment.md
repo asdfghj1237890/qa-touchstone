@@ -36,9 +36,9 @@
 
 ## 補強路線圖（優先序）
 
-1. **Runner 改打真網路** — 複用 `executeRequest`，斷言跑在 live 回應上。把「規模驗證」從 demo 變真的最小改動，價值最大。非 Tauri（瀏覽器/dev）仍自然 fallback 罐頭。
-2. **AI 當 oracle** — 發送後把 request + 回應丟給模型「這符合 spec 嗎 / 有什麼可疑」，把 AI 從出題搬到批改。複用 LLM 設定。
-3. **Monitors 接真實 Runner** — 「Run now」真的跑（真實請求 + 斷言）取代亂數；真正的背景排程 cadence 屬獨立後續工作。
-4. **（後續）authz matrix / schema conformance scan。**
+1. ✅ **Runner 改打真網路** — 複用 `executeRequest`（`qa/sendRequest.js`），斷言跑在 live 回應上。非 Tauri（瀏覽器/dev）仍自然 fallback 罐頭。**已完成 2026-05-31。**
+2. ✅ **AI 當 oracle** — ResponsePanel 加「AI review」：把 request + 回應 + 既有斷言丟給模型判斷，複用 `qa/llm.js`。**已完成 2026-05-31。**
+3. ✅ **Monitors 接真實 Runner** — 「Run now」真的跑（真實請求 + 斷言）取代亂數。背景排程 cadence 仍為後續工作。**已完成 2026-05-31。**
+4. ⬜ **（後續）背景 cadence 排程、批次 AI 審查、authz/BOLA matrix、schema conformance scan。**
 
-> 進度：1、2、3 於 2026-05-31 開工。詳見對應的設計與 commit。
+> 進度：1、2、3 於 2026-05-31 完成（spec：[real-execution-and-ai-oracle](superpowers/specs/2026-05-31-real-execution-and-ai-oracle-design.md)，plan：[同名 plan](superpowers/plans/2026-05-31-real-execution-and-ai-oracle.md)）。共用層 `buildReq.js` / `sendRequest.js` / `llm.js`。
