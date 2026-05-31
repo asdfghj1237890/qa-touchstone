@@ -1,11 +1,12 @@
 import React from 'react';
 import './setup.js';
 import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
+import { qaRunSavedRequest } from './sendRequest.js';
 
 // ── QA Companion — Collection Runner (batch run + data iteration) ─────────
 const { useState: useRN, useRef: useRefRN, useEffect: useEffRN } = React;
 
-function Runner({ env, vars, tests }) {
+function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens = {} }) {
   const COLLECTIONS = window.QA.COLLECTIONS;
   const [colId, setColId] = useRN(COLLECTIONS[0].id);
   const col = COLLECTIONS.find(c => c.id === colId) || COLLECTIONS[0];
@@ -41,7 +42,7 @@ function Runner({ env, vars, tests }) {
   };
   const clearData = () => { setDataText(''); setDataName(''); if (fileRef.current) fileRef.current.value = ''; };
 
-  const stop = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } setPhase(p => p === 'running' ? 'done' : p); };
+  const stop = () => { if (timerRef.current && timerRef.current.cancel) timerRef.current.cancel(); timerRef.current = null; setPhase(p => p === 'running' ? 'done' : p); };
 
   const run = () => {
     if (running) { stop(); return; }
@@ -50,22 +51,33 @@ function Runner({ env, vars, tests }) {
     const queue = [];
     for (let i = 0; i < iters; i++) reqs.forEach(r => queue.push({ iter: i + 1, r, data: dataRows ? dataRows[i] : null }));
     setResults([]); setProgress(0); setPhase('running');
-    const acc = []; let k = 0;
-    const step = () => {
-      if (k >= queue.length) { setPhase('done'); timerRef.current = null; return; }
-      const { iter, r, data } = queue[k];
-      const resp = window.QA.RESPONSES[r.id] || { status: 404, statusText: 'Not Found', time: 30, size: 0, body: null, headers: {} };
-      const map = window.qaVarMap(vars, env.label, colId, data || undefined);
-      const res = window.qaRunAssertions(tests[r.id] || [], resp);
-      acc.push({
-        iter, name: r.name, method: r.method,
-        path: window.qaSubstitute(r.path.split('?')[0], map),
-        status: resp.status, time: resp.time, passed: res.filter(x => x.pass).length, total: res.length,
-      });
-      setResults([...acc]); k += 1; setProgress(k / queue.length);
-      timerRef.current = setTimeout(step, 110 + (+delay || 0));
-    };
-    step();
+    const acc = [];
+    let cancelled = false;
+    timerRef.current = { cancel: () => { cancelled = true; } };
+    (async () => {
+      for (let k = 0; k < queue.length; k++) {
+        if (cancelled) break;
+        const { iter, r, data } = queue[k];
+        const map = window.qaVarMap(vars, env.label, colId, data || undefined);
+        let resp;
+        try {
+          resp = await qaRunSavedRequest(r, { env, vars, cookies, sslVerify, oauthToken: oauthTokens[r.id], collectionId: colId });
+        } catch (e) {
+          resp = { status: 0, statusText: String(e), time: 0, size: 0, body: null, headers: {} };
+        }
+        if (cancelled) break;
+        const res = window.qaRunAssertions(tests[r.id] || [], resp);
+        acc.push({
+          iter, name: r.name, method: r.method,
+          path: window.qaSubstitute(r.path.split('?')[0], map),
+          status: resp.status, time: resp.time,
+          passed: res.filter(x => x.pass).length, total: res.length,
+        });
+        setResults([...acc]); setProgress((k + 1) / queue.length);
+        if ((+delay || 0) > 0) await new Promise(res2 => setTimeout(res2, +delay));
+      }
+      setPhase('done'); timerRef.current = null;
+    })();
   };
 
   const total = results.length;
