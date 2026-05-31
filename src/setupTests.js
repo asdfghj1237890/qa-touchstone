@@ -184,6 +184,7 @@ const createMockElectronAPI = () => ({
   findHexFile: vi.fn().mockResolvedValue(''),
   getCredentialsPath: vi.fn().mockResolvedValue(''),
   closeWindow: vi.fn(),
+  quitApp: vi.fn(),
   minimizeWindow: vi.fn(),
   maximizeWindow: vi.fn()
 });
