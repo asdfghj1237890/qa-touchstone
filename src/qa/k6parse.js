@@ -66,7 +66,11 @@ export function snapshot(state, slo) {
       err: +err.toFixed(2),
     },
     latSeries, rpsSeries,
-    dist: { ok: state.ok, c4: state.c4, c5: state.c5 + state.netErr },
+    // Keep transport failures (status 0: timeout, connection refused, DNS,
+    // TLS) in their own `net` bucket instead of folding them into c5. Folding
+    // made an unreachable host read as "100% 5xx" — a server error it never
+    // was. `net` still counts toward errCount / err% above.
+    dist: { ok: state.ok, c4: state.c4, c5: state.c5, net: state.netErr },
     broke: null,
     slo: { ...slo },
   };
