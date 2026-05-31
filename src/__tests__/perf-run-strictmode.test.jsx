@@ -1,0 +1,36 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PerfTest } from '../qa/PerfTest.jsx';
+import api from '../api/index.js';
+
+// Regression guard for the StrictMode mounted-guard bug: PerfTest's cleanup-only
+// effect left mountedRef stuck false under React.StrictMode (the real App wraps
+// <App/> in StrictMode), so run() bailed right after `await writeTempText` —
+// before launching k6 — and the Run button did nothing in dev builds.
+describe('PerfTest Run under React.StrictMode', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'Cat fact', path: 'https://catfact.ninja/fact' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    api.getK6Path = vi.fn().mockResolvedValue('k6.exe');
+    api.writeTempText = vi.fn().mockResolvedValue('/tmp/script.js');
+    api.runProgramWithRealTimeOutput = vi.fn().mockResolvedValue(0);
+    api.cleanupTempFile = vi.fn().mockResolvedValue();
+    api.stopCommand = vi.fn();
+  });
+
+  it('Run actually launches k6 (does not silently bail)', async () => {
+    render(
+      <React.StrictMode>
+        <PerfTest env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} />
+      </React.StrictMode>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Run test/i }));
+    // Without the fix, mountedRef is false after StrictMode's mount cycle, so
+    // run() returns after writeTempText and k6 is never spawned.
+    await waitFor(() => expect(api.runProgramWithRealTimeOutput).toHaveBeenCalled(), { timeout: 4000 });
+  });
+});
