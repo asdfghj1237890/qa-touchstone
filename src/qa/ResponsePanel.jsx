@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { Icon, Spinner, StatusPill, highlightJson } from './components.jsx';
+import { qaCallLLM } from './llm.js';
 
 // ── QA Companion — response panel (hero: send → response animates in) ─────
 const { useState: useStateRP, useEffect: useEffectRP, useRef: useRefRP } = React;
@@ -133,6 +134,28 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
   const [tab, setTab] = useStateRP('body');
   const [copied, setCopied] = useStateRP(false);
   const [menu, setMenu] = useStateRP(false);
+  const [aiState, setAiState] = useStateRP('idle'); // idle | loading | done | error
+  const [aiText, setAiText] = useStateRP('');
+  const reviewWithAI = async () => {
+    if (!response) return;
+    setAiState('loading'); setAiText('');
+    const expected = (testList || []).map(t => window.qaAssertLabel ? window.qaAssertLabel(t) : JSON.stringify(t));
+    const bodyStr = response.body == null ? '(no body)' : JSON.stringify(response.body).slice(0, 1500);
+    const prompt = [
+      'You are a senior QA engineer reviewing one API response. Be terse (max 4 lines).',
+      'Say whether it looks correct, and flag anything suspicious (wrong status, error body, missing fields, security smells).',
+      `REQUEST: ${req.method} ${req.url}`,
+      expected.length ? `EXPECTED (assertions): ${expected.join('; ')}` : 'EXPECTED: (none specified)',
+      `RESPONSE: ${response.status} ${response.statusText}, ${response.time}ms`,
+      `BODY: ${bodyStr}`,
+    ].join('\n');
+    try {
+      const out = await qaCallLLM(prompt);
+      setAiText(String(out || '').trim() || '(empty response)'); setAiState('done');
+    } catch (e) {
+      setAiText('AI review unavailable: ' + e.message + '. Configure a provider in Settings → AI / LLM.'); setAiState('error');
+    }
+  };
   const run = state === 'done';
   const time = useCountUp(response ? response.time : 0, run);
   const size = useCountUp(response ? response.size : 0, run);
@@ -258,6 +281,15 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
                       </div>
                     ))}
                   </div>
+            )}
+          </div>
+
+          <div className="qa-resp-ai">
+            <button className="qa-hist-expbtn" onClick={reviewWithAI} disabled={aiState === 'loading'}>
+              <Icon name="sparkle" size={13} /> {aiState === 'loading' ? 'Reviewing…' : 'AI review'}
+            </button>
+            {aiState !== 'idle' && aiState !== 'loading' && (
+              <div className="qa-resp-ai-out" data-err={aiState === 'error' ? '1' : '0'}>{aiText}</div>
             )}
           </div>
         </>
