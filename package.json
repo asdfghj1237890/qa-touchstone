@@ -131,7 +131,7 @@
           ]
         }
       ],
-      "icon": "public/favicon512.ico",
+      "icon": "public/favicon.ico",
       "identity": null,
       "signIgnore": ".*",
       "extendInfo": {
