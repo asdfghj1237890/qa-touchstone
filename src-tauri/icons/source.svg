@@ -22,8 +22,8 @@
   <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#ambient)"/>
   <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#sheen)"/>
   <rect x="68" y="68" width="888" height="888" rx="220" fill="none" stroke="#7fb8ff" stroke-opacity="0.22" stroke-width="3"/>
-  <g transform="translate(214,286) scale(21)" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M1 13 H5 l2 -6 l2.5 10 l2 -7 L14 13 l3.5 4.5 L27 4" stroke="#4d9fff" stroke-opacity="0.18" stroke-width="2.4"/>
-    <path d="M1 13 H5 l2 -6 l2.5 10 l2 -7 L14 13 l3.5 4.5 L27 4" stroke="url(#stroke)" stroke-width="2.4" filter="url(#glow)"/>
+  <g transform="translate(214,268) scale(21)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12 H9 l1.2 -3 l1.4 6 l1.8 -11.5 l1.8 16.5 l1.4 -8 H27" stroke="#4d9fff" stroke-opacity="0.18" stroke-width="2.2"/>
+    <path d="M1 12 H9 l1.2 -3 l1.4 6 l1.8 -11.5 l1.8 16.5 l1.4 -8 H27" stroke="url(#stroke)" stroke-width="2.2" filter="url(#glow)"/>
   </g>
 </svg>
