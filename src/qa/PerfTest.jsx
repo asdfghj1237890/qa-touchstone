@@ -274,10 +274,17 @@ function PerfTest({ env, vars }) {
   // Abort any in-flight k6 process if the user leaves the Performance route.
   // Also flip mountedRef so the run() coroutine can bail after its await
   // points even if acc.current hasn't been assigned yet.
-  useEffPF(() => () => {
-    mountedRef.current = false;
-    if (acc.current) acc.current.stopped = true;
-    try { api.stopCommand(); } catch {}
+  // The setup MUST restore mountedRef=true: under React.StrictMode the mount
+  // runs setup→cleanup→setup, so a cleanup-only effect would leave mountedRef
+  // stuck false and make run() bail right after `await writeTempText` (before
+  // setPhase('running')) — i.e. the Run button does nothing in dev builds.
+  useEffPF(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (acc.current) acc.current.stopped = true;
+      try { api.stopCommand(); } catch {}
+    };
   }, []);
 
   const run = async () => {
