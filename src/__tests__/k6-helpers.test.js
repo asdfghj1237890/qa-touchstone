@@ -84,7 +84,7 @@ describe('k6parse.feed + snapshot', () => {
     const snap = snapshot(st, slo);
     expect(snap.latSeries).toEqual([150, 300, 0, 500]); // avg per bin
     expect(snap.rpsSeries).toEqual([2, 1, 0, 1]);
-    expect(snap.dist).toEqual({ ok: 2, c4: 1, c5: 1 });
+    expect(snap.dist).toEqual({ ok: 2, c4: 1, c5: 1, net: 0 });
     expect(snap.m.sent).toBe(4);
     // err% = 2/4 = 50%
     expect(snap.m.err).toBe(50);
@@ -116,11 +116,14 @@ describe('k6parse.feed + snapshot', () => {
     expect(snap.m.err).toBe(0);
   });
 
-  it('counts a status of 0 as a network error and rolls into c5', () => {
+  it('counts a status of 0 as a network error in its own bucket (not 5xx)', () => {
     const st = makeState(1000, 1);
     feed(st, mkLine('2026-05-30T00:00:00.000Z', 99, 0));
     const snap = snapshot(st, slo);
-    expect(snap.dist).toEqual({ ok: 0, c4: 0, c5: 1 });
+    // status 0 = transport failure (timeout, refused, DNS) — kept separate
+    // from genuine HTTP 5xx so the UI doesn't mislabel an unreachable host.
+    expect(snap.dist).toEqual({ ok: 0, c4: 0, c5: 0, net: 1 });
+    // still an error for the error-rate / SLO accounting
     expect(snap.m.err).toBe(100);
   });
 });
