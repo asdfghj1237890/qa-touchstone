@@ -136,6 +136,11 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
   const [menu, setMenu] = useStateRP(false);
   const [aiState, setAiState] = useStateRP('idle'); // idle | loading | done | error
   const [aiText, setAiText] = useStateRP('');
+  const aiMountedRef = useRefRP(true);
+  useEffectRP(() => () => { aiMountedRef.current = false; }, []);
+  // Clear any prior AI verdict whenever a new response arrives, so an old
+  // review can't linger under a freshly sent request and mislead the user.
+  useEffectRP(() => { setAiState('idle'); setAiText(''); }, [response]);
   const reviewWithAI = async () => {
     if (!response) return;
     setAiState('loading'); setAiText('');
@@ -151,9 +156,11 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
     ].join('\n');
     try {
       const out = await qaCallLLM(prompt);
+      if (!aiMountedRef.current) return;
       setAiText(String(out || '').trim() || '(empty response)'); setAiState('done');
     } catch (e) {
-      setAiText('AI review unavailable: ' + e.message + '. Configure a provider in Settings → AI / LLM.'); setAiState('error');
+      if (!aiMountedRef.current) return;
+      setAiText('AI review unavailable: ' + String(e && e.message || e) + '. Configure a provider in Settings → AI / LLM.'); setAiState('error');
     }
   };
   const run = state === 'done';
