@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, Spinner, loadLlmCfg } from './components.jsx';
+import { qaCallLLM } from './llm.js';
 
 // ── QA Companion — Test case generation (spec / BDD → cases) ──────────────
 const { useState: useTG } = React;
@@ -311,22 +312,6 @@ function TestGen({ openSettings, onAddTests }) {
   const [engine, setEngine] = useTG(() => (window.claude && window.claude.complete) ? 'ai' : 'heuristic');
   const cfg = window.loadLlmCfg();
 
-  const callLLM = async (prompt) => {
-    if (cfg.provider === 'builtin') {
-      if (!(window.claude && window.claude.complete)) throw new Error('built-in Claude unavailable');
-      return await window.claude.complete({ messages: [{ role: 'user', content: prompt }] });
-    }
-    const url = cfg.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : cfg.baseUrl;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
-      body: JSON.stringify({ model: cfg.model, temperature: 0.2, messages: [{ role: 'user', content: prompt }] }),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' from provider');
-    const j = await res.json();
-    return j.choices && j.choices[0] && j.choices[0].message ? j.choices[0].message.content : '';
-  };
-
   const SAMPLES = { bdd: SAMPLE_BDD, openapi: SAMPLE_OPENAPI, text: SAMPLE_TEXT };
   const switchSource = (s) => { setSource(s); setInput(SAMPLES[s]); setCases([]); setErr(''); };
 
@@ -381,7 +366,7 @@ function TestGen({ openSettings, onAddTests }) {
     }
     setBusy(true);
     try {
-      const raw = await callLLM(buildPrompt(source, input));
+      const raw = await qaCallLLM(buildPrompt(source, input));
       const parsed = extractCases(raw);
       if (!parsed || !parsed.length) { setErr('The model didn’t return parseable cases. Try again, or use the Heuristic engine.'); setBusy(false); return; }
       setCases(parsed); setBusy(false);
