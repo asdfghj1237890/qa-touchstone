@@ -2,7 +2,6 @@
   "name": "qa-touchstone",
   "version": "0.13.1",
   "private": true,
-  "main": "public/electron.js",
   "description": "A desktop API client and embedded QA utility for local test workflows.",
   "scripts": {
     "dev": "vite",
@@ -20,18 +19,9 @@
     "test:html-view": "(npm run test:html || true) && node scripts/generate-test-index.js && npx vite preview --outDir src/__tests__/test-report --open",
     "test:coverage-view": "(npm run test:coverage || true) && npx vite preview --outDir src/__tests__/test-report/coverage --open",
     "test:safe": "vitest run || true",
-    "electron-dev": "concurrently --kill-others --kill-others-on-fail --success first \"cross-env BROWSER=none npm run dev\" \"wait-on http://localhost:3000 && electron . --disable-gpu --enable-software-rasterizer --no-sandbox\"",
-    "clean": "rm -rf node_modules/.cache && rm -rf build",
-    "dist": "npm run test && npm run build && electron-builder",
-    "dist:mac": "npm run test:ci && npm run build && electron-builder --mac",
-    "dist:mac-arm64": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64",
-    "dist:mac-x64": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64",
-    "dist:unsigned": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
-    "dist:unsigned-force": "npm run test:ci && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac && codesign --remove-signature release-executables/mac/*.app",
-    "postinstall": "electron-builder install-app-deps"
+    "clean": "rm -rf node_modules/.cache && rm -rf build"
   },
   "dependencies": {
-    "@electron/remote": "^2.1.2",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
     "@mui/icons-material": "^7.1.1",
@@ -42,7 +32,6 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "aws4": "^1.13.2",
     "dompurify": "^3.4.7",
-    "electron-is-dev": "^2.0.0",
     "lodash": "^4.17.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -66,16 +55,11 @@
     "@vitejs/plugin-react": "^4.5.1",
     "@vitest/coverage-v8": "^3.2.2",
     "@vitest/ui": "^3.2.2",
-    "concurrently": "^9.1.2",
-    "cross-env": "^7.0.3",
-    "electron": "^36.4.0",
-    "electron-builder": "^26.0.12",
     "identity-obj-proxy": "^3.0.0",
     "jsdom": "^26.1.0",
     "png-to-ico": "^3.0.1",
     "vite": "^6.3.5",
-    "vitest": "^3.2.2",
-    "wait-on": "^8.0.3"
+    "vitest": "^3.2.2"
   },
   "author": "unuwayne",
   "license": "ISC",
@@ -91,61 +75,6 @@
       "last 1 safari version"
     ]
   },
-  "build": {
-    "appId": "com.qatouchstone.desktop",
-    "productName": "QA Touchstone",
-    "directories": {
-      "buildResources": "build-resources",
-      "output": "release-executables"
-    },
-    "files": [
-      "build/**/*",
-      "node_modules/**/*",
-      "public/electron.js",
-      "public/preload.js",
-      "package.json"
-    ],
-    "extraMetadata": {
-      "main": "public/electron.js"
-    },
-    "win": {
-      "target": [
-        "portable"
-      ],
-      "icon": "public/favicon.ico"
-    },
-    "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "icon": "public/favicon.ico",
-      "identity": null,
-      "signIgnore": ".*",
-      "extendInfo": {
-        "NSDocumentsFolderUsageDescription": "This app needs access to documents folder for managing configuration files and exports.",
-        "NSDownloadsFolderUsageDescription": "This app needs access to downloads folder for importing files and managing downloaded resources."
-      }
-    },
-    "asar": true,
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
-  },
-  "homepage": "./",
   "overrides": {
     "nth-check": ">=2.0.1",
     "postcss": ">=8.4.31",
