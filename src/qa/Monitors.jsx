@@ -2,9 +2,10 @@ import React from 'react';
 import './setup.js';
 import { Dropdown, Icon, Spinner } from './components.jsx';
 import { FieldRow } from './RequestBuilder.jsx';
+import { qaRunSavedRequest } from './sendRequest.js';
 
 // ── QA Touchstone — Monitors: scheduled collection runs ────────────────────
-const { useState: useStateMON } = React;
+const { useState: useStateMON, useRef: useRefMON, useEffect: useEffMON } = React;
 
 const CADENCES = ['Every 5 minutes', 'Every 15 minutes', 'Every hour', 'Every 6 hours', 'Daily at 02:00', 'Weekly'];
 const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
@@ -68,29 +69,47 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName }) {
   );
 }
 
-function MonitorsPage({ env, setRoute }) {
+function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tests = {}, oauthTokens = {} }) {
   const [monitors, setMonitors] = useStateMON(() => window.QA.MONITORS.map(m => ({ ...m, runs: m.runs.slice() })));
   const [running, setRunning] = useStateMON(null);
   const [creating, setCreating] = useStateMON(false);
+  const mountedRef = useRefMON(true);
+  useEffMON(() => () => { mountedRef.current = false; }, []);
   const colName = (id) => (window.QA.COLLECTIONS.find(c => c.id === id) || {}).name || id;
 
   const toggle = (id) => setMonitors(ms => ms.map(m => m.id === id ? { ...m, enabled: !m.enabled, nextRun: !m.enabled ? 'in 5 min' : 'paused' } : m));
 
   const runNow = (id) => {
     setRunning(id);
-    setTimeout(() => {
-      setMonitors(ms => ms.map(m => {
-        if (m.id !== id) return m;
-        const col = window.QA.COLLECTIONS.find(c => c.id === m.collectionId);
-        const n = col ? col.count : 3;
-        const failed = Math.random() < 0.25 ? 1 : 0;
-        const now = new Date();
-        const at = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const run = { at, status: failed ? 'fail' : 'pass', passed: n - failed, failed, ms: 600 + Math.floor(Math.random() * 600) };
-        return { ...m, runs: [run, ...m.runs].slice(0, 20) };
-      }));
+    const mon = monitors.find(m => m.id === id);
+    const col = window.QA.COLLECTIONS.find(c => c.id === (mon && mon.collectionId));
+    if (!col) {
       setRunning(null);
-    }, 1400);
+      return;
+    }
+    const reqs = col.folders.flatMap(f => f.requests);
+    (async () => {
+      let passed = 0, failed = 0, totalMs = 0;
+      for (const r of reqs) {
+        let resp;
+        try {
+          resp = await qaRunSavedRequest(r, { env, vars, cookies, sslVerify, oauthToken: oauthTokens[r.id], collectionId: col.id });
+        } catch (e) {
+          resp = { status: 0, time: 0 };
+        }
+        totalMs += resp.time || 0;
+        const asserts = window.qaRunAssertions(tests[r.id] || [], resp);
+        // A request with no assertions counts as pass iff status < 400.
+        const ok = asserts.length ? asserts.every(a => a.pass) : (resp.status >= 200 && resp.status < 400);
+        if (ok) passed += 1; else failed += 1;
+      }
+      if (!mountedRef.current) return;
+      const now = new Date();
+      const at = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const run = { at, status: failed ? 'fail' : 'pass', passed, failed, ms: totalMs };
+      setMonitors(ms2 => ms2.map(m => m.id === id ? { ...m, runs: [run, ...m.runs].slice(0, 20) } : m));
+      setRunning(null);
+    })();
   };
 
   const activeCount = monitors.filter(m => m.enabled).length;

@@ -273,7 +273,7 @@ function App() {
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
-          {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} />}
+          {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} vars={vars} cookies={cookies} sslVerify={sslVerify} tests={tests} oauthTokens={oauthTokens} />}
           {route === 'testgen' && <TestGen openSettings={openSettings} onAddTests={addTestsForCase} />}
           {route === 'api' && (
             <div className="qa-api">
