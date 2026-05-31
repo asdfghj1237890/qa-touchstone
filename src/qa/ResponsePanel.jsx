@@ -137,7 +137,10 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
   const [aiState, setAiState] = useStateRP('idle'); // idle | loading | done | error
   const [aiText, setAiText] = useStateRP('');
   const aiMountedRef = useRefRP(true);
-  useEffectRP(() => () => { aiMountedRef.current = false; }, []);
+  // Setup MUST restore true: under React.StrictMode the mount runs
+  // setup→cleanup→setup, so a cleanup-only effect would leave this stuck false
+  // and make reviewWithAI's post-await guard skip setAiState (stuck "Reviewing…").
+  useEffectRP(() => { aiMountedRef.current = true; return () => { aiMountedRef.current = false; }; }, []);
   // Clear any prior AI verdict whenever a new response arrives, so an old
   // review can't linger under a freshly sent request and mislead the user.
   useEffectRP(() => { setAiState('idle'); setAiText(''); }, [response]);

@@ -39,4 +39,20 @@ describe('Monitors Run now executes real assertions (canned fallback)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run now/ }));
     await waitFor(() => expect(screen.getByText(/1\/1 passed/)).toBeInTheDocument(), { timeout: 4000 });
   });
+
+  it('still records the run under React.StrictMode (mount→cleanup→mount)', async () => {
+    // StrictMode runs effect setup→cleanup→setup at mount; a cleanup-only
+    // mounted-guard would leave the ref stuck false, so runNow's post-await
+    // guard would skip setMonitors/setRunning and the button would hang on
+    // "Running…". This reproduces that exact path.
+    const tests = { r1: [{ type: 'status', op: 'eq', value: 200, on: true }] };
+    render(
+      <React.StrictMode>
+        <MonitorsPage env={{ label: 'None', baseUrl: '' }} setRoute={() => {}}
+                      vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} tests={tests} oauthTokens={{}} />
+      </React.StrictMode>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Run now/ }));
+    await waitFor(() => expect(screen.getByText(/1\/1 passed/)).toBeInTheDocument(), { timeout: 4000 });
+  });
 });

@@ -77,7 +77,11 @@ function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tes
   // Synchronous re-entry guard: React `running` state isn't updated within the
   // same tick, so a fast double-click would otherwise start two concurrent runs.
   const runningRef = useRefMON(false);
-  useEffMON(() => () => { mountedRef.current = false; }, []);
+  // Set true on (re)mount and false on unmount. The setup MUST restore true:
+  // under React.StrictMode the mount runs setup→cleanup→setup, so a cleanup-only
+  // effect would leave mountedRef stuck false and make runNow's post-await guard
+  // skip setMonitors/setRunning forever (button stuck on "Running…").
+  useEffMON(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const colName = (id) => (window.QA.COLLECTIONS.find(c => c.id === id) || {}).name || id;
 
   const toggle = (id) => setMonitors(ms => ms.map(m => m.id === id ? { ...m, enabled: !m.enabled, nextRun: !m.enabled ? 'in 5 min' : 'paused' } : m));

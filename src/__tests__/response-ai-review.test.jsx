@@ -39,4 +39,19 @@ describe('ResponsePanel AI review', () => {
                           env={{ label: 'None', baseUrl: '' }} varMap={{}} testList={[]} />);
     expect(screen.queryByText(/Looks correct/)).not.toBeInTheDocument();
   });
+
+  it('still shows the verdict under React.StrictMode (mount→cleanup→mount)', async () => {
+    // The real app wraps <App/> in StrictMode, which runs effect setup→cleanup→
+    // setup at mount. A cleanup-only mounted-guard effect leaves the ref stuck
+    // false, so the post-await guard would skip setAiState and the button would
+    // stay "Reviewing…" forever. This reproduces that exact path.
+    render(
+      <React.StrictMode>
+        <ResponsePanel state="done" response={okResponse} req={req}
+                       env={{ label: 'None', baseUrl: '' }} varMap={{}} testList={[]} />
+      </React.StrictMode>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /AI review/i }));
+    await waitFor(() => expect(screen.getByText(/Looks correct/)).toBeInTheDocument(), { timeout: 4000 });
+  });
 });
