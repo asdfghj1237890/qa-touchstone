@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Icon, MethodBadge, Spinner, loadLlmCfg } from './components.jsx';
+import { Icon, MethodBadge, Spinner } from './components.jsx';
 import { qaCallLLM } from './llm.js';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────
