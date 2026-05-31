@@ -87,7 +87,7 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
         setResults([...acc]); setProgress((k + 1) / queue.length);
         if ((+delay || 0) > 0) await new Promise(res2 => setTimeout(res2, +delay));
       }
-      setPhase('done');
+      if (!cancelled) setPhase('done');
       } finally { timerRef.current = null; startedRef.current = false; }
     })();
   };

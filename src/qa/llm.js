@@ -8,6 +8,7 @@ export async function qaCallLLM(prompt) {
     return await window.claude.complete({ messages: [{ role: 'user', content: prompt }] });
   }
   const url = cfg.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : cfg.baseUrl;
+  if (!url) throw new Error('No custom provider endpoint configured (Settings → AI / LLM)');
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
