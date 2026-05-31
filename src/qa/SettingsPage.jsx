@@ -22,9 +22,10 @@ function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
     { title: 'Certificates', path: '/Users/qa/certs/device' },
     { title: 'Postman Collections', path: '/Users/qa/collections' },
   ];
-  const [envEdit, setEnvEdit] = useStateST('Staging');
+  const envNames = Object.keys(vars.environments || {});
+  const [envEdit, setEnvEdit] = useStateST(envNames[0] || 'None');
   const colList = window.QA.COLLECTIONS;
-  const [colEdit, setColEdit] = useStateST(colList[0].id);
+  const [colEdit, setColEdit] = useStateST(colList[0] ? colList[0].id : '');
   const colVars = (vars.collections || {})[colEdit] || [];
   return (
     <>
@@ -149,9 +150,26 @@ function CookieSettings({ cookies, setCookies }) {
 
 function ApiSettings() {
   const profiles = window.QA.CRED_PROFILES;
-  const [sel, setSel] = useStateST(profiles[0].id);
-  const p = profiles.find(x => x.id === sel);
+  const [sel, setSel] = useStateST(profiles[0] ? profiles[0].id : '');
   const typeLabel = { aws: 'AWS SigV4', bearer: 'Bearer', basic: 'Basic' };
+
+  if (!profiles.length) {
+    return (
+      <div className="qa-set-grid qa-set-grid--api">
+        <section className="qa-panel">
+          <div className="qa-panel-head"><span><Icon name="key" size={14} /> Credential profiles</span><button className="qa-link">+ New</button></div>
+          <div className="qa-set-body">
+            <div className="qa-auth-note">
+              <Icon name="key" size={13} />
+              <span>No credential profiles yet. Add one to store AWS, Bearer, or Basic credentials for re-use across requests.</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  const p = profiles.find(x => x.id === sel) || profiles[0];
 
   return (
     <div className="qa-set-grid qa-set-grid--api">

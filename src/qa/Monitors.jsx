@@ -114,6 +114,12 @@ function MonitorsPage({ env, setRoute }) {
         {monitors.map(m => (
           <MonitorCard key={m.id} mon={m} onToggle={toggle} onRun={runNow} running={running === m.id} collectionName={colName(m.collectionId)} />
         ))}
+        {!monitors.length && (
+          <div className="qa-auth-note" style={{ gridColumn: '1 / -1' }}>
+            <Icon name="clock" size={13} />
+            <span>No monitors yet. Create one to schedule a collection run on a cadence and watch for assertion failures.</span>
+          </div>
+        )}
       </div>
 
       {creating && <NewMonitorModal env={env} onClose={() => setCreating(false)}
@@ -124,12 +130,15 @@ function MonitorsPage({ env, setRoute }) {
 
 function NewMonitorModal({ env, onClose, onCreate }) {
   const cols = window.QA.COLLECTIONS;
+  // Real environments only (filter the placeholder `None` out); fall back to
+  // the currently active env label if the user hasn't added any from Settings.
+  const realEnvs = window.QA.ENVIRONMENTS.filter(e => e.label !== 'None').map(e => e.label);
+  const envs = realEnvs.length ? realEnvs : [env.label];
   const [name, setName] = useStateMON('');
-  const [collectionId, setCollectionId] = useStateMON(cols[0].id);
+  const [collectionId, setCollectionId] = useStateMON(cols[0] ? cols[0].id : '');
   const [cadence, setCadence] = useStateMON(CADENCES[1]);
   const [region, setRegion] = useStateMON(REGIONS[0]);
-  const [menv, setMenv] = useStateMON(env.label === 'None' ? 'Staging' : env.label);
-  const envs = window.QA.ENVIRONMENTS.filter(e => e.label !== 'None').map(e => e.label);
+  const [menv, setMenv] = useStateMON(env.label !== 'None' ? env.label : (realEnvs[0] || env.label));
   return (
     <div className="qa-modal-scrim" onMouseDown={onClose}>
       <div className="qa-modal qa-monnew" onMouseDown={e => e.stopPropagation()}>

@@ -30,10 +30,18 @@ function unsubscribe(callback) {
   }
 }
 
+// Tauri 環境偵測：__TAURI_INTERNALS__ 由 Tauri 在載入腳本前注入。純瀏覽器
+// （vite dev、vitest）下不存在，呼叫 invoke 會丟 "reading 'invoke'"。
+// 與 qa/executor.js 的 hasTauri() 同一套判斷。
+const hasTauri = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+
 // 啟動時一次性取得，維持同步介面
 let cachedPlatform = 'win32';
 let cachedProcessEnv = { NODE_ENV: 'production' };
 export async function initApi() {
+  // 非 Tauri（瀏覽器 fallback / 測試）：保留上方預設值，不去呼叫 invoke，
+  // 否則每次啟動都會在 console 印出一筆 invoke undefined 的紅色錯誤。
+  if (!hasTauri()) return;
   try {
     cachedPlatform = await invoke('get_platform');
     cachedProcessEnv = await invoke('get_process_env');

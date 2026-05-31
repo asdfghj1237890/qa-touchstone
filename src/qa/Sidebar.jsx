@@ -104,7 +104,9 @@ function CollectionRow({ req, active, onClick }) {
 
 function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, onSelectHistory, onImport, dataVersion }) {
   const { COLLECTIONS, ENVIRONMENTS } = window.QA;
-  const [open, setOpen] = useState({ 'c-users': true, 'c-auth': true, 'c-orders': false });
+  // Default to the first collection open; everything else collapsed. Avoids
+  // hard-coding seed IDs that may not exist after the workspace is reshaped.
+  const [open, setOpen] = useState(() => COLLECTIONS[0] ? { [COLLECTIONS[0].id]: true } : {});
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('collections');
   const [hSel, setHSel] = useState([]);

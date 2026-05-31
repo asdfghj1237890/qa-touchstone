@@ -67,8 +67,10 @@ describe('App (redesign shell)', () => {
   it('opens the API Client with collections and a Send action', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'API Client' }));
-    expect(screen.getByText('User Service')).toBeInTheDocument();
-    expect(screen.getByText('List users')).toBeInTheDocument();
+    // The bundled public-apis demo collection auto-loads at boot, so the
+    // sidebar shows it and its first request without any user import step.
+    expect(screen.getByText('Public APIs — Callable Demo')).toBeInTheDocument();
+    expect(screen.getByText('Random cat fact')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Send/ })).toBeInTheDocument();
   });
 

@@ -78,10 +78,26 @@ function hostOf(url) {
 }
 // cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
 
+// A placeholder request used when no collections are loaded yet. Components
+// (RequestBuilder, Sidebar, send pipeline) all guard on req.id, but we still
+// need a valid shape so React's initial render doesn't crash.
+const EMPTY_REQ = {
+  id: '', method: 'GET', url: '', params: [], headers: DEFAULT_HEADERS.map(h => ({ ...h })),
+  bodyMode: 'none', body: '', gqlQuery: '', gqlVars: '', form: [],
+  auth: {
+    type: 'none', bearer: '',
+    apiKey: { key: '', value: '', placement: 'header' },
+    basic: { user: '', pass: '' },
+    aws: { profile: '', service: '', region: '' },
+    oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '' },
+  },
+};
+
 function buildReq(id) {
   const { COLLECTIONS, REQUEST_DETAILS } = window.QA;
   const all = COLLECTIONS.flatMap(c => c.folders.flatMap(f => f.requests));
   const meta = all.find(r => r.id === id) || all[0];
+  if (!meta) return { ...EMPTY_REQ, headers: DEFAULT_HEADERS.map(h => ({ ...h })) };
   const det = REQUEST_DETAILS[meta.id] || {};
   const isGql = !!det.graphql;
   return {
@@ -96,12 +112,11 @@ function buildReq(id) {
     gqlVars: isGql ? det.graphql.variables : '',
     form: [],
     auth: {
-      type: det.auth || 'none',
-      bearer: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3MzAxIn0.demo',
-      apiKey: { key: 'x-api-key', value: 'sk_live_4f8a91c2e7', placement: 'header' },
-      basic: { user: 'qa-runner', pass: 'correct horse battery' },
-      aws: { profile: 'acme-staging', service: 'execute-api', region: 'us-east-1' },
-      oauth2: { grant: 'client_credentials', authUrl: 'https://auth.acme.dev/authorize', tokenUrl: 'https://auth.acme.dev/oauth/token', clientId: '{{clientId}}', clientSecret: '', scope: 'read write' },
+      type: det.auth || 'none', bearer: '',
+      apiKey: { key: '', value: '', placement: 'header' },
+      basic: { user: '', pass: '' },
+      aws: { profile: '', service: '', region: '' },
+      oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '' },
     },
   };
 }
@@ -112,13 +127,13 @@ function App() {
 
   const [route, setRoute] = useStateApp('home');
   const [settingsTab, setSettingsTab] = useStateApp('appearance');
-  const [env, setEnv] = useStateApp(window.QA.ENVIRONMENTS[2]); // Staging
+  const [env, setEnv] = useStateApp(window.QA.ENVIRONMENTS[0]);
   const [vars, setVars] = useStateApp(() => JSON.parse(JSON.stringify(window.QA.VARIABLES)));
   const [localVars, setLocalVars] = useStateApp({}); // { [reqId]: [{key,value,on}] }
   const [cookies, setCookies] = useStateApp(() => window.QA.COOKIES.map(c => ({ ...c })));
   const [sslVerify, setSslVerify] = useStateApp(true);
   const [tests, setTests] = useStateApp({});
-  const [req, setReq] = useStateApp(() => buildReq('usr-list'));
+  const [req, setReq] = useStateApp(() => buildReq(null));
   const [respState, setRespState] = useStateApp('empty'); // empty | loading | done
   const [response, setResponse] = useStateApp(null);
   const [history, setHistory] = useStateApp(window.QA.SEED_HISTORY.map(h => ({ ...h })));
