@@ -61,6 +61,9 @@ export const api = {
   getProcessEnv: () => cachedProcessEnv,
   openSettings: () => invoke('open_settings'),
   closeWindow: () => getCurrentWindow().close(),
+  // Custom-titlebar X for the main window: quit the whole app deterministically
+  // via a Rust command instead of relying on close() → CloseRequested → exit.
+  quitApp: () => invoke('quit_app'),
   minimizeWindow: () => getCurrentWindow().minimize(),
   maximizeWindow: () => getCurrentWindow().toggleMaximize(),
 

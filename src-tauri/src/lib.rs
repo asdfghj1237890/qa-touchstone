@@ -53,6 +53,7 @@ pub fn run() {
             commands::system::get_platform,
             commands::system::get_process_env,
             commands::window::open_settings,
+            commands::window::quit_app,
             commands::config::load_config,
             commands::config::save_config,
             commands::config::save_visible_pages,

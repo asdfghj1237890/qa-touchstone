@@ -46,7 +46,7 @@ function WindowControls() {
         <button type="button" className="qa-winctl-wbtn" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
         </button>
-        <button type="button" className="qa-winctl-wbtn qa-winctl-wclose" title="Close" aria-label="Close window" onClick={act(api.closeWindow)}>
+        <button type="button" className="qa-winctl-wbtn qa-winctl-wclose" title="Close" aria-label="Close window" onClick={act(api.quitApp)}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" strokeWidth="1" fill="none" /></svg>
         </button>
       </div>
@@ -54,7 +54,7 @@ function WindowControls() {
   }
   return (
     <div className="qa-winctl">
-      <button type="button" className="qa-winctl-btn qa-winctl-close" title="Close" aria-label="Close window" onClick={act(api.closeWindow)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-close" title="Close" aria-label="Close window" onClick={act(api.quitApp)} />
       <button type="button" className="qa-winctl-btn qa-winctl-min" title="Minimize" aria-label="Minimize window" onClick={act(api.minimizeWindow)} />
       <button type="button" className="qa-winctl-btn qa-winctl-max" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)} />
     </div>
