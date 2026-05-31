@@ -21,8 +21,16 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
   const [progress, setProgress] = useRN(0);
   const [results, setResults] = useRN([]);
   const timerRef = useRefRN(null);
+  // Synchronous guard so a fast double-click on Run can't spawn a second
+  // concurrent async loop that clobbers timerRef and orphans the first.
+  const startedRef = useRefRN(false);
 
   useEffRN(() => { setSelIds((COLLECTIONS.find(c => c.id === colId) || COLLECTIONS[0]).folders.flatMap(f => f.requests).map(r => r.id)); }, [colId]);
+
+  // Cancel any in-flight run when the user navigates away from the Runner
+  // route (the component unmounts). Without this the async loop keeps awaiting
+  // requests and calling setState on an unmounted component for seconds.
+  useEffRN(() => () => { if (timerRef.current && timerRef.current.cancel) timerRef.current.cancel(); }, []);
 
   const running = phase === 'running';
   const toggleReq = (id) => setSelIds(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
@@ -46,8 +54,10 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
 
   const run = () => {
     if (running) { stop(); return; }
+    if (startedRef.current) return; // a loop is already winding up/down
     const reqs = colReqs.filter(r => selIds.includes(r.id));
     if (!reqs.length) return;
+    startedRef.current = true;
     const queue = [];
     for (let i = 0; i < iters; i++) reqs.forEach(r => queue.push({ iter: i + 1, r, data: dataRows ? dataRows[i] : null }));
     setResults([]); setProgress(0); setPhase('running');
@@ -76,7 +86,7 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
         setResults([...acc]); setProgress((k + 1) / queue.length);
         if ((+delay || 0) > 0) await new Promise(res2 => setTimeout(res2, +delay));
       }
-      setPhase('done'); timerRef.current = null;
+      setPhase('done'); timerRef.current = null; startedRef.current = false;
     })();
   };
 
