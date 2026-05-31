@@ -1,9 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Runner } from '../qa/Runner.jsx';
 
 describe('Runner runs real requests + live assertions (canned fallback)', () => {
+  afterEach(() => cleanup());
   beforeEach(() => {
     window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
       { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
