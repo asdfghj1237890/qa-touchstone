@@ -271,7 +271,7 @@ function App() {
           {route === 'settings' && <SettingsPage accent={accent} setAccent={setAccent} initialTab={settingsTab} vars={vars} setVars={setVars} cookies={cookies} setCookies={setCookies} sslVerify={sslVerify} setSslVerify={setSslVerify} />}
           {route === 'perf' && <PerfTest env={env} vars={vars} />}
           {route === 'realtime' && <RealtimePage env={env} />}
-          {route === 'runner' && <Runner env={env} vars={vars} tests={tests} />}
+          {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
           {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} />}
           {route === 'testgen' && <TestGen openSettings={openSettings} onAddTests={addTestsForCase} />}
