@@ -17,8 +17,8 @@
   <rect width="32" height="32" rx="7.5" fill="url(#bg)"/>
   <rect width="32" height="32" rx="7.5" fill="url(#sheen)"/>
   <rect x="0.6" y="0.6" width="30.8" height="30.8" rx="7" fill="none" stroke="#7fb8ff" stroke-opacity="0.20"/>
-  <g transform="translate(2.2,4.5)" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M1 13 H5 l2 -6 l2.5 10 l2 -7 L14 13 l3.5 4.5 L27 4" stroke="#4d9fff" stroke-opacity="0.22"/>
-    <path d="M1 13 H5 l2 -6 l2.5 10 l2 -7 L14 13 l3.5 4.5 L27 4" stroke="url(#stroke)" filter="url(#glow)"/>
+  <g transform="translate(2.2,4.5)" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12 H9 l1.2 -3 l1.4 6 l1.8 -11.5 l1.8 16.5 l1.4 -8 H27" stroke="#4d9fff" stroke-opacity="0.22"/>
+    <path d="M1 12 H9 l1.2 -3 l1.4 6 l1.8 -11.5 l1.8 16.5 l1.4 -8 H27" stroke="url(#stroke)" filter="url(#glow)"/>
   </g>
 </svg>
