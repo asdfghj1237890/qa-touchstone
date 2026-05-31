@@ -17,6 +17,7 @@ import { cookieMatches } from './qa/cookies.js';
 import { MonitorsPage } from './qa/Monitors.jsx';
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
+import { buildReq } from './qa/buildReq.js';
 import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
@@ -61,8 +62,6 @@ function WindowControls() {
   );
 }
 
-const DEFAULT_HEADERS = [{ key: 'Accept', value: 'application/json', on: true }];
-
 const ROUTE_LABEL = { home: 'Home', api: 'API Client', realtime: 'Realtime', runner: 'Runner', perf: 'Performance', testgen: 'Test Gen', docs: 'API Docs', monitors: 'Monitors', settings: 'Settings' };
 
 // Which collection owns a given request id (for collection-scoped variables).
@@ -77,49 +76,6 @@ function hostOf(url) {
   try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
 }
 // cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
-
-// A placeholder request used when no collections are loaded yet. Components
-// (RequestBuilder, Sidebar, send pipeline) all guard on req.id, but we still
-// need a valid shape so React's initial render doesn't crash.
-const EMPTY_REQ = {
-  id: '', method: 'GET', url: '', params: [], headers: DEFAULT_HEADERS.map(h => ({ ...h })),
-  bodyMode: 'none', body: '', gqlQuery: '', gqlVars: '', form: [],
-  auth: {
-    type: 'none', bearer: '',
-    apiKey: { key: '', value: '', placement: 'header' },
-    basic: { user: '', pass: '' },
-    aws: { profile: '', service: '', region: '' },
-    oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '' },
-  },
-};
-
-function buildReq(id) {
-  const { COLLECTIONS, REQUEST_DETAILS } = window.QA;
-  const all = COLLECTIONS.flatMap(c => c.folders.flatMap(f => f.requests));
-  const meta = all.find(r => r.id === id) || all[0];
-  if (!meta) return { ...EMPTY_REQ, headers: DEFAULT_HEADERS.map(h => ({ ...h })) };
-  const det = REQUEST_DETAILS[meta.id] || {};
-  const isGql = !!det.graphql;
-  return {
-    id: meta.id,
-    method: meta.method,
-    url: meta.path.split('?')[0],
-    params: (det.params || []).map(p => ({ ...p })),
-    headers: DEFAULT_HEADERS.map(h => ({ ...h })),
-    bodyMode: isGql ? 'graphql' : (det.body ? 'json' : 'none'),
-    body: det.body || '',
-    gqlQuery: isGql ? det.graphql.query : '',
-    gqlVars: isGql ? det.graphql.variables : '',
-    form: [],
-    auth: {
-      type: det.auth || 'none', bearer: '',
-      apiKey: { key: '', value: '', placement: 'header' },
-      basic: { user: '', pass: '' },
-      aws: { profile: '', service: '', region: '' },
-      oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '' },
-    },
-  };
-}
 
 function App() {
   const rootRef = useRefApp(null);
