@@ -75,6 +75,27 @@ Build the Tauri desktop app:
 npm run tauri:build
 ```
 
+macOS produces a `.dmg` under `src-tauri/target/release/bundle/dmg/`,
+Windows an NSIS installer. The macOS k6 binary is bundled into the app at
+`Contents/Resources/resources/k6`, so Performance testing works without a
+system install.
+
+### Opening the macOS app (Gatekeeper)
+
+The build is not signed/notarized with an Apple Developer ID, so on first
+launch macOS Gatekeeper will block it with "app is damaged / cannot be
+opened". Bypass it once, either way:
+
+- **Right-click** the app → **Open** → **Open** in the dialog, **or**
+- Strip the quarantine attribute from a terminal:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"
+  ```
+
+For wider distribution, sign with a Developer ID certificate and notarize
+the build instead.
+
 ## API Client
 
 The API client can load Postman collections and execute requests with the selected environment. Environment presets are intentionally generic in the public edition so teams can map the app to their own services.
