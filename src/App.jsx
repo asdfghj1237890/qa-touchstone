@@ -30,11 +30,12 @@ const tauriReady = () => typeof window !== 'undefined' && (window.__TAURI_INTERN
 // Controls follow the host OS: Windows gets right-aligned square
 // minimize/maximize/close buttons (close hovers red); every other platform
 // keeps the macOS-style colored traffic lights.
-const isWindowsOS = () => {
-  if (typeof navigator === 'undefined') return false;
-  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
-  return /windows|win32|win64/i.test(platform);
+const uaPlatform = () => {
+  if (typeof navigator === 'undefined') return '';
+  return (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
 };
+const isWindowsOS = () => /windows|win32|win64/i.test(uaPlatform());
+const isMacOS = () => /mac/i.test(uaPlatform());
 
 function WindowControls() {
   const act = (fn) => (e) => { e.stopPropagation(); if (tauriReady()) Promise.resolve(fn()).catch(() => {}); };
@@ -97,6 +98,7 @@ function App() {
   const [cookieToast, setCookieToast] = useStateApp(null); // {name, domain} captured from Set-Cookie
   const [oauthTokens, setOauthTokens] = useStateApp({}); // { [reqId]: { token, type, expiresAt, scope } }
   const [logoFlash, setLogoFlash] = useStateApp(0); // bumps on a successful response to flash the brand mark
+  const [perfRunning, setPerfRunning] = useStateApp(false); // true while a performance test is in flight
   const sendSeq = useRefApp(0);
 
   // Apply theme whenever the accent changes; persist it.
@@ -248,12 +250,13 @@ function App() {
 
   return (
     <div className="qa-app" ref={rootRef}>
-      <NavRail route={route} setRoute={setRoute} busy={respState === 'loading'} flashAt={logoFlash} />
+      <NavRail route={route} setRoute={setRoute} busy={respState === 'loading'} flashAt={logoFlash} active={perfRunning} />
 
       <div className="qa-main">
         {/* Title bar */}
         <header className="qa-titlebar" data-tauri-drag-region onDoubleClick={() => { if (tauriReady()) Promise.resolve(api.maximizeWindow()).catch(() => {}); }}>
           <div className="qa-titlebar-left" data-tauri-drag-region>
+            {isMacOS() && <WindowControls />}
             <span className="qa-titlebar-name" data-tauri-drag-region>QA Touchstone</span>
             <span className="qa-titlebar-sep" data-tauri-drag-region>/</span>
             <span className="qa-titlebar-route" data-tauri-drag-region>{ROUTE_LABEL[route] || 'Home'}</span>
@@ -262,14 +265,14 @@ function App() {
             {route === 'api' && (
               <span className="qa-titlebar-env" data-tauri-drag-region><span className="qa-env-dot" /> {env.label}</span>
             )}
-            <WindowControls />
+            {!isMacOS() && <WindowControls />}
           </div>
         </header>
 
         <div className="qa-content">
           {route === 'home' && <HomePage setRoute={setRoute} history={history} onOpenRequest={openFromHistory} env={env} />}
           {route === 'settings' && <SettingsPage accent={accent} setAccent={setAccent} initialTab={settingsTab} vars={vars} setVars={setVars} cookies={cookies} setCookies={setCookies} sslVerify={sslVerify} setSslVerify={setSslVerify} />}
-          {route === 'perf' && <PerfTest env={env} vars={vars} />}
+          {route === 'perf' && <PerfTest env={env} vars={vars} onRunningChange={setPerfRunning} />}
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}

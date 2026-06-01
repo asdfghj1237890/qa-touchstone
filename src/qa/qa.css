@@ -54,6 +54,9 @@
   .qa-pulse[data-flash="1"] .qa-pulse-sweep { stroke: oklch(0.78 0.16 150); }
   .qa-pulse[data-flash="1"] .qa-pulse-sweep { animation: qa-pulse-settle 1s cubic-bezier(.2,.8,.2,1) forwards; filter: drop-shadow(0 0 4px oklch(0.78 0.16 150)); }
   .qa-pulse[data-flash="1"] .qa-pulse-base { opacity: .9; transition: stroke .2s; }
+  /* Sustained green pulse while a performance test is running. */
+  .qa-pulse[data-active="1"] .qa-pulse-base { stroke: oklch(0.78 0.16 150); opacity: .45; transition: stroke .2s; }
+  .qa-pulse[data-active="1"] .qa-pulse-sweep { stroke: oklch(0.78 0.16 150); animation-duration: 0.9s; filter: drop-shadow(0 0 4px oklch(0.78 0.16 150)); }
   @keyframes qa-pulse-sweep { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
   @keyframes qa-pulse-settle { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
   @media (prefers-reduced-motion: reduce) { .qa-pulse-sweep { animation: none !important; stroke-dashoffset: 0; stroke-dasharray: none; } .qa-pulse-base { opacity: 0; } }
@@ -92,6 +95,8 @@
     background: var(--bg-2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 999px; }
   .qa-env-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 7px var(--accent); }
   .qa-winctl { display: flex; align-items: center; gap: 8px; }
+  /* macOS traffic lights sit at the top-left, before the app name. */
+  .qa-titlebar-left > .qa-winctl { margin-right: 10px; }
   .qa-winctl-btn { width: 12px; height: 12px; padding: 0; border: none; border-radius: 50%;
     cursor: pointer; -webkit-app-region: no-drag; transition: filter .12s ease, transform .1s ease; }
   .qa-winctl-btn:hover { filter: brightness(1.18); }

@@ -194,7 +194,7 @@ function Stepper({ value, onChange, min = 0, disabled, width = 110 }) {
                 onChange={e => onChange(Math.max(min, +e.target.value || 0))} />;
 }
 
-function PerfTest({ env, vars }) {
+function PerfTest({ env, vars, onRunningChange }) {
   const [target, setTarget] = usePF('usr-list');
   const [type, setType] = usePF('load');
   const [stages, setStages] = usePF(() => clone(TYPE_META.load.stages));
@@ -249,6 +249,14 @@ function PerfTest({ env, vars }) {
   }));
   const maxVus = Math.max(0, ...effStages.map((st) => +st.t || 0));
   const running = phase === 'running';
+
+  // Report run state up so the app shell can react (e.g. the brand mark in the
+  // nav rail glows green while a load test is in flight). Reset on unmount so
+  // leaving the Performance route clears it.
+  useEffPF(() => {
+    if (onRunningChange) onRunningChange(running);
+    return () => { if (onRunningChange) onRunningChange(false); };
+  }, [running, onRunningChange]);
 
   // Hand off the load to k6 (must be on PATH). The chart and SLO scoring read
   // real samples streamed back from `k6 run --out json=-`. stop() only flags
