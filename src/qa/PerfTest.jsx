@@ -153,21 +153,59 @@ function exportRuns(list, fmt) {
   downloadFile(base + '.csv', lines.join('\n'), 'text/csv');
 }
 
-function Chart({ pts, max, color, label, unit }) {
+// Format a seconds value for the time axis: 8 -> "8s", 63 -> "63s".
+const fmtSecs = (s) => `${Math.round(s)}s`;
+
+function Chart({ pts, max, color, label, unit, dur }) {
+  const [hover, setHover] = usePF(null); // { i, leftPct, topPct, t, v } | null
   const n = pts.length;
   const coords = pts.map((v, i) => [(i / Math.max(1, N_POINTS - 1)) * 100, 100 - (Math.min(v, max) / max) * 100]);
   const line = coords.map(c => `${c[0].toFixed(2)},${c[1].toFixed(2)}`).join(' ');
   const area = n >= 2 ? `0,100 ${line} ${coords[n - 1][0].toFixed(2)},100` : '';
+
+  // Y-axis tick values, top (max) -> bottom (0), aligned with the 25/50/75 grid.
+  const yTicks = [1, 0.75, 0.5, 0.25, 0].map((f) => Math.round(max * f));
+  // X-axis time ticks across the run duration.
+  const total = dur || 0;
+  const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => total * f);
+
+  // Map a pointer position to the nearest sample bin, then show a guide + tip.
+  const onMove = (e) => {
+    if (n < 2) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    const i = Math.round(fx * (N_POINTS - 1));
+    const v = pts[i] || 0;
+    setHover({ i, leftPct: (i / (N_POINTS - 1)) * 100, topPct: 100 - (Math.min(v, max) / max) * 100, t: (i / (N_POINTS - 1)) * total, v });
+  };
+
   return (
     <div className="pf-chart">
       <div className="pf-chart-head"><span>{label}</span><span className="pf-chart-max">{Math.round(max)}{unit}</span></div>
-      <div className="pf-chart-box">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pf-chart-svg">
-          {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2="100" y2={y} className="pf-grid" />)}
-          {n >= 2 && <polygon points={area} fill={color} opacity="0.12" />}
-          {n >= 2 && <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />}
-        </svg>
-        {n < 2 && <div className="pf-chart-empty">No data yet</div>}
+      <div className="pf-chart-plot">
+        <div className="pf-chart-yaxis">
+          {yTicks.map((t, i) => <span key={i}>{t.toLocaleString()}</span>)}
+        </div>
+        <div className="pf-chart-box" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pf-chart-svg">
+            {[25, 50, 75].map(y => <line key={y} x1="0" y1={y} x2="100" y2={y} className="pf-grid" />)}
+            {n >= 2 && <polygon points={area} fill={color} opacity="0.12" />}
+            {n >= 2 && <polyline points={line} fill="none" stroke={color} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />}
+          </svg>
+          {hover && (
+            <>
+              <div className="pf-chart-guide" style={{ left: `${hover.leftPct}%` }} />
+              <div className="pf-chart-dot" style={{ left: `${hover.leftPct}%`, top: `${hover.topPct}%`, background: color }} />
+              <div className="pf-chart-tip" style={{ left: `${Math.min(88, Math.max(12, hover.leftPct))}%`, top: `${hover.topPct}%` }}>
+                <b>{Math.round(hover.v).toLocaleString()}{unit}</b> <em>@ {fmtSecs(hover.t)}</em>
+              </div>
+            </>
+          )}
+          {n < 2 && <div className="pf-chart-empty">No data yet</div>}
+        </div>
+      </div>
+      <div className="pf-chart-xaxis">
+        {xTicks.map((t, i) => <span key={i}>{fmtSecs(t)}</span>)}
       </div>
     </div>
   );
@@ -473,6 +511,9 @@ function PerfTest({ env, vars, onRunningChange }) {
 
   const tgt = flat.find(r => r.value === target) || flat[0];
   const shown = running ? live : (runs[viewIdx] || live);
+  // Duration backing the charts' time axis: the live config total while running,
+  // otherwise the viewed historical run's recorded duration (falls back to total).
+  const chartDur = (!running && shown && shown.dur) ? shown.dur : total;
   const baseline = running ? null : (runs[viewIdx + 1] || null);
   const dist = shown ? shown.dist : { ok: 0, c4: 0, c5: 0, net: 0 };
   // Historical runs persisted before the `net` bucket existed won't have it;
@@ -594,8 +635,8 @@ function PerfTest({ env, vars, onRunningChange }) {
             </div>
 
             <div className="pf-charts">
-              <Chart pts={shown.latSeries} max={maxLat} color="var(--accent)" label="Response time (p50)" unit=" ms" />
-              <Chart pts={shown.rpsSeries} max={maxRps} color="oklch(0.78 0.15 150)" label="Requests / sec" unit="" />
+              <Chart pts={shown.latSeries} max={maxLat} color="var(--accent)" label="Response time (p50)" unit=" ms" dur={chartDur} />
+              <Chart pts={shown.rpsSeries} max={maxRps} color="oklch(0.78 0.15 150)" label="Requests / sec" unit="" dur={chartDur} />
             </div>
 
             <div className="pf-dist">
