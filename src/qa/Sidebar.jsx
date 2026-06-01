@@ -59,7 +59,7 @@ function exportHistory(items, fmt) {
   histDownload(base + '.csv', lines.join('\n'), 'text/csv');
 }
 
-function NavRail({ route, setRoute, busy, flashAt }) {
+function NavRail({ route, setRoute, busy, flashAt, active }) {
   const items = [
     { key: 'home', icon: 'home', label: 'Home' },
     { key: 'testgen', icon: 'sparkle', label: 'Test Gen' },
@@ -74,7 +74,7 @@ function NavRail({ route, setRoute, busy, flashAt }) {
   return (
     <nav className="qa-rail">
       <div className="qa-rail-logo" title="QA Companion">
-        <PulseLogo busy={busy} flashAt={flashAt} size={22} />
+        <PulseLogo busy={busy} flashAt={flashAt} active={active} size={22} />
       </div>
       <div className="qa-rail-items">
         {items.map(it => (

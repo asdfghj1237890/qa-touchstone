@@ -63,9 +63,10 @@ function Icon({ name, size = 16, stroke = 2, style, className }) {
 
 // Animated brand mark: an EKG-style heartbeat that resolves into a checkmark.
 // A bright pulse sweeps the line continuously (faster while `busy`); on `flashAt`
-// change it flashes green — the logo "reacts" to a passing request.
+// change it flashes green — the logo "reacts" to a passing request. While
+// `active` (e.g. a performance test is running) it stays green and keeps pulsing.
 const PULSE_PATH = 'M1 13 H5 l2 -6 l2.5 10 l2 -7 L14 13 l3.5 4.5 L27 4';
-function PulseLogo({ busy, flashAt, size = 22 }) {
+function PulseLogo({ busy, flashAt, active, size = 22 }) {
   const [flash, setFlash] = React.useState(false);
   React.useEffect(() => {
     if (!flashAt) return;
@@ -74,7 +75,7 @@ function PulseLogo({ busy, flashAt, size = 22 }) {
     return () => clearTimeout(t);
   }, [flashAt]);
   return (
-    <svg className="qa-pulse" data-busy={busy ? '1' : '0'} data-flash={flash ? '1' : '0'}
+    <svg className="qa-pulse" data-busy={busy ? '1' : '0'} data-flash={flash ? '1' : '0'} data-active={active ? '1' : '0'}
          width={size} height={size * 24 / 28} viewBox="0 0 28 24" fill="none"
          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path className="qa-pulse-base" d={PULSE_PATH} pathLength="100" strokeWidth="2.4" />
