@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "tauri": "tauri",
+    "setup:k6": "node scripts/setup-k6.mjs",
+    "pretauri:dev": "node scripts/setup-k6.mjs",
     "tauri:dev": "tauri dev",
+    "pretauri:build": "node scripts/setup-k6.mjs",
     "tauri:build": "tauri build",
     "icons": "node scripts/gen-icons.mjs && tauri icon src-tauri/icons/source.png && node scripts/gen-favicon.mjs",
     "build": "vite build",

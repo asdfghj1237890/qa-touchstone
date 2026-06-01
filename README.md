@@ -39,6 +39,24 @@ Run the Tauri desktop app in development mode:
 npm run tauri:dev
 ```
 
+### k6 binary (Performance testing)
+
+The Performance page runs real load tests via [k6](https://k6.io). The k6
+binary is **not** committed (it's tens of MB and platform-specific — see
+`.gitignore`), so after a fresh clone or `git pull` it must be materialized
+locally. This is automatic: `npm run tauri:dev` and `npm run tauri:build` run a
+`pre*` hook that places the right binary for your OS at
+`src-tauri/resources/` (`k6` on macOS/Linux, `k6.exe` on Windows). The hook
+copies an existing `k6` from your PATH if present, otherwise downloads it from
+GitHub releases.
+
+You can also run it manually (no-op if already present):
+
+```bash
+npm run setup:k6
+# pin a version: K6_VERSION=2.0.0 npm run setup:k6
+```
+
 Run unit tests:
 
 ```bash
