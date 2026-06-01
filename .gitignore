@@ -28,5 +28,6 @@ src-tauri/gen
 # (Windows: k6.exe, macOS/Linux: k6). Too large to track in git.
 src-tauri/resources/k6.exe
 src-tauri/resources/k6
+src-tauri/resources/.k6.provenance.json
 # Local editor / tooling config (Claude Code preview launch.json, etc.)
 .claude/
