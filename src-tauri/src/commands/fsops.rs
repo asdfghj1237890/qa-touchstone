@@ -1,5 +1,7 @@
 use crate::error::{AppError, AppResult};
+#[cfg(target_os = "windows")]
 use tauri::Manager;
+#[cfg(target_os = "windows")]
 use tauri::path::BaseDirectory;
 
 fn rejects_traversal(p: &str) -> bool {
@@ -48,18 +50,32 @@ pub fn read_file_content(file_path: String) -> AppResult<String> {
         .map_err(|e| AppError::Other(format!("Failed to read file: {e}")))
 }
 
-/// Resolve the absolute path of the bundled `k6.exe` (listed under
-/// `bundle.resources` in tauri.conf.json). Works in both dev and prod since
-/// Tauri's path resolver returns the correct location either way.
+/// Resolve the k6 binary the perf runner should launch.
+///
+/// Only Windows ships a bundled `k6.exe` (listed under `bundle.resources` in
+/// tauri.conf.json). On macOS/Linux there is no bundled binary, so this returns
+/// an error and the renderer falls back to a system-installed `k6` on PATH
+/// (`k6Path || 'k6'` in PerfTest.jsx). Without this, macOS would always receive
+/// the Windows `.exe` path and every run would fail to exec.
 #[tauri::command]
-pub fn get_k6_path(app: tauri::AppHandle) -> AppResult<String> {
-    let p = app
-        .path()
-        .resolve("resources/k6.exe", BaseDirectory::Resource)
-        .map_err(|e| AppError::Other(format!("Resolve k6 path failed: {e}")))?;
-    p.to_str()
-        .map(String::from)
-        .ok_or_else(|| AppError::Other("k6 path is not valid UTF-8".into()))
+pub fn get_k6_path(#[allow(unused_variables)] app: tauri::AppHandle) -> AppResult<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let p = app
+            .path()
+            .resolve("resources/k6.exe", BaseDirectory::Resource)
+            .map_err(|e| AppError::Other(format!("Resolve k6 path failed: {e}")))?;
+        return p
+            .to_str()
+            .map(String::from)
+            .ok_or_else(|| AppError::Other("k6 path is not valid UTF-8".into()));
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(AppError::Other(
+            "No bundled k6 on this platform; fall back to `k6` on PATH".into(),
+        ))
+    }
 }
 
 /// Delete a file the renderer earlier received from `write_temp_text`. The
