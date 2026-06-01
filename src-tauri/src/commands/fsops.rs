@@ -1,7 +1,5 @@
 use crate::error::{AppError, AppResult};
-#[cfg(target_os = "windows")]
 use tauri::Manager;
-#[cfg(target_os = "windows")]
 use tauri::path::BaseDirectory;
 
 fn rejects_traversal(p: &str) -> bool {
@@ -50,32 +48,34 @@ pub fn read_file_content(file_path: String) -> AppResult<String> {
         .map_err(|e| AppError::Other(format!("Failed to read file: {e}")))
 }
 
-/// Resolve the k6 binary the perf runner should launch.
+/// Resolve the bundled k6 binary the perf runner should launch.
 ///
-/// Only Windows ships a bundled `k6.exe` (listed under `bundle.resources` in
-/// tauri.conf.json). On macOS/Linux there is no bundled binary, so this returns
-/// an error and the renderer falls back to a system-installed `k6` on PATH
-/// (`k6Path || 'k6'` in PerfTest.jsx). Without this, macOS would always receive
-/// the Windows `.exe` path and every run would fail to exec.
+/// Each platform bundles its own binary under `bundle.resources` (see
+/// tauri.windows.conf.json → `resources/k6.exe`, tauri.macos.conf.json →
+/// `resources/k6`). Tauri's resolver returns the correct location in both dev
+/// and prod. If the bundled binary is missing, this errors so the renderer
+/// falls back to a system-installed `k6` on PATH (`k6Path || 'k6'` in
+/// PerfTest.jsx).
 #[tauri::command]
-pub fn get_k6_path(#[allow(unused_variables)] app: tauri::AppHandle) -> AppResult<String> {
+pub fn get_k6_path(app: tauri::AppHandle) -> AppResult<String> {
     #[cfg(target_os = "windows")]
-    {
-        let p = app
-            .path()
-            .resolve("resources/k6.exe", BaseDirectory::Resource)
-            .map_err(|e| AppError::Other(format!("Resolve k6 path failed: {e}")))?;
-        return p
-            .to_str()
-            .map(String::from)
-            .ok_or_else(|| AppError::Other("k6 path is not valid UTF-8".into()));
-    }
+    let rel = "resources/k6.exe";
     #[cfg(not(target_os = "windows"))]
-    {
-        Err(AppError::Other(
-            "No bundled k6 on this platform; fall back to `k6` on PATH".into(),
-        ))
+    let rel = "resources/k6";
+
+    let p = app
+        .path()
+        .resolve(rel, BaseDirectory::Resource)
+        .map_err(|e| AppError::Other(format!("Resolve k6 path failed: {e}")))?;
+    if !p.exists() {
+        return Err(AppError::Other(format!(
+            "Bundled k6 not found at {}; falling back to PATH",
+            p.display()
+        )));
     }
+    p.to_str()
+        .map(String::from)
+        .ok_or_else(|| AppError::Other("k6 path is not valid UTF-8".into()))
 }
 
 /// Delete a file the renderer earlier received from `write_temp_text`. The

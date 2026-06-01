@@ -24,7 +24,9 @@ logs/app.log
 qa-touchstone-swagger-postman.json
 src-tauri/target
 src-tauri/gen
-# Bundled k6 binary (~61 MB) — downloaded by setup, packaged into the .exe
+# Bundled k6 binaries (tens of MB) — provided by setup, packaged per platform
+# (Windows: k6.exe, macOS/Linux: k6). Too large to track in git.
 src-tauri/resources/k6.exe
+src-tauri/resources/k6
 # Local editor / tooling config (Claude Code preview launch.json, etc.)
 .claude/
