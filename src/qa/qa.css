@@ -1195,3 +1195,34 @@
   .qa-sec-drawer-req { padding: 0 14px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
   .qa-sec-drawer-req code { font-family: var(--font-mono); font-size: 12px; color: var(--text); word-break: break-all; }
   .qa-sec-drawer-id { font-size: 12px; color: var(--text-dim); }
+
+  /* ── Security findings (response oracles) ───────────────────────────────── */
+  .qa-sev--info     { --sev: #6b7280; }
+  .qa-sev--low      { --sev: #2563eb; }
+  .qa-sev--medium   { --sev: #d97706; }
+  .qa-sev--high     { --sev: #ea580c; }
+  .qa-sev--critical { --sev: #dc2626; }
+
+  .qa-sec-findbadge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 4px; margin-left: 6px;
+    border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 1;
+    color: #fff; background: var(--sev, #6b7280); }
+  .qa-sec-findsummary { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+  .qa-sec-findchip {
+    font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+    color: #fff; background: var(--sev, #6b7280); }
+  .qa-sec-findpanel { margin-top: 18px; }
+  .qa-sec-findpanel h3 { font-size: 13px; margin: 0 0 8px; color: var(--text-dim); }
+  .qa-sec-findlist, .qa-sec-findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .qa-sec-findlist li, .qa-sec-findings li {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 6px 10px; border-radius: 8px; font-size: 12px;
+    border-left: 3px solid var(--sev, #6b7280); background: rgba(127,127,127,.06); }
+  .qa-sec-find-sev {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    color: var(--sev, #6b7280); }
+  .qa-sec-find-oracle { font-size: 10px; color: var(--text-dim); }
+  .qa-sec-find-id { font-size: 11px; color: var(--text-dim); }
+  .qa-sec-find-path { font-size: 11px; }
+  .qa-sec-find-ev { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono, monospace); }
