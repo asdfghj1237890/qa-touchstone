@@ -218,3 +218,16 @@ describe('runMatrix — request capture', () => {
     expect(results.r1.admin.status).toBe(200);
   });
 });
+
+describe('persistence — bola', () => {
+  it('round-trips a bola blob when present and omits it when absent', () => {
+    installLocalStorage();
+    const bola = { tests: [{ id: 't1', reqId: 'r1', method: 'GET', path: '/u/{id}', idLocation: { kind: 'path', index: 1 }, idValues: { anon: '5' } }] };
+    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401], bola });
+    expect(loadMatrixConfig().bola).toEqual(bola);
+
+    installLocalStorage();
+    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401] });
+    expect(loadMatrixConfig().bola).toBeUndefined();
+  });
+});
