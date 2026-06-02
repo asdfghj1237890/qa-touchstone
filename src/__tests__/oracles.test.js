@@ -151,3 +151,24 @@ describe('summarizeFindings', () => {
     expect(summarizeFindings(results)).toEqual({ total: 3, bySeverity: { info: 0, low: 1, medium: 0, high: 2, critical: 0 } });
   });
 });
+
+import { scanSensitiveLLM } from '../qa/oracles.js';
+
+describe('scanSensitiveLLM', () => {
+  it('parses a JSON array out of the LLM reply into llm-sourced findings', async () => {
+    const fakeLLM = async () => 'Here you go:\n[{"path":"note","title":"SSN in free text","severity":"high"}]';
+    const f = await scanSensitiveLLM({ body: { note: 'ssn 078-05-1120' } }, fakeLLM);
+    expect(f).toHaveLength(1);
+    expect(f[0]).toMatchObject({ oracle: 'sensitive-data', source: 'llm', path: 'note', severity: 'high' });
+  });
+  it('returns [] when the reply has no parseable array', async () => {
+    expect(await scanSensitiveLLM({ body: { ok: true } }, async () => 'nothing found')).toEqual([]);
+  });
+  it('coerces an unknown severity to medium', async () => {
+    const f = await scanSensitiveLLM({ body: {} }, async () => '[{"path":"x","severity":"spicy"}]');
+    expect(f[0].severity).toBe('medium');
+  });
+  it('wraps an LLM error', async () => {
+    await expect(scanSensitiveLLM({ body: {} }, async () => { throw new Error('no key'); })).rejects.toThrow(/LLM scan failed/);
+  });
+});

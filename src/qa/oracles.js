@@ -2,6 +2,7 @@
 // Scans a captured response for sensitive-data exposure and schema/contract
 // drift, producing Finding[]. UI lives in Security.jsx; this file is unit-tested.
 import './setup.js';
+import { qaCallLLM } from './llm.js';
 
 export const SEVERITY_ORDER = ['info', 'low', 'medium', 'high', 'critical'];
 
@@ -176,4 +177,28 @@ export function summarizeFindings(results) {
     }
   }
   return { total, bySeverity };
+}
+
+// Optional, on-demand only. `callLLM` is injectable for tests; defaults to the
+// shared qaCallLLM. Never called automatically and never blocks a matrix run.
+export async function scanSensitiveLLM(response, callLLM = qaCallLLM) {
+  const body = response && response.body;
+  const text = typeof body === 'string' ? body : JSON.stringify(body || {}, null, 2);
+  const prompt =
+    'You are a security reviewer. Identify sensitive data exposure in this API ' +
+    'response body: PII, secrets/tokens, or internal/debug fields a client should ' +
+    'not receive. Return ONLY a JSON array of {"path","title","severity"} where ' +
+    'severity is one of info,low,medium,high,critical. If nothing, return [].\n\n' +
+    'Response body:\n' + text.slice(0, 4000);
+  let raw;
+  try { raw = await callLLM(prompt); } catch (e) { throw new Error('LLM scan failed: ' + ((e && e.message) || e)); }
+  let arr;
+  try { arr = JSON.parse((String(raw).match(/\[[\s\S]*\]/) || ['[]'])[0]); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(x => x && x.path).map(x => ({
+    oracle: 'sensitive-data',
+    severity: SEVERITY_ORDER.includes(x.severity) ? x.severity : 'medium',
+    title: x.title || 'AI-flagged exposure',
+    path: String(x.path), evidence: '', source: 'llm',
+  }));
 }
