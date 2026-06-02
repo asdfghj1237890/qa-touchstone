@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { qaRunSavedRequest } from '../qa/sendRequest.js';
+import { buildReq } from '../qa/buildReq.js';
 import api from '../api/index.js';
 
 // Outside Tauri, executeRequest falls back to window.QA.RESPONSES[req.id].
@@ -72,5 +73,28 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
 
     expect(resp.status).toBe(200);
     expect(execute.mock.calls[0][0].requestDetails.request.url).toBe('https://api.test/users/42');
+  });
+});
+
+describe('qaRunSavedRequest — authOverride', () => {
+  beforeEach(() => {
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/thing' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'bearer' } };
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} } };
+  });
+
+  it('accepts authOverride without throwing (canned path)', async () => {
+    const resp = await qaRunSavedRequest(
+      { id: 'r1' },
+      { env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, authOverride: { type: 'none' } },
+    );
+    expect(resp.status).toBe(200);
+  });
+
+  it('buildReq retains the saved request auth type when no override is given', () => {
+    const req = buildReq('r1');
+    expect(req.auth.type).toBe('bearer');
   });
 });
