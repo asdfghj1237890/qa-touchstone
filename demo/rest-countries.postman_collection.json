@@ -1,0 +1,371 @@
+{
+  "info": {
+    "name": "OpenNet REST Countries \u2014 QA Touchstone Collection",
+    "description": "Supplemental API collection for the OpenNet AQA RestAPI homework. The Python pytest suite remains the source of truth; this Postman-compatible collection mirrors the same positive/negative REST Countries checks so QA Touchstone can be used for quick smoke/exploratory reruns. Base URL: https://restcountries.com/v3.1.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "TC1 Search country by name \u2014 positive",
+      "item": [
+        {
+          "name": "Search name: japan -> Japan/Tokyo/Asia",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/japan?fields=name,capital,region,cca2",
+            "description": "Expected: 200, non-empty list, Japan record has capital Tokyo and region Asia."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is a non-empty list\", function () { pm.expect(body).to.be.an('array').that.is.not.empty; });",
+                  "pm.test(\"includes Japan\", function () { const match = body.find(c => c.name && c.name.common === \"Japan\"); pm.expect(match, 'matched country').to.exist; pm.expect(match.capital).to.deep.equal([\"Tokyo\"]); pm.expect(match.region).to.equal(\"Asia\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search name: france -> France/Paris/Europe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/france?fields=name,capital,region,cca2",
+            "description": "Expected: 200, non-empty list, France record has capital Paris and region Europe."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is a non-empty list\", function () { pm.expect(body).to.be.an('array').that.is.not.empty; });",
+                  "pm.test(\"includes France\", function () { const match = body.find(c => c.name && c.name.common === \"France\"); pm.expect(match, 'matched country').to.exist; pm.expect(match.capital).to.deep.equal([\"Paris\"]); pm.expect(match.region).to.equal(\"Europe\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search name: brazil -> Brazil/Brasilia/Americas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/brazil?fields=name,capital,region,cca2",
+            "description": "Expected: 200, non-empty list, Brazil record has capital Brasilia and region Americas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is a non-empty list\", function () { pm.expect(body).to.be.an('array').that.is.not.empty; });",
+                  "pm.test(\"includes Brazil\", function () { const match = body.find(c => c.name && c.name.common === \"Brazil\"); pm.expect(match, 'matched country').to.exist; pm.expect(match.capital).to.deep.equal([\"Bras\\u00edlia\"]); pm.expect(match.region).to.equal(\"Americas\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TC2 Search unknown country \u2014 negative",
+      "item": [
+        {
+          "name": "Search unknown: zzzzznotacountry",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/zzzzznotacountry",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search unknown: 1234567",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/1234567",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search unknown: notarealplace",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/name/notarealplace",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TC3 Alpha code lookup \u2014 positive",
+      "item": [
+        {
+          "name": "Alpha code: jp -> Japan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/jp?fields=name,region",
+            "description": "Expected: 200 object with name.common = Japan."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is an object\", function () { pm.expect(body).to.be.an('object'); });",
+                  "pm.test(\"resolved common name is Japan\", function () { pm.expect(body.name.common).to.equal(\"Japan\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Alpha code: FR -> France",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/FR?fields=name,region",
+            "description": "Expected: 200 object with name.common = France; also covers case-insensitive input."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is an object\", function () { pm.expect(body).to.be.an('object'); });",
+                  "pm.test(\"resolved common name is France\", function () { pm.expect(body.name.common).to.equal(\"France\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Alpha code: usa -> United States",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/usa?fields=name,region",
+            "description": "Expected: 200 object with name.common = United States."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"response is an object\", function () { pm.expect(body).to.be.an('object'); });",
+                  "pm.test(\"resolved common name is United States\", function () { pm.expect(body.name.common).to.equal(\"United States\"); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TC3 Invalid alpha code \u2014 negative",
+      "item": [
+        {
+          "name": "Invalid alpha: zz",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/zz",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid alpha: 000",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/000",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid alpha: xx",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "https://restcountries.com/v3.1/alpha/xx",
+            "description": "Expected: 404 with REST Countries error contract."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "const body = pm.response.json();",
+                  "pm.test(\"error contract reports 404\", function () { pm.expect(body.status).to.equal(404); pm.expect(String(body.message).toLowerCase()).to.include('not found'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
