@@ -4,13 +4,15 @@ import { Icon, MethodBadge } from './components.jsx';
 import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
-import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch } from './oauth.js';
+import { executeRequest } from './executor.js';
+import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './oauth.js';
 import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
 } from './authz.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
+const tauriReady = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 const EXPECTS = ['allow', 'deny', 'skip'];
 const VERDICT_LABEL = { pass: 'security.verdict.pass', fail: 'security.verdict.fail', vuln: 'security.verdict.vuln', inconclusive: 'security.verdict.inconclusive' };
 
@@ -42,8 +44,21 @@ function IdentityEditor({ identity, onChange, onClose, env, vars, sslVerify }) {
   const fetchOAuth = async () => {
     const map = window.qaVarMap(vars || window.QA.VARIABLES, env.label);
     const tokenRequest = buildOAuthTokenRequest(identity.auth.oauth2 || {}, map);
-    // Let failures propagate — AuthEditor's OAuth2Editor catches and shows the error.
-    const token = await exchangeOAuthTokenWithFetch(tokenRequest);
+    // Mirror the API client (App.jsx): inside Tauri, exchange through the Rust
+    // backend to avoid browser CORS; fall back to fetch only in dev/browser.
+    // Failures propagate so AuthEditor's OAuth2Editor shows the error.
+    let token;
+    if (tauriReady()) {
+      const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
+      if (!resp || resp.status < 200 || resp.status >= 300) {
+        const detail = resp && resp.body && typeof resp.body === 'object'
+          ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body)) : '';
+        throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
+      }
+      token = parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
+    } else {
+      token = await exchangeOAuthTokenWithFetch(tokenRequest);
+    }
     if (token) onChange({ ...identity, _oauthToken: token });
   };
   return (
@@ -110,8 +125,18 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const bulkRow = (reqId, val) => setExpect(setRow(state, reqId, val).expect);
 
   const addIdentity = () => { const id = newIdentity(); setIdentities(xs => [...xs, id]); setEditId(id.id); };
-  const removeIdentity = (id) => { if (id === 'anon') return; setIdentities(xs => xs.filter(x => x.id !== id)); };
-  const removeEndpoint = (reqId) => setEndpoints(xs => xs.filter(x => x.reqId !== reqId));
+  const removeIdentity = (id) => {
+    if (id === 'anon') return;
+    setIdentities(xs => xs.filter(x => x.id !== id));
+    // Drop this identity's cells so the summary chips don't keep counting them.
+    setResults(r => Object.fromEntries(Object.entries(r).map(([rid, row]) => {
+      const { [id]: _gone, ...rest } = row; return [rid, rest];
+    })));
+  };
+  const removeEndpoint = (reqId) => {
+    setEndpoints(xs => xs.filter(x => x.reqId !== reqId));
+    setResults(r => { const n = { ...r }; delete n[reqId]; return n; });
+  };
 
   const runner = (ep, identity) => qaRunSavedRequest({ id: ep.reqId }, {
     env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
