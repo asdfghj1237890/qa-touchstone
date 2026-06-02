@@ -1,8 +1,8 @@
 // ── QA Touchstone — request executor ───────────────────────────────────────
 // Bridges the redesigned API client to the real Tauri HTTP backend
-// (`execute_postman_request`). When the backend is unavailable (browser/dev
-// or test), it falls back to the canned responses in data.js so the UI — and
-// the send→response hero animation — still works end to end.
+// (`execute_postman_request`). In browser/dev it attempts a real CORS fetch for
+// public demo APIs, then falls back to canned responses when the browser blocks
+// the request or the network is unavailable. Tests always use the canned path.
 import './setup.js';
 import api from '../api/index.js';
 
@@ -105,9 +105,54 @@ function hasTauri() {
   return typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 }
 
+function isTestMode() {
+  return !!(import.meta.env && import.meta.env.MODE === 'test');
+}
+
+async function browserFetchResponse(req, env, varMap, opts = {}) {
+  if (typeof fetch !== 'function') throw new Error('Browser fetch unavailable');
+  const payload = buildPayload(req, env, varMap, opts);
+  const request = payload.requestDetails.request;
+  const headers = {};
+  (request.header || []).forEach(h => {
+    const key = String(h.key || '');
+    if (!key) return;
+    // Browsers reject forbidden headers like Cookie; use the canned fallback
+    // for those because the Rust backend is the real path for cookie replay.
+    if (key.toLowerCase() === 'cookie') throw new Error('Cookie header requires Tauri backend');
+    headers[key] = h.value || '';
+  });
+  const body = request.body && request.body.raw != null ? String(request.body.raw) : undefined;
+  const started = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const res = await fetch(request.url, {
+    method: request.method,
+    headers,
+    body: body != null && !/^(GET|HEAD)$/i.test(request.method) ? body : undefined,
+    mode: 'cors',
+  });
+  const bodyText = await res.text();
+  const time = Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - started);
+  const responseHeaders = {};
+  try { res.headers.forEach((value, key) => { responseHeaders[key] = value; }); } catch {}
+  return {
+    status: res.status,
+    statusText: res.statusText || statusText(res.status),
+    time,
+    size: byteLength(bodyText),
+    body: tryParse(bodyText),
+    headers: responseHeaders,
+    finalUrl: res.url || request.url,
+    setCookies: [],
+  };
+}
+
 // Returns a Promise<{ status, statusText, time, size, body, headers }>.
 export async function executeRequest(req, env, varMap, opts = {}) {
   if (!hasTauri()) {
+    if (!isTestMode()) {
+      try { return await browserFetchResponse(req, env, varMap, opts); }
+      catch {}
+    }
     // Simulate latency so the hero animation reads naturally.
     const canned = cannedResponse(req);
     const delay = 620 + Math.min(900, (canned.time || 100) * 1.4);

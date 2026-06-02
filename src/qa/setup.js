@@ -7,7 +7,7 @@ import demoCollectionRaw from '../../demo/public-apis.postman_collection.json?ra
 
 // Auto-load the bundled public-apis Postman collection so a fresh launch
 // has a real, callable workspace. The demo collection's URLs are absolute
-// (catfact.ninja, httpbin.org, …) so they work regardless of the active
+// (JSONPlaceholder, Open-Meteo, REST Countries, …) so they work regardless of the active
 // environment. Failures are non-fatal — the app still boots with an empty
 // workspace if the demo file is ever removed or malformed.
 //

@@ -11,89 +11,153 @@ const RT_PROTOCOLS = [
   { key: 'sse', labelKey: 'realtime.sse', scheme: 'https://' },
 ];
 
-// Canned inbound traffic the mock server "pushes" once connected.
-const WS_SCRIPT = [
-  { dir: 'in', delay: 400, body: '{"type":"welcome","sessionId":"sess_8f2c","heartbeat":30}' },
-  { dir: 'in', delay: 1600, body: '{"type":"presence","online":42}' },
-  { dir: 'in', delay: 3200, body: '{"type":"ping"}' },
-];
-const SSE_SCRIPT = [
-  { event: 'open', delay: 300, body: 'stream opened' },
-  { event: 'message', delay: 900, body: '{"id":1,"price":128.40,"symbol":"ACME"}' },
-  { event: 'message', delay: 1900, body: '{"id":2,"price":128.92,"symbol":"ACME"}' },
-  { event: 'price', delay: 2900, body: '{"id":3,"price":129.05,"symbol":"ACME"}' },
-  { event: 'message', delay: 3900, body: '{"id":4,"price":128.71,"symbol":"ACME"}' },
-];
+const RT_DEMO_WS_URL = 'wss://ws.postman-echo.com/raw';
+const RT_DEMO_SSE_URL = 'https://stream.wikimedia.org/v2/stream/recentchange';
+const RT_MAX_MESSAGES = 180;
+const RT_MAX_BODY_CHARS = 5000;
 
 function rtNow() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`; }
+function rtTrimBody(body) {
+  const text = String(body == null ? '' : body);
+  return text.length > RT_MAX_BODY_CHARS
+    ? `${text.slice(0, RT_MAX_BODY_CHARS)}\n... truncated ${text.length - RT_MAX_BODY_CHARS} chars`
+    : text;
+}
+async function rtDataToText(data) {
+  if (typeof data === 'string') return rtTrimBody(data);
+  if (data && typeof data.text === 'function') return rtTrimBody(await data.text());
+  if (data instanceof ArrayBuffer) return `[binary ${data.byteLength} B]`;
+  if (ArrayBuffer.isView(data)) return `[binary ${data.byteLength} B]`;
+  return rtTrimBody(String(data || ''));
+}
 
 function RealtimeClient({ env }) {
   const { t } = useI18n();
   const [proto, setProto] = useStateRT('ws');
-  const [url, setUrl] = useStateRT('wss://staging.api.acme.dev/ws/events');
+  const [url, setUrl] = useStateRT(RT_DEMO_WS_URL);
   const [status, setStatus] = useStateRT('disconnected'); // disconnected | connecting | open | closed
   const [msgs, setMsgs] = useStateRT([]); // {dir, body, at, event}
-  const [compose, setCompose] = useStateRT('{"type":"subscribe","channel":"orders"}');
-  const timersRef = useRefRT([]);
+  const [counts, setCounts] = useStateRT({ in: 0, out: 0 });
+  const [compose, setCompose] = useStateRT('{"message":"hello from QA Touchstone","channel":"demo"}');
+  const wsRef = useRefRT(null);
+  const eventSourceRef = useRefRT(null);
+  const lastStreamErrorRef = useRefRT(0);
   const scrollRef = useRefRT(null);
 
   const isWs = proto === 'ws';
-  const clearTimers = () => { timersRef.current.forEach(t => clearTimeout(t)); timersRef.current = []; };
-  useEffectRT(() => () => clearTimers(), []);
+  const clearTransport = () => {
+    if (wsRef.current) {
+      const ws = wsRef.current;
+      ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null;
+      try { ws.close(1000, 'client disconnect'); } catch {}
+      wsRef.current = null;
+    }
+    if (eventSourceRef.current) {
+      const source = eventSourceRef.current;
+      source.onopen = null; source.onmessage = null; source.onerror = null;
+      try { source.close(); } catch {}
+      eventSourceRef.current = null;
+    }
+  };
+  useEffectRT(() => () => clearTransport(), []);
   useEffectRT(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs]);
 
-  const push = (m) => setMsgs(list => [...list, { at: rtNow(), ...m }]);
+  const resetStream = () => { setMsgs([]); setCounts({ in: 0, out: 0 }); };
+  const push = (m) => {
+    if (m.dir === 'in' || m.dir === 'out') {
+      setCounts(c => ({ ...c, [m.dir]: c[m.dir] + 1 }));
+    }
+    setMsgs(list => [...list, { at: rtNow(), ...m }].slice(-RT_MAX_MESSAGES));
+  };
+  const pushStreamError = (message) => {
+    const now = Date.now();
+    if (now - lastStreamErrorRef.current < 1400) return;
+    lastStreamErrorRef.current = now;
+    push({ dir: 'sys', body: message });
+  };
 
   const switchProto = (p) => {
-    if (status !== 'disconnected') disconnect();
+    clearTransport();
     setProto(p);
-    setUrl(p === 'ws' ? 'wss://staging.api.acme.dev/ws/events' : 'https://staging.api.acme.dev/sse/prices');
-    setMsgs([]);
+    setStatus('disconnected');
+    setUrl(p === 'ws' ? RT_DEMO_WS_URL : RT_DEMO_SSE_URL);
+    resetStream();
   };
 
   const connect = () => {
     if (status === 'open' || status === 'connecting') return;
-    setStatus('connecting'); setMsgs([]);
-    const t0 = setTimeout(() => {
-      setStatus('open');
-      push({ dir: 'sys', body: t('realtime.connectedTo', { url }) });
-      const script = isWs ? WS_SCRIPT : SSE_SCRIPT;
-      script.forEach(s => {
-        const t = setTimeout(() => push({ dir: 'in', body: s.body, event: s.event }), s.delay);
-        timersRef.current.push(t);
-      });
-      if (!isWs) { // SSE keeps emitting periodic events
-        let n = 5;
-        const tick = () => {
-          const t = setTimeout(() => {
-            push({ dir: 'in', body: `{"id":${n},"price":${(128 + Math.random() * 2).toFixed(2)},"symbol":"ACME"}`, event: 'price' });
-            n++; tick();
-          }, 2600);
-          timersRef.current.push(t);
-        };
-        tick();
+    const targetUrl = url.trim();
+    if (!targetUrl) return;
+    setStatus('connecting'); resetStream();
+    clearTransport();
+    if (isWs) {
+      if (typeof WebSocket !== 'function') {
+        setStatus('closed');
+        push({ dir: 'sys', body: t('realtime.unsupported.ws') });
+        return;
       }
-    }, 650);
-    timersRef.current.push(t0);
+      const ws = new WebSocket(targetUrl);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        setStatus('open');
+        push({ dir: 'sys', body: t('realtime.connectedTo', { url: targetUrl }) });
+      };
+      ws.onmessage = async (event) => {
+        push({ dir: 'in', body: await rtDataToText(event.data), event: 'message' });
+      };
+      ws.onerror = () => pushStreamError(t('realtime.connectionError'));
+      ws.onclose = (event) => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
+        setStatus('closed');
+        push({ dir: 'sys', body: t('realtime.closedWithCode', { code: event && event.code ? event.code : 1000 }) });
+      };
+      return;
+    }
+    if (typeof EventSource !== 'function') {
+      setStatus('closed');
+      push({ dir: 'sys', body: t('realtime.unsupported.sse') });
+      return;
+    }
+    const source = new EventSource(targetUrl);
+    eventSourceRef.current = source;
+    source.onopen = () => {
+      setStatus('open');
+      push({ dir: 'sys', body: t('realtime.connectedTo', { url: targetUrl }) });
+    };
+    source.onmessage = (event) => {
+      push({ dir: 'in', body: rtTrimBody(event.data), event: event.type || 'message' });
+    };
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) {
+        if (eventSourceRef.current === source) eventSourceRef.current = null;
+        setStatus('closed');
+        pushStreamError(t('realtime.connectionError'));
+      } else {
+        pushStreamError(t('realtime.sseReconnecting'));
+      }
+    };
   };
 
   const disconnect = () => {
-    clearTimers();
+    clearTransport();
     setStatus('closed');
     push({ dir: 'sys', body: t('realtime.closed') });
   };
 
   const sendMsg = () => {
     if (status !== 'open' || !compose.trim()) return;
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      push({ dir: 'sys', body: t('realtime.connectionError') });
+      return;
+    }
+    wsRef.current.send(compose);
     push({ dir: 'out', body: compose });
-    // Mock server echoes an ack.
-    const t = setTimeout(() => push({ dir: 'in', body: `{"type":"ack","of":${JSON.stringify(safeChannel(compose))}}` }), 480);
-    timersRef.current.push(t);
   };
 
   const connected = status === 'open';
-  const inCount = msgs.filter(m => m.dir === 'in').length;
-  const outCount = msgs.filter(m => m.dir === 'out').length;
+  const inCount = counts.in;
+  const outCount = counts.out;
 
   return (
     <div className="rt">
@@ -117,7 +181,7 @@ function RealtimeClient({ env }) {
         <span className="rt-stat" data-status={status}>{t(`realtime.status.${status}`)}</span>
         <span className="qa-meta">{isWs ? 'WebSocket' : 'text/event-stream'}</span>
         <span className="rt-counts"><span className="rt-c-in">↓ {inCount}</span> <span className="rt-c-out">↑ {outCount}</span></span>
-        {msgs.length > 0 && <button className="qa-link" onClick={() => setMsgs([])}>{t('common.clear')}</button>}
+        {msgs.length > 0 && <button className="qa-link" onClick={resetStream}>{t('common.clear')}</button>}
       </div>
 
       <div className="rt-stream" ref={scrollRef}>
@@ -156,7 +220,6 @@ function RealtimeClient({ env }) {
     </div>
   );
 }
-function safeChannel(s) { try { return JSON.parse(s).channel || JSON.parse(s).type || 'message'; } catch { return 'message'; } }
 
 function RealtimePage({ env }) {
   const { t } = useI18n();

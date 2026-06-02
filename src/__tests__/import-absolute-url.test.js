@@ -93,16 +93,16 @@ describe('absolute-URL imports stay callable', () => {
     const parsed = qaParseImport(text);
     expect(parsed.error).toBeUndefined();
     expect(parsed.format).toBe('Postman v2.1');
-    expect(parsed.collection.folders).toHaveLength(11);
+    expect(parsed.collection.folders).toHaveLength(6);
     const reqs = parsed.collection.folders.flatMap((f) => f.requests);
-    expect(reqs).toHaveLength(37);
+    expect(reqs).toHaveLength(22);
     expect(reqs.every((r) => /^https:\/\//.test(r.path))).toBe(true);
     // each absolute URL must execute as-is (no env base prepended)
-    const sample = reqs.find((r) => r.path === 'https://api.agify.io/?name=michael');
+    const sample = reqs.find((r) => r.path === 'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true');
     const payload = buildPayload({ ...baseReq(sample.path), headers: [], params: [] }, { baseUrl: 'https://ignored.example' }, {});
-    expect(payload.requestDetails.request.url).toBe('https://api.agify.io/?name=michael');
-    // the POST echo request carries its JSON body through import
-    const post = reqs.find((r) => r.path === 'https://httpbin.org/post');
+    expect(payload.requestDetails.request.url).toBe('https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true');
+    // the POST request carries its JSON body through import
+    const post = reqs.find((r) => r.path === 'https://jsonplaceholder.typicode.com/posts');
     expect(post.method).toBe('POST');
     expect(parsed.details[post.id].body).toContain('QA Touchstone');
   });
