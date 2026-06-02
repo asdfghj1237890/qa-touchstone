@@ -147,3 +147,33 @@ export function checkSchema(body, contract, config = DEFAULT_ORACLE_CONFIG) {
   }
   return findings;
 }
+
+// Run both oracles for one matrix cell. Schema runs only on 2xx with a baseline.
+// An undeclared field that also trips a sensitive rule is bumped to `high`
+// (silent overexposure is the dangerous case).
+export function runOracles(cell, ctx = {}) {
+  const { baseline, config = DEFAULT_ORACLE_CONFIG } = ctx;
+  const resp = cell && cell.response;
+  if (!resp) return [];
+  const sensitive = scanSensitive(resp, config);
+  const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+  const schema = is2xx && baseline ? checkSchema(resp.body, baseline, config) : [];
+  const leakPaths = new Set(sensitive.map(f => normalizePath(f.path)));
+  for (const f of schema) {
+    if (f.title === 'Undeclared field' && leakPaths.has(f.path)) f.severity = 'high';
+  }
+  return [...sensitive, ...schema];
+}
+
+// Tally findings by severity across the matrix results grid.
+export function summarizeFindings(results) {
+  const bySeverity = { info: 0, low: 0, medium: 0, high: 0, critical: 0 };
+  let total = 0;
+  for (const reqId in results) {
+    for (const idId in results[reqId]) {
+      const fs = (results[reqId][idId] && results[reqId][idId].findings) || [];
+      for (const f of fs) { total++; if (bySeverity[f.severity] !== undefined) bySeverity[f.severity]++; }
+    }
+  }
+  return { total, bySeverity };
+}
