@@ -80,6 +80,16 @@
         { "name": "Currency rates USD to EUR", "request": { "method": "GET", "header": [], "url": "https://api.frankfurter.app/latest?from=USD&to=EUR" } },
         { "name": "DummyJSON product search", "request": { "method": "GET", "header": [], "url": "https://dummyjson.com/products/search?q=phone" } }
       ]
+    },
+    {
+      "name": "Auth / Security (httpbin)",
+      "description": "Real-auth endpoints for demoing the Security RBAC matrix. httpbin returns 401 when a bearer/basic credential is missing or wrong and 200 when correct. /hidden-basic-auth returns 404 when denied (use it to demo a custom deny-set, e.g. 401,403,404). /get is open to everyone — set an identity's expectation to 'deny' on it to see a VULN cell. The matrix overrides each request's auth per identity, so these are saved without auth. Verified credentials: bearer = any string; basic = user/passwd.",
+      "item": [
+        { "name": "Bearer protected", "request": { "method": "GET", "header": [], "url": "https://httpbin.org/bearer" } },
+        { "name": "Basic auth (user/passwd)", "request": { "method": "GET", "header": [], "url": "https://httpbin.org/basic-auth/user/passwd" } },
+        { "name": "Hidden basic auth (404 when denied)", "request": { "method": "GET", "header": [], "url": "https://httpbin.org/hidden-basic-auth/user/passwd" } },
+        { "name": "Open endpoint (no auth)", "request": { "method": "GET", "header": [], "url": "https://httpbin.org/get" } }
+      ]
     }
   ]
 }
