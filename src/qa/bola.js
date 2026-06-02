@@ -91,3 +91,17 @@ export function matchesOwner(attackResp, ownerRef, ownerIdValue) {
   }
   return false;
 }
+
+export function classifyBola(method, status, matched, denySet) {
+  const deny = denySet || [401, 403, 404];
+  if (typeof status !== 'number' || !Number.isFinite(status)) return 'inconclusive';
+  if (deny.includes(status)) return 'pass';
+  if (status >= 200 && status <= 299) return matched ? 'vuln' : 'unconfirmed';
+  return 'inconclusive';
+}
+
+export function bolaSeverity(method, verdict) {
+  if (verdict === 'vuln') return MUTATING_METHODS.includes(String(method).toUpperCase()) ? 'critical' : 'high';
+  if (verdict === 'unconfirmed') return 'medium';
+  return null;
+}

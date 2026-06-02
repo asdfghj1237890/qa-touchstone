@@ -1,6 +1,6 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
-import { applyIdLocation, matchesOwner } from '../qa/bola.js';
+import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity } from '../qa/bola.js';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 
@@ -59,5 +59,34 @@ describe('matchesOwner', () => {
   });
   it('returns false when the owner reference body has no leaves', () => {
     expect(matchesOwner(resp({ a: 1 }), resp({}), 'zzz')).toBe(false);
+  });
+});
+
+describe('classifyBola', () => {
+  const deny = [401, 403, 404];
+  it('deny-set status is pass', () => {
+    expect(classifyBola('GET', 403, true, deny)).toBe('pass');
+    expect(classifyBola('GET', 404, false, deny)).toBe('pass');
+  });
+  it('2xx + matched is vuln; 2xx + unmatched is unconfirmed', () => {
+    expect(classifyBola('GET', 200, true, deny)).toBe('vuln');
+    expect(classifyBola('GET', 200, false, deny)).toBe('unconfirmed');
+  });
+  it('other/null status is inconclusive', () => {
+    expect(classifyBola('GET', 500, true, deny)).toBe('inconclusive');
+    expect(classifyBola('GET', null, true, deny)).toBe('inconclusive');
+  });
+});
+
+describe('bolaSeverity', () => {
+  it('confirmed read is high, confirmed mutating is critical', () => {
+    expect(bolaSeverity('GET', 'vuln')).toBe('high');
+    expect(bolaSeverity('DELETE', 'vuln')).toBe('critical');
+    expect(bolaSeverity('post', 'vuln')).toBe('critical');
+  });
+  it('unconfirmed is medium; pass/inconclusive have no finding', () => {
+    expect(bolaSeverity('GET', 'unconfirmed')).toBe('medium');
+    expect(bolaSeverity('GET', 'pass')).toBe(null);
+    expect(bolaSeverity('GET', 'inconclusive')).toBe(null);
   });
 });
