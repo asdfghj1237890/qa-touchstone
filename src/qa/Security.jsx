@@ -188,7 +188,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     try {
       const extra = await scanSensitiveLLM(drawerCell.response);
       const { reqId, idId } = drawer;
-      setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: { ...r[reqId][idId], findings: [...(r[reqId][idId].findings || []), ...extra] } } }));
+      // The endpoint/identity may have been removed while the scan was in flight;
+      // skip the merge rather than dereferencing a now-missing cell.
+      setResults(r => {
+        const cell = r[reqId] && r[reqId][idId];
+        if (!cell) return r;
+        return { ...r, [reqId]: { ...r[reqId], [idId]: { ...cell, findings: [...(cell.findings || []), ...extra] } } };
+      });
       setAiScan({ busy: false, error: null });
     } catch (e) {
       setAiScan({ busy: false, error: String((e && e.message) || e) });
