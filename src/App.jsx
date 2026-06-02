@@ -19,7 +19,7 @@ import { MONITOR_SCHEDULER_INTERVAL_MS, MONITOR_STORAGE_KEY, MonitorsPage, nextM
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
 import { buildReq } from './qa/buildReq.js';
-import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './qa/oauth.js';
+import { requestOAuthToken } from './qa/oauth.js';
 import { I18nProvider } from './qa/i18n.jsx';
 import { useI18n } from './qa/useI18n.js';
 import api from './api/index.js';
@@ -315,20 +315,7 @@ function AppShell() {
   // Tauri, route through the Rust HTTP backend to avoid browser CORS limits;
   // in browser/dev fallback, use fetch directly.
   const fetchOAuthToken = async (targetReq) => {
-    const tokenRequest = buildOAuthTokenRequest(targetReq.auth.oauth2 || {}, activeMap);
-    let token;
-    if (tauriReady()) {
-      const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
-      if (!resp || resp.status < 200 || resp.status >= 300) {
-        const detail = resp && resp.body && typeof resp.body === 'object'
-          ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body))
-          : '';
-        throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
-      }
-      token = parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
-    } else {
-      token = await exchangeOAuthTokenWithFetch(tokenRequest);
-    }
+    const token = await requestOAuthToken(targetReq.auth.oauth2, activeMap, { sslVerify, executeRequest });
     setOauthTokens(t => ({ ...t, [targetReq.id]: token }));
     return token;
   };

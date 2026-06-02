@@ -5,14 +5,13 @@ import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import { executeRequest } from './executor.js';
-import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './oauth.js';
+import { requestOAuthToken } from './oauth.js';
 import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
 } from './authz.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
-const tauriReady = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
 const EXPECTS = ['allow', 'deny', 'skip'];
 const VERDICT_LABEL = { pass: 'security.verdict.pass', fail: 'security.verdict.fail', vuln: 'security.verdict.vuln', inconclusive: 'security.verdict.inconclusive' };
 
@@ -43,22 +42,9 @@ function IdentityEditor({ identity, onChange, onClose, env, vars, sslVerify }) {
   const patch = ({ auth }) => onChange({ ...identity, auth });
   const fetchOAuth = async () => {
     const map = window.qaVarMap(vars || window.QA.VARIABLES, env.label);
-    const tokenRequest = buildOAuthTokenRequest(identity.auth.oauth2 || {}, map);
-    // Mirror the API client (App.jsx): inside Tauri, exchange through the Rust
-    // backend to avoid browser CORS; fall back to fetch only in dev/browser.
-    // Failures propagate so AuthEditor's OAuth2Editor shows the error.
-    let token;
-    if (tauriReady()) {
-      const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
-      if (!resp || resp.status < 200 || resp.status >= 300) {
-        const detail = resp && resp.body && typeof resp.body === 'object'
-          ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body)) : '';
-        throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
-      }
-      token = parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
-    } else {
-      token = await exchangeOAuthTokenWithFetch(tokenRequest);
-    }
+    // Shared with the API client: Tauri backend vs fetch. Failures propagate so
+    // AuthEditor's OAuth2Editor shows them.
+    const token = await requestOAuthToken(identity.auth.oauth2, map, { sslVerify, executeRequest });
     if (token) onChange({ ...identity, _oauthToken: token });
   };
   return (
@@ -140,7 +126,12 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   const runner = (ep, identity) => qaRunSavedRequest({ id: ep.reqId }, {
     env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
-  });
+  }).then(response => ({
+    // Redacted summary of what was sent — drives the cell drawer (and is ready
+    // for a later CI export to serialize) without storing any secret.
+    request: { method: ep.method, path: ep.path, identity: identity.id === 'anon' ? 'anon' : (identity.name || identity.id), authType: identity.auth.type },
+    response,
+  }));
 
   const run = async (rowReqId = null) => {
     const target = rowReqId ? { ...state, endpoints: state.endpoints.filter(e => e.reqId === rowReqId) } : state;
@@ -264,10 +255,20 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       {drawerCell && (
         <div className="qa-sec-drawer">
           <div className="qa-sec-drawer-head">
-            {t('security.cell.response')} · {drawerCell.status ?? '—'} · {t(VERDICT_LABEL[drawerCell.verdict] || 'security.cell.notRun')}
+            <span>{drawerCell.status ?? '—'} · {t(VERDICT_LABEL[drawerCell.verdict] || 'security.cell.notRun')}</span>
             <button className="qa-iconbtn" onClick={() => setDrawer(null)}><Icon name="x" size={14} /></button>
           </div>
+          {drawerCell.request && (
+            <>
+              <span className="qa-sec-drawer-label">{t('security.cell.request')}</span>
+              <div className="qa-sec-drawer-req">
+                <div><MethodBadge method={drawerCell.request.method} size="sm" /> <code>{drawerCell.request.path}</code></div>
+                <div className="qa-sec-drawer-id">{drawerCell.request.identity} · {drawerCell.request.authType}</div>
+              </div>
+            </>
+          )}
           {drawerCell.error && <div className="qa-sec-drawer-err">{drawerCell.error}</div>}
+          <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
         </div>
       )}
