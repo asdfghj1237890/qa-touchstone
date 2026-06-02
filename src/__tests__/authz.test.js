@@ -183,6 +183,21 @@ describe('persistence', () => {
   });
 });
 
+describe('persistence — oracleConfig', () => {
+  it('round-trips oracleConfig when present and omits it when absent', () => {
+    installLocalStorage();
+    saveMatrixConfig({
+      identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401],
+      oracleConfig: { sensitive: true, schema: false, llm: false, severityOverrides: { pii: 'low' } },
+    });
+    expect(loadMatrixConfig().oracleConfig).toEqual({ sensitive: true, schema: false, llm: false, severityOverrides: { pii: 'low' } });
+
+    installLocalStorage();
+    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401] });
+    expect(loadMatrixConfig().oracleConfig).toBeUndefined();
+  });
+});
+
 describe('runMatrix — request capture', () => {
   const reqState = withDefaults({
     identities: [{ id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } }],
