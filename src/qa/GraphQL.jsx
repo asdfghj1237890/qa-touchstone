@@ -1,12 +1,14 @@
 import React from 'react';
 import './setup.js';
 import { Icon } from './components.jsx';
+import { useI18n } from './useI18n.js';
 
 // ── QA Companion — GraphQL editor + schema explorer (mock introspection) ──
 const { useState: useStateGQ } = React;
 
 // One expandable type in the schema explorer.
 function GqlType({ t, onInsert }) {
+  const { t: tr } = useI18n();
   const [open, setOpen] = useStateGQ(t.name === 'Query');
   return (
     <div className="gql-type">
@@ -19,7 +21,7 @@ function GqlType({ t, onInsert }) {
       {open && (
         <div className="gql-fields">
           {t.fields.map(f => (
-            <button key={f.name} className="gql-field" onClick={() => onInsert && onInsert(f.name)} title="insert field">
+            <button key={f.name} className="gql-field" onClick={() => onInsert && onInsert(f.name)} title={tr('graphql.insertField')}>
               <span className="gql-field-name">{f.name}</span>
               {f.args && <span className="gql-field-args">{f.args}</span>}
               {f.type && <span className="gql-field-type">{f.type}</span>}
@@ -32,22 +34,23 @@ function GqlType({ t, onInsert }) {
 }
 
 function SchemaExplorer({ schema }) {
+  const { t } = useI18n();
   const [q, setQ] = useStateGQ('');
   const types = schema.types.filter(t => !q || t.name.toLowerCase().includes(q.toLowerCase()) || t.fields.some(f => f.name.toLowerCase().includes(q.toLowerCase())));
   return (
     <div className="gql-schema">
       <div className="gql-schema-head">
-        <span><Icon name="layers" size={12} /> Schema</span>
+        <span><Icon name="layers" size={12} /> {t('graphql.schema')}</span>
         <span className="qa-meta">{schema.endpoint}</span>
       </div>
       <div className="qa-search gql-schema-search">
         <Icon name="search" size={12} />
-        <input placeholder="Filter types & fields" value={q} onChange={e => setQ(e.target.value)} />
-        {q && <button onClick={() => setQ('')} aria-label="clear"><Icon name="x" size={11} /></button>}
+        <input placeholder={t('graphql.filter')} value={q} onChange={e => setQ(e.target.value)} />
+        {q && <button onClick={() => setQ('')} aria-label={t('common.clear')}><Icon name="x" size={11} /></button>}
       </div>
       <div className="gql-schema-scroll">
         {types.map(t => <GqlType key={t.name} t={t} />)}
-        {!types.length && <div className="qa-empty-mini">No matching types</div>}
+        {!types.length && <div className="qa-empty-mini">{t('graphql.noMatches')}</div>}
       </div>
     </div>
   );
@@ -55,23 +58,24 @@ function SchemaExplorer({ schema }) {
 
 // The Body-tab content shown when bodyMode === 'graphql'.
 function GraphQLEditor({ req, patch }) {
+  const { t } = useI18n();
   const [showSchema, setShowSchema] = useStateGQ(true);
   const [sub, setSub] = useStateGQ('query'); // query | variables
   const schema = window.QA.GRAPHQL_SCHEMA;
   let varErr = '';
-  if ((req.gqlVars || '').trim()) { try { JSON.parse(req.gqlVars); } catch { varErr = 'Invalid JSON'; } }
+  if ((req.gqlVars || '').trim()) { try { JSON.parse(req.gqlVars); } catch { varErr = t('graphql.invalidJson'); } }
   return (
     <div className="gql">
       <div className="gql-main">
         <div className="gql-bar">
           <div className="qa-segs qa-segs--mini">
-            <button data-active={sub === 'query' ? '1' : '0'} onClick={() => setSub('query')}>Query</button>
+            <button data-active={sub === 'query' ? '1' : '0'} onClick={() => setSub('query')}>{t('graphql.query')}</button>
             <button data-active={sub === 'variables' ? '1' : '0'} onClick={() => setSub('variables')}>
-              Variables{(req.gqlVars || '').trim() ? ' •' : ''}
+              {t('graphql.variables')}{(req.gqlVars || '').trim() ? ' •' : ''}
             </button>
           </div>
           <button className="qa-hist-expbtn" onClick={() => setShowSchema(s => !s)}>
-            <Icon name="layers" size={12} /> {showSchema ? 'Hide' : 'Show'} schema
+            <Icon name="layers" size={12} /> {showSchema ? t('graphql.hideSchema') : t('graphql.showSchema')}
           </button>
         </div>
         {sub === 'query' && (
