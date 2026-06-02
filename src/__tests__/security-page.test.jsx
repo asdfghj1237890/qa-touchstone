@@ -83,4 +83,56 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // The cell text will be "200 · VULN"
     await waitFor(() => expect(screen.getByText(/200.*VULN/)).toBeInTheDocument(), { timeout: 4000 });
   });
+
+  it('surfaces a findings badge when the response leaks sensitive data', async () => {
+    // Override the canned response with an email leak in the body.
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+    fireEvent.click(screen.getByRole('button', { name: /Run all/i }));
+
+    await waitFor(() => expect(document.querySelector('.qa-sec-findbadge')).not.toBeNull(), { timeout: 4000 });
+  });
+
+  it('lists findings in the cell drawer with a Scan with AI action', async () => {
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+    fireEvent.click(screen.getByRole('button', { name: /Run all/i }));
+    await waitFor(() => expect(document.querySelector('.qa-sec-findbadge')).not.toBeNull(), { timeout: 4000 });
+
+    // Open the cell drawer by clicking the run cell (it has a result now).
+    fireEvent.click(document.querySelector('.qa-sec-cell'));
+    await waitFor(() => expect(document.querySelector('.qa-sec-findings')).not.toBeNull());
+
+    // The drawer's findings list renders the leak path 'email' as a <code>.
+    const findings = document.querySelector('.qa-sec-findings');
+    expect(within(findings).getByText('email')).toBeTruthy();
+    // No LLM is reachable in jsdom (built-in needs window.claude), so the AI
+    // scan is offered but disabled with a hint rather than failing on click.
+    const aiBtn = screen.getByRole('button', { name: /Scan with AI/i });
+    expect(aiBtn).toBeInTheDocument();
+    expect(aiBtn).toBeDisabled();
+    expect(screen.getByText(/Configure AI in Settings/i)).toBeInTheDocument();
+  });
+
+  it('shows a severity summary chip and an aggregated findings panel after a run', async () => {
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+    fireEvent.click(screen.getByRole('button', { name: /Run all/i }));
+    await waitFor(() => expect(document.querySelector('.qa-sec-findbadge')).not.toBeNull(), { timeout: 4000 });
+    expect(document.querySelector('.qa-sec-findsummary')).not.toBeNull();
+    expect(document.querySelector('.qa-sec-findpanel')).not.toBeNull();
+  });
 });
