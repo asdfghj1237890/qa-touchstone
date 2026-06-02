@@ -110,3 +110,40 @@ export function scanSensitive(response, config = DEFAULT_ORACLE_CONFIG) {
   else if (typeof body === 'string') visit('$', '', body);   // non-JSON raw body
   return findings;
 }
+
+function jsType(v) {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  return typeof v;   // 'string' | 'number' | 'boolean' | 'object'
+}
+
+// Build a shallow contract: normalized path -> { type, required }.
+export function inferContract(body) {
+  const contract = {};
+  if (body == null || typeof body !== 'object') return contract;
+  walkJson(body, (path, _key, value) => { contract[normalizePath(path)] = { type: jsType(value), required: true }; });
+  return contract;
+}
+
+// Compare a 2xx body against a contract; emit drift findings.
+export function checkSchema(body, contract, config = DEFAULT_ORACLE_CONFIG) {
+  if (!config || config.schema === false || !contract) return [];
+  const findings = [];
+  const present = {};
+  if (body != null && typeof body === 'object') {
+    walkJson(body, (path, _key, value) => { present[normalizePath(path)] = jsType(value); });
+  }
+  for (const p of Object.keys(present)) {
+    if (!(p in contract)) {
+      findings.push({ oracle: 'schema', severity: 'low', title: 'Undeclared field', path: p, evidence: '', source: 'rule' });
+    } else if (present[p] !== contract[p].type && contract[p].type !== 'null' && present[p] !== 'null') {
+      findings.push({ oracle: 'schema', severity: 'medium', title: 'Type mismatch', path: p, evidence: `${contract[p].type} → ${present[p]}`, source: 'rule' });
+    }
+  }
+  for (const p of Object.keys(contract)) {
+    if (contract[p].required && !(p in present)) {
+      findings.push({ oracle: 'schema', severity: 'medium', title: 'Missing field', path: p, evidence: '', source: 'rule' });
+    }
+  }
+  return findings;
+}
