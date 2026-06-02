@@ -22,7 +22,7 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
     <div className="qa-home">
       <div className="qa-home-inner">
         <header className="qa-home-head">
-          <div className="qa-home-badge"><PulseLogo size={26} /></div>
+          <div className="qa-home-badge"><PulseLogo size={42} /></div>
           <div>
             <h1>QA Companion</h1>
             <p>Local-first API client for QA workflows — Postman-compatible.</p>

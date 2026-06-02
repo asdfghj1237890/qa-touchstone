@@ -74,7 +74,7 @@ function NavRail({ route, setRoute, busy, flashAt, active }) {
   return (
     <nav className="qa-rail">
       <div className="qa-rail-logo" title="QA Companion">
-        <PulseLogo busy={busy} flashAt={flashAt} active={active} size={22} />
+        <PulseLogo busy={busy} flashAt={flashAt} active={active} size={34} />
       </div>
       <div className="qa-rail-items">
         {items.map(it => (

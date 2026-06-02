@@ -10,8 +10,53 @@ const { useState: usePF, useRef: useRefPF, useEffect: useEffPF } = React;
 
 // Computed per render (not cached at module load) so imported collections,
 // which are pushed into window.QA.COLLECTIONS at runtime, show up here too.
-const pfTargets = () => window.QA.COLLECTIONS.flatMap(c =>
-  c.folders.flatMap(f => f.requests.map(r => ({ value: r.id, label: `${r.method}  ${r.path.split('?')[0]}`, method: r.method }))));
+function compactUrlLabel(raw) {
+  const url = String(raw || '').split('?')[0];
+  try {
+    const u = new URL(url);
+    return `${u.hostname}${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+const pfCollectionOptions = () => window.QA.COLLECTIONS.map(c => ({
+  value: c.id,
+  label: c.name || 'Collection',
+  title: c.name || c.id,
+}));
+
+const pfTargets = (collectionId) => window.QA.COLLECTIONS.filter(c => !collectionId || c.id === collectionId).flatMap(c =>
+  c.folders.flatMap(f => f.requests.map(r => {
+    const url = String(r.path || '').split('?')[0];
+    const folder = f.name || c.name || 'Collection';
+    const name = r.name || compactUrlLabel(url) || r.id;
+    const urlLabel = compactUrlLabel(url);
+    return {
+      value: r.id,
+      label: name,
+      name,
+      method: r.method,
+      folder,
+      collection: c.name || 'Collection',
+      url,
+      urlLabel,
+      meta: `${folder} · ${urlLabel}`,
+      title: `${r.method} ${name}\n${folder}\n${url}`,
+    };
+  })));
+
+function TargetRequestOption({ item }) {
+  return (
+    <span className="pf-target-option">
+      <MethodBadge method={item.method} size="sm" />
+      <span className="pf-target-copy">
+        <span className="pf-target-name">{item.name}</span>
+        <span className="pf-target-meta">{item.meta}</span>
+      </span>
+    </span>
+  );
+}
 
 // VU defaults intentionally kept low — these run real traffic via k6, so the
 // previous synthetic-mode peaks (120/200/500) would hammer public demo APIs.
@@ -233,6 +278,7 @@ function Stepper({ value, onChange, min = 0, disabled, width = 110 }) {
 }
 
 function PerfTest({ env, vars, onRunningChange }) {
+  const [targetCollection, setTargetCollection] = usePF(() => window.QA.COLLECTIONS[0]?.id || '');
   const [target, setTarget] = usePF('usr-list');
   const [type, setType] = usePF('load');
   const [stages, setStages] = usePF(() => clone(TYPE_META.load.stages));
@@ -256,7 +302,22 @@ function PerfTest({ env, vars, onRunningChange }) {
   // existing useEffect-cleanup has nothing to stop — we'd still launch k6
   // and setState on an unmounted component.
   const mountedRef = useRefPF(true);
-  const flat = pfTargets();
+  const collections = pfCollectionOptions();
+  const activeCollection = collections.some(c => c.value === targetCollection)
+    ? targetCollection
+    : (collections[0]?.value || '');
+  const flat = pfTargets(activeCollection);
+  const targetIds = flat.map(r => r.value).join('|');
+
+  useEffPF(() => {
+    if (activeCollection !== targetCollection) {
+      setTargetCollection(activeCollection);
+      return;
+    }
+    if (flat.length && !flat.some(r => r.value === target)) {
+      setTarget(flat[0].value);
+    }
+  }, [activeCollection, targetCollection, target, targetIds]);
 
   const pickType = (t) => { setType(t); setStages(clone(TYPE_META[t].stages)); setSlo({ ...TYPE_META[t].slo }); };
 
@@ -530,8 +591,13 @@ function PerfTest({ env, vars, onRunningChange }) {
           ))}
         </div>
 
+        <label className="qa-side-label" style={{ marginTop: 16 }}>Collection</label>
+        <Dropdown value={activeCollection} options={collections} onChange={setTargetCollection} />
+
         <label className="qa-side-label" style={{ marginTop: 16 }}>Target request</label>
-        <Dropdown value={target} options={flat} onChange={setTarget} />
+        <Dropdown value={target} options={flat} onChange={setTarget} className="pf-target-dd"
+                  renderValue={(item) => <TargetRequestOption item={item} />}
+                  renderOption={(item) => <TargetRequestOption item={item} />} />
 
         <div className="pf-sec-label"><span>Load stages</span><span className="qa-meta">{total}s · peak {maxVus} VUs</span></div>
         <div className="pf-stages">
@@ -582,7 +648,7 @@ function PerfTest({ env, vars, onRunningChange }) {
           <div className="pf-empty">
             <div className="pf-empty-icon"><Icon name="gauge" size={28} stroke={1.5} /></div>
             <div className="pf-empty-title">Configure & run a test</div>
-            <div className="pf-empty-sub"><MethodBadge method={tgt.method} size="sm" /> {tgt.label.split('  ')[1]} · {maxVus} VUs · {total}s</div>
+            <div className="pf-empty-sub"><MethodBadge method={tgt.method} size="sm" /> {tgt.name} · {maxVus} VUs · {total}s</div>
           </div>
         ) : (
           <>

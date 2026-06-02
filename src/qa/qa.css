@@ -43,10 +43,10 @@
   .qa-rail { width: 56px; flex: 0 0 56px; background: var(--bg-1); border-right: 1px solid var(--border);
     display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 12px; z-index: 5; }
   .qa-rail-logo { width: 34px; height: 34px; border-radius: var(--radius); display: grid; place-items: center;
-    background: var(--accent-soft); color: var(--accent); overflow: hidden; }
+    background: transparent; color: var(--accent); overflow: hidden; }
   .qa-pulse { display: block; }
-  .qa-pulse-base { stroke: var(--accent); opacity: .26; }
-  .qa-pulse-sweep { stroke: var(--accent); stroke-dasharray: 22 78;
+  .qa-pulse-base { opacity: .18; }
+  .qa-pulse-sweep { stroke-dasharray: 22 78;
     animation: qa-pulse-sweep 2.6s linear infinite; filter: drop-shadow(0 0 2px var(--accent)); }
   .qa-pulse[data-busy="1"] .qa-pulse-sweep { animation-duration: 0.9s; }
   .qa-pulse[data-busy="1"] .qa-pulse-base { opacity: .4; }
@@ -424,7 +424,7 @@
   .qa-home { height: 100%; overflow: auto; background: var(--bg); }
   .qa-home-inner { max-width: 960px; margin: 0 auto; padding: 36px 28px 48px; display: flex; flex-direction: column; gap: 26px; }
   .qa-home-head { display: flex; align-items: center; gap: 14px; }
-  .qa-home-badge { width: 42px; height: 42px; border-radius: var(--radius-lg); background: var(--accent-soft);
+  .qa-home-badge { width: 42px; height: 42px; border-radius: var(--radius-lg); background: transparent;
     color: var(--accent); display: grid; place-items: center; flex: 0 0 auto; }
   .qa-home-head h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
   .qa-home-head p { margin: 3px 0 0; color: var(--text-dim); font-size: 13px; }
@@ -543,6 +543,14 @@
   .pf-type:hover:not(:disabled) { color: var(--text); }
   .pf-type[data-active="1"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
   .pf-type-name { font-size: 11.5px; font-weight: 600; }
+  .pf-target-dd .qa-dd-btn { height: auto; min-height: 54px; padding: 8px 10px; }
+  .pf-target-dd .qa-dd-btn > span { min-width: 0; flex: 1; white-space: normal; }
+  .pf-target-dd .qa-dd-menu { max-height: 340px; }
+  .pf-target-dd .qa-dd-menu button { padding: 9px 10px; }
+  .pf-target-option { display: flex; align-items: flex-start; gap: 9px; min-width: 0; width: 100%; }
+  .pf-target-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .pf-target-name { color: var(--text); font-size: 12.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pf-target-meta { color: var(--text-faint); font-family: var(--font-mono); font-size: 11px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pf-params { display: flex; flex-direction: column; gap: 11px; margin: 18px 0; }
   .pf-param { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .pf-param > span { font-size: 12.5px; color: var(--text-dim); }
