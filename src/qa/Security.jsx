@@ -126,7 +126,12 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   const runner = (ep, identity) => qaRunSavedRequest({ id: ep.reqId }, {
     env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
-  });
+  }).then(response => ({
+    // Redacted summary of what was sent — drives the cell drawer (and is ready
+    // for a later CI export to serialize) without storing any secret.
+    request: { method: ep.method, path: ep.path, identity: identity.id === 'anon' ? 'anon' : (identity.name || identity.id), authType: identity.auth.type },
+    response,
+  }));
 
   const run = async (rowReqId = null) => {
     const target = rowReqId ? { ...state, endpoints: state.endpoints.filter(e => e.reqId === rowReqId) } : state;
@@ -250,10 +255,20 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       {drawerCell && (
         <div className="qa-sec-drawer">
           <div className="qa-sec-drawer-head">
-            {t('security.cell.response')} · {drawerCell.status ?? '—'} · {t(VERDICT_LABEL[drawerCell.verdict] || 'security.cell.notRun')}
+            <span>{drawerCell.status ?? '—'} · {t(VERDICT_LABEL[drawerCell.verdict] || 'security.cell.notRun')}</span>
             <button className="qa-iconbtn" onClick={() => setDrawer(null)}><Icon name="x" size={14} /></button>
           </div>
+          {drawerCell.request && (
+            <>
+              <span className="qa-sec-drawer-label">{t('security.cell.request')}</span>
+              <div className="qa-sec-drawer-req">
+                <div><MethodBadge method={drawerCell.request.method} size="sm" /> <code>{drawerCell.request.path}</code></div>
+                <div className="qa-sec-drawer-id">{drawerCell.request.identity} · {drawerCell.request.authType}</div>
+              </div>
+            </>
+          )}
           {drawerCell.error && <div className="qa-sec-drawer-err">{drawerCell.error}</div>}
+          <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
         </div>
       )}
