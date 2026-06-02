@@ -62,6 +62,10 @@ describe('scanSensitive — PII', () => {
     expect(scanSensitive(resp({ c: '4242424242424242' })).some(x => x.title === 'Credit-card-like number')).toBe(true);
     expect(scanSensitive(resp({ c: '4242424242424241' })).some(x => x.title === 'Credit-card-like number')).toBe(false);
   });
+  it('still flags a Luhn-valid non-card number (documented over-match; over-flagging is the safe direction)', () => {
+    // A 16-digit order/sequence id that happens to pass Luhn is flagged like a card.
+    expect(scanSensitive(resp({ orderId: '4242424242424242' })).some(x => x.title === 'Credit-card-like number')).toBe(true);
+  });
 });
 
 describe('scanSensitive — internal/debug', () => {
@@ -83,6 +87,30 @@ describe('scanSensitive — config', () => {
   it('applies a per-group severity override', () => {
     const f = scanSensitive(resp({ email: 'a@b.co' }), { ...DEFAULT_ORACLE_CONFIG, severityOverrides: { pii: 'low' } });
     expect(f.find(x => x.title === 'Email address').severity).toBe('low');
+  });
+});
+
+describe('scanSensitive — deep nesting (depth guard)', () => {
+  // Build a ~200-level-deep object with a leak placed at a shallow level.
+  const buildDeep = (depth) => {
+    let node = { bottom: true };
+    for (let i = 0; i < depth; i++) node = { next: node };
+    return node;
+  };
+  it('does not throw on a pathologically deep body and still finds a shallow leak', () => {
+    const deep = buildDeep(200);
+    deep.email = 'a.b@example.com';   // leak at the shallow root level
+    let f;
+    expect(() => { f = scanSensitive(resp(deep)); }).not.toThrow();
+    expect(f.some(x => x.title === 'Email address' && x.path === 'email')).toBe(true);
+  });
+  it('caps recursion silently: a leak past the depth limit is not visited', () => {
+    // Place a leak well below WALK_MAX_DEPTH; the guard stops before reaching it.
+    let node = { email: 'deep.leak@example.com' };
+    for (let i = 0; i < 200; i++) node = { next: node };
+    let f;
+    expect(() => { f = scanSensitive(resp(node)); }).not.toThrow();
+    expect(f.some(x => x.title === 'Email address')).toBe(false);   // capped, not thrown
   });
 });
 
@@ -139,6 +167,15 @@ describe('runOracles', () => {
   });
   it('returns [] when the cell has no response', () => {
     expect(runOracles({ status: null, response: null }, {})).toEqual([]);
+  });
+  it('does not throw on a pathologically deep body and still finds a shallow leak', () => {
+    let node = { bottom: true };
+    for (let i = 0; i < 200; i++) node = { next: node };
+    node.email = 'a.b@example.com';   // leak at the shallow root level
+    const cell = { status: 200, response: { status: 200, body: node, headers: {} } };
+    let f;
+    expect(() => { f = runOracles(cell, {}); }).not.toThrow();
+    expect(f.some(x => x.title === 'Email address' && x.path === 'email')).toBe(true);
   });
 });
 
