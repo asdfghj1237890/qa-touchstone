@@ -46,6 +46,8 @@ export function walkJson(node, visit, path = '', depth = 0) {
   }
 }
 
+// `llm` is reserved for a future Settings toggle; today the LLM pass is gated by
+// an explicit user click in the drawer, not by this flag.
 export const DEFAULT_ORACLE_CONFIG = { sensitive: true, schema: true, llm: false, severityOverrides: {} };
 
 // Each rule matches by key-name (`key`) and/or value-regex (`value`). `luhn`
