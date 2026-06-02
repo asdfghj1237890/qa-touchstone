@@ -1,10 +1,10 @@
 import React from 'react';
 import './setup.js';
-import { Icon, MethodBadge, Spinner, Dropdown } from './components.jsx';
+import { Icon, MethodBadge } from './components.jsx';
 import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
-import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './oauth.js';
+import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch } from './oauth.js';
 import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
@@ -42,10 +42,8 @@ function IdentityEditor({ identity, onChange, onClose, env, vars, sslVerify }) {
   const fetchOAuth = async () => {
     const map = window.qaVarMap(vars || window.QA.VARIABLES, env.label);
     const tokenRequest = buildOAuthTokenRequest(identity.auth.oauth2 || {}, map);
-    const token = await exchangeOAuthTokenWithFetch(tokenRequest).catch(async () => {
-      // Tauri path not available in this editor context; fall back to fetch helper above.
-      return null;
-    });
+    // Let failures propagate — AuthEditor's OAuth2Editor catches and shows the error.
+    const token = await exchangeOAuthTokenWithFetch(tokenRequest);
     if (token) onChange({ ...identity, _oauthToken: token });
   };
   return (
@@ -96,7 +94,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const abortRef = useRef(null);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
-  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet }), [identities, endpoints, expect, denySet]);
+  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET }), [identities, endpoints, expect, denySet]);
 
   // Persist config (not results) whenever it changes.
   useE(() => { saveMatrixConfig(state); }, [state]);
@@ -106,7 +104,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const cycleCell = (reqId, idId) => {
     const cur = state.expect[reqId][idId];
     const next = EXPECTS[(EXPECTS.indexOf(cur) + 1) % EXPECTS.length];
-    setExpect(e => ({ ...e, [reqId]: { ...(state.expect[reqId]), [idId]: next } }));
+    setExpect(e => ({ ...e, [reqId]: { ...(e[reqId] || state.expect[reqId]), [idId]: next } }));
   };
   const bulkCol = (idId, val) => setExpect(setColumn(state, idId, val).expect);
   const bulkRow = (reqId, val) => setExpect(setRow(state, reqId, val).expect);
@@ -126,11 +124,14 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     setRunning(true);
     const partial = rowReqId ? { ...results } : {};
     setResults(partial);
-    await runMatrix(target, runner, {
-      signal: controller.signal,
-      onCell: (reqId, idId, cell) => setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: cell } })),
-    });
-    setRunning(false);
+    try {
+      await runMatrix(target, runner, {
+        signal: controller.signal,
+        onCell: (reqId, idId, cell) => setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: cell } })),
+      });
+    } finally {
+      setRunning(false);
+    }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(false); };
 
