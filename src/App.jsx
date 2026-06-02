@@ -19,6 +19,8 @@ import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
 import { buildReq } from './qa/buildReq.js';
 import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './qa/oauth.js';
+import { I18nProvider } from './qa/i18n.jsx';
+import { useI18n } from './qa/useI18n.js';
 import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
@@ -39,17 +41,18 @@ const isWindowsOS = () => /windows|win32|win64/i.test(uaPlatform());
 const isMacOS = () => /mac/i.test(uaPlatform());
 
 function WindowControls() {
+  const { t } = useI18n();
   const act = (fn) => (e) => { e.stopPropagation(); if (tauriReady()) Promise.resolve(fn()).catch(() => {}); };
   if (isWindowsOS()) {
     return (
       <div className="qa-winctl qa-winctl-win">
-        <button type="button" className="qa-winctl-wbtn" title="Minimize" aria-label="Minimize window" onClick={act(api.minimizeWindow)}>
+        <button type="button" className="qa-winctl-wbtn" title={t('window.minimize')} aria-label={t('window.minimize')} onClick={act(api.minimizeWindow)}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0" y="4.5" width="10" height="1" fill="currentColor" /></svg>
         </button>
-        <button type="button" className="qa-winctl-wbtn" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)}>
+        <button type="button" className="qa-winctl-wbtn" title={t('window.maximize')} aria-label={t('window.maximize')} onClick={act(api.maximizeWindow)}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" /></svg>
         </button>
-        <button type="button" className="qa-winctl-wbtn qa-winctl-wclose" title="Close" aria-label="Close window" onClick={act(api.quitApp)}>
+        <button type="button" className="qa-winctl-wbtn qa-winctl-wclose" title={t('window.close')} aria-label={t('window.close')} onClick={act(api.quitApp)}>
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1 1 L9 9 M9 1 L1 9" stroke="currentColor" strokeWidth="1" fill="none" /></svg>
         </button>
       </div>
@@ -57,14 +60,14 @@ function WindowControls() {
   }
   return (
     <div className="qa-winctl">
-      <button type="button" className="qa-winctl-btn qa-winctl-close" title="Close" aria-label="Close window" onClick={act(api.quitApp)} />
-      <button type="button" className="qa-winctl-btn qa-winctl-min" title="Minimize" aria-label="Minimize window" onClick={act(api.minimizeWindow)} />
-      <button type="button" className="qa-winctl-btn qa-winctl-max" title="Maximize" aria-label="Maximize window" onClick={act(api.maximizeWindow)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-close" title={t('window.close')} aria-label={t('window.close')} onClick={act(api.quitApp)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-min" title={t('window.minimize')} aria-label={t('window.minimize')} onClick={act(api.minimizeWindow)} />
+      <button type="button" className="qa-winctl-btn qa-winctl-max" title={t('window.maximize')} aria-label={t('window.maximize')} onClick={act(api.maximizeWindow)} />
     </div>
   );
 }
 
-const ROUTE_LABEL = { home: 'Home', api: 'API Client', realtime: 'Realtime', runner: 'Runner', perf: 'Performance', testgen: 'Test Gen', docs: 'API Docs', monitors: 'Monitors', settings: 'Settings' };
+const ROUTE_KEYS = { home: 'route.home', api: 'route.api', realtime: 'route.realtime', runner: 'route.runner', perf: 'route.perf', testgen: 'route.testgen', docs: 'route.docs', monitors: 'route.monitors', settings: 'route.settings' };
 
 // Which collection owns a given request id (for collection-scoped variables).
 function collectionOf(reqId) {
@@ -79,7 +82,8 @@ function hostOf(url) {
 }
 // cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
 
-function App() {
+function AppShell() {
+  const { t } = useI18n();
   const rootRef = useRefApp(null);
   const [accent, setAccent] = useStateApp(() => { try { return localStorage.getItem('qa_accent') || 'auto'; } catch { return 'auto'; } });
 
@@ -272,7 +276,7 @@ function App() {
             {isMacOS() && <WindowControls />}
             <span className="qa-titlebar-name" data-tauri-drag-region>QA Touchstone</span>
             <span className="qa-titlebar-sep" data-tauri-drag-region>/</span>
-            <span className="qa-titlebar-route" data-tauri-drag-region>{ROUTE_LABEL[route] || 'Home'}</span>
+            <span className="qa-titlebar-route" data-tauri-drag-region>{t(ROUTE_KEYS[route] || 'route.home')}</span>
           </div>
           <div className="qa-titlebar-right" data-tauri-drag-region>
             {route === 'api' && (
@@ -318,13 +322,21 @@ function App() {
         <div className="qa-toast" onClick={() => { setCookieToast(null); openSettings('cookies'); }}>
           <Icon name="globe" size={15} />
           <div className="qa-toast-text">
-            <strong>Cookie stored</strong>
-            <span><code>{cookieToast.name}</code> saved to jar for {cookieToast.domain}</span>
+            <strong>{t('toast.cookieStored')}</strong>
+            <span>{t('toast.cookieSaved', { name: cookieToast.name, domain: cookieToast.domain })}</span>
           </div>
-          <span className="qa-toast-cta">View jar</span>
+          <span className="qa-toast-cta">{t('toast.viewJar')}</span>
         </div>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <I18nProvider>
+      <AppShell />
+    </I18nProvider>
   );
 }
 

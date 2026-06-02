@@ -2,11 +2,13 @@ import React from 'react';
 import './setup.js';
 import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
 import { qaRunSavedRequest } from './sendRequest.js';
+import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — Collection Runner (batch run + data iteration) ─────────
 const { useState: useRN, useRef: useRefRN, useEffect: useEffRN } = React;
 
 function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens = {} }) {
+  const { t } = useI18n();
   const COLLECTIONS = window.QA.COLLECTIONS;
   const [colId, setColId] = useRN(COLLECTIONS[0].id);
   const col = COLLECTIONS.find(c => c.id === colId) || COLLECTIONS[0];
@@ -98,50 +100,54 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
   const failed = results.filter(r => (r.total > 0 && r.passed < r.total) || r.status >= 400).length;
   const avg = total ? Math.round(results.reduce((s, r) => s + r.time, 0) / total) : 0;
   let lastIter = 0;
+  const runCount = selIds.length * iters;
+  const requestLabel = t(runCount === 1 ? 'runner.requestOne' : 'runner.requestMany');
+  const emptyRequestLabel = t(selIds.length === 1 ? 'runner.requestOne' : 'runner.requestMany');
+  const iterationLabel = t(iters === 1 ? 'runner.iterationOne' : 'runner.iterationMany');
 
   return (
     <div className="rn">
       <div className="rn-config">
-        <div className="rn-config-head"><h2>Collection Runner</h2><p>Run a collection in batch, iterate over data, and check assertions.</p></div>
+        <div className="rn-config-head"><h2>{t('runner.title')}</h2><p>{t('runner.subtitle')}</p></div>
 
-        <label className="qa-side-label">Collection</label>
+        <label className="qa-side-label">{t('runner.collection')}</label>
         <Dropdown value={colId} options={COLLECTIONS.map(c => ({ value: c.id, label: c.name }))} onChange={setColId} />
 
-        <div className="rn-sec"><span>Requests</span><span className="qa-meta">{selIds.length}/{colReqs.length}</span></div>
+        <div className="rn-sec"><span>{t('runner.requests')}</span><span className="qa-meta">{selIds.length}/{colReqs.length}</span></div>
         <div className="rn-reqs">
           {colReqs.map(r => (
             <div className="rn-req" key={r.id}>
               <MiniCheck on={selIds.includes(r.id)} onClick={() => !running && toggleReq(r.id)} />
               <MethodBadge method={r.method} size="sm" />
               <span className="rn-req-name">{r.name}</span>
-              {(tests[r.id] || []).length > 0 && <span className="rn-req-tests" title="assertions">{(tests[r.id] || []).length}✓</span>}
+              {(tests[r.id] || []).length > 0 && <span className="rn-req-tests" title={t('runner.assertions')}>{(tests[r.id] || []).length}✓</span>}
             </div>
           ))}
         </div>
 
         <div className="rn-row2">
-          <div className="pf-param"><span>Iterations</span><input className="pf-num" type="number" min="1" value={iterations} disabled={running || !!dataRows} onChange={e => setIterations(Math.max(1, +e.target.value || 1))} /></div>
-          <div className="pf-param"><span>Delay<em>ms</em></span><input className="pf-num" type="number" min="0" value={delay} disabled={running} onChange={e => setDelay(Math.max(0, +e.target.value || 0))} /></div>
+          <div className="pf-param"><span>{t('runner.iterations')}</span><input className="pf-num" type="number" min="1" value={iterations} disabled={running || !!dataRows} onChange={e => setIterations(Math.max(1, +e.target.value || 1))} /></div>
+          <div className="pf-param"><span>{t('runner.delay')}<em>ms</em></span><input className="pf-num" type="number" min="0" value={delay} disabled={running} onChange={e => setDelay(Math.max(0, +e.target.value || 0))} /></div>
         </div>
 
-        <div className="rn-sec"><span>Data file iteration</span><span className="qa-meta">{dataRows ? `${dataRows.length} rows · ${dataCols.length} cols` : 'optional'}</span></div>
+        <div className="rn-sec"><span>{t('runner.dataIteration')}</span><span className="qa-meta">{dataRows ? t('runner.rowsCols', { rows: dataRows.length, cols: dataCols.length }) : t('runner.optional')}</span></div>
         <div className="rn-data-tools">
           <button className="qa-side-import" disabled={running} onClick={() => fileRef.current && fileRef.current.click()}>
-            <Icon name="upload" size={13} /> Upload CSV / JSON
+            <Icon name="upload" size={13} /> {t('runner.upload')}
           </button>
-          {dataName && <span className="rn-data-file"><Icon name="fileText" size={12} /> {dataName} <button onClick={clearData} aria-label="clear data file"><Icon name="x" size={11} /></button></span>}
+          {dataName && <span className="rn-data-file"><Icon name="fileText" size={12} /> {dataName} <button onClick={clearData} aria-label={t('runner.clearData')}><Icon name="x" size={11} /></button></span>}
           <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" hidden
                  onChange={e => loadFile(e.target.files[0])} />
         </div>
         {!dataName && (
           <textarea className="rn-data" spellCheck="false" value={dataText} disabled={running}
                     onChange={e => setDataText(e.target.value)}
-                    placeholder={'…or paste CSV / JSON here\n\nCSV:\nuserId,role\n7301,admin\n7302,editor\n\nJSON:\n[ { "userId": "7301" } ]'} />
+                    placeholder={t('runner.pastePlaceholder')} />
         )}
         {dataErr && <div className="rn-data-err"><Icon name="x" size={12} /> {dataErr}</div>}
         {dataRows && (
           <div className="rn-data-preview">
-            <div className="rn-data-ok"><Icon name="check" size={12} /> {dataFmt.toUpperCase()} · {dataRows.length} iterations · columns become variables</div>
+            <div className="rn-data-ok"><Icon name="check" size={12} /> {t('runner.dataOk', { format: dataFmt.toUpperCase(), rows: dataRows.length })}</div>
             <div className="rn-data-grid" style={{ gridTemplateColumns: `28px repeat(${dataCols.length}, minmax(60px, 1fr))` }}>
               <div className="rn-data-cell rn-data-hcell">#</div>
               {dataCols.map(c => <div key={c} className="rn-data-cell rn-data-hcell"><code>{`{{${c}}}`}</code></div>)}
@@ -152,41 +158,41 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
                 </React.Fragment>
               ))}
             </div>
-            {dataRows.length > 5 && <div className="rn-data-more">+{dataRows.length - 5} more rows</div>}
+            {dataRows.length > 5 && <div className="rn-data-more">{t('runner.moreRows', { count: dataRows.length - 5 })}</div>}
           </div>
         )}
 
         <button className="pf-run" data-running={running ? '1' : '0'} onClick={run}>
           {running ? <Icon name="stop" size={15} /> : <Icon name="play" size={15} />}
-          {running ? 'Stop' : `Run ${selIds.length * iters} request${selIds.length * iters !== 1 ? 's' : ''}`}
+          {running ? t('runner.stop') : t('runner.run', { count: runCount, requestLabel })}
         </button>
         {phase !== 'idle' && (
           <div className="pf-prog"><div className="pf-prog-bar"><span style={{ width: `${Math.round(progress * 100)}%` }} /></div>
-            <div className="pf-prog-meta"><span>{total} / {selIds.length * iters}</span><span>{running ? 'running' : 'done'}</span></div></div>
+            <div className="pf-prog-meta"><span>{total} / {runCount}</span><span>{running ? t('perf.running') : t('runner.done')}</span></div></div>
         )}
       </div>
 
       <div className="rn-results">
         {phase === 'idle' ? (
-          <div className="pf-empty">
-            <div className="pf-empty-icon"><Icon name="play" size={26} stroke={1.5} /></div>
-            <div className="pf-empty-title">Run a collection</div>
-            <div className="pf-empty-sub">{col.name} · {selIds.length} requests · {iters} iteration{iters !== 1 ? 's' : ''}</div>
+            <div className="pf-empty">
+              <div className="pf-empty-icon"><Icon name="play" size={26} stroke={1.5} /></div>
+            <div className="pf-empty-title">{t('runner.emptyTitle')}</div>
+            <div className="pf-empty-sub">{t('runner.emptySub', { collection: col.name, requests: selIds.length, requestLabel: emptyRequestLabel, iterations: iters, iterationLabel })}</div>
           </div>
         ) : (
           <>
             <div className="rn-summary">
-              <div className="rn-sum"><span>Requests</span><strong>{total}</strong></div>
-              <div className="rn-sum"><span>Assertions</span><strong style={{ color: aPass === aTotal ? 'oklch(0.78 0.14 150)' : 'oklch(0.74 0.16 22)' }}>{aPass}/{aTotal}</strong></div>
-              <div className="rn-sum"><span>Failures</span><strong style={{ color: failed ? 'oklch(0.74 0.16 22)' : 'var(--text)' }}>{failed}</strong></div>
-              <div className="rn-sum"><span>Avg time</span><strong>{avg}<em> ms</em></strong></div>
+              <div className="rn-sum"><span>{t('runner.requests')}</span><strong>{total}</strong></div>
+              <div className="rn-sum"><span>{t('runner.assertions')}</span><strong style={{ color: aPass === aTotal ? 'oklch(0.78 0.14 150)' : 'oklch(0.74 0.16 22)' }}>{aPass}/{aTotal}</strong></div>
+              <div className="rn-sum"><span>{t('runner.failures')}</span><strong style={{ color: failed ? 'oklch(0.74 0.16 22)' : 'var(--text)' }}>{failed}</strong></div>
+              <div className="rn-sum"><span>{t('runner.avgTime')}</span><strong>{avg}<em> ms</em></strong></div>
             </div>
             <div className="rn-table">
               {results.map((r, i) => {
                 const head = r.iter !== lastIter; lastIter = r.iter;
                 return (
                   <React.Fragment key={i}>
-                    {head && <div className="rn-iter-head">Iteration {r.iter}{dataRows ? ` · ${JSON.stringify(dataRows[r.iter - 1])}` : ''}</div>}
+                    {head && <div className="rn-iter-head">{t('runner.iteration', { number: r.iter })}{dataRows ? ` · ${JSON.stringify(dataRows[r.iter - 1])}` : ''}</div>}
                     <div className="rn-trow qa-fade">
                       <MethodBadge method={r.method} size="sm" />
                       <span className="rn-tpath">{r.path}</span>
@@ -194,7 +200,7 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
                       <span className="rn-ttime">{r.time}ms</span>
                       {r.total > 0
                         ? <span className="rn-ttests" data-pass={r.passed === r.total ? '1' : '0'}><Icon name={r.passed === r.total ? 'check' : 'x'} size={11} stroke={3} /> {r.passed}/{r.total}</span>
-                        : <span className="rn-ttests rn-ttests--none">no tests</span>}
+                        : <span className="rn-ttests rn-ttests--none">{t('runner.noTests')}</span>}
                     </div>
                   </React.Fragment>
                 );

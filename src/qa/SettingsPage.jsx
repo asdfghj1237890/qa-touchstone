@@ -1,22 +1,26 @@
 import React from 'react';
 import './setup.js';
-import { Dropdown, Icon, LLM_PROVIDERS, MiniCheck, loadLlmCfg, saveLlmCfg } from './components.jsx';
+import { Dropdown, Icon, MiniCheck } from './components.jsx';
 import { FieldRow, KVTable, SecretInput } from './RequestBuilder.jsx';
+import { useI18n } from './useI18n.js';
+import { LOCALES } from './i18nOptions.js';
 
 // ── QA Touchstone — Settings (Environment + API credentials) ───────────────
 const { useState: useStateST } = React;
 
 function PathRow({ title, path }) {
+  const { t } = useI18n();
   return (
     <div className="qa-pathrow">
       <button className="qa-pathbtn"><Icon name="folder" size={14} /> {title}</button>
-      <span className="qa-pathval" data-empty={path ? '0' : '1'}>{path || 'No path selected'}</span>
-      <button className="qa-iconbtn" title="Browse"><Icon name="chevron" size={14} /></button>
+      <span className="qa-pathval" data-empty={path ? '0' : '1'}>{path || t('settings.env.noPath')}</span>
+      <button className="qa-iconbtn" title={t('settings.browse')}><Icon name="chevron" size={14} /></button>
     </div>
   );
 }
 
 function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
+  const { t } = useI18n();
   const paths = [
     { title: 'Platform Tools', path: '/Users/qa/tools/platform' },
     { title: 'Certificates', path: '/Users/qa/certs/device' },
@@ -31,19 +35,19 @@ function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
     <>
     <div className="qa-set-grid">
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="folder" size={14} /> Environment paths</span></div>
+        <div className="qa-panel-head"><span><Icon name="folder" size={14} /> {t('settings.env.paths')}</span></div>
         <div className="qa-set-body">
           {paths.map(p => <PathRow key={p.title} {...p} />)}
         </div>
       </section>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> API environments</span><button className="qa-link">+ Add</button></div>
+        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('settings.env.apiEnvironments')}</span><button className="qa-link">{t('settings.env.add')}</button></div>
         <div className="qa-set-body">
           {window.QA.ENVIRONMENTS.filter(e => e.label !== 'None').map(e => (
             <div className="qa-envrow" key={e.label}>
               <span className="qa-envrow-dot" />
               <span className="qa-envrow-name">{e.label}</span>
-              <span className="qa-envrow-url" data-empty={e.baseUrl ? '0' : '1'}>{e.baseUrl || 'No base URL'}</span>
+              <span className="qa-envrow-url" data-empty={e.baseUrl ? '0' : '1'}>{e.baseUrl || t('settings.env.noBaseUrl')}</span>
             </div>
           ))}
         </div>
@@ -52,55 +56,55 @@ function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
 
     {/* Variable scope precedence explainer */}
     <div className="qa-scope-bar">
-      <span className="qa-scope-bar-label">Resolution order</span>
-      <span className="qa-scope-chip" data-scope="global">Global</span>
+      <span className="qa-scope-bar-label">{t('settings.env.resolutionOrder')}</span>
+      <span className="qa-scope-chip" data-scope="global">{t('settings.env.scope.global')}</span>
       <Icon name="chevron" size={12} />
-      <span className="qa-scope-chip" data-scope="collection">Collection</span>
+      <span className="qa-scope-chip" data-scope="collection">{t('settings.env.scope.collection')}</span>
       <Icon name="chevron" size={12} />
-      <span className="qa-scope-chip" data-scope="environment">Environment</span>
+      <span className="qa-scope-chip" data-scope="environment">{t('settings.env.scope.environment')}</span>
       <Icon name="chevron" size={12} />
-      <span className="qa-scope-chip" data-scope="local">Local</span>
-      <span className="qa-scope-bar-note">later scopes win on conflict · Local vars live in the request's Options tab</span>
+      <span className="qa-scope-chip" data-scope="local">{t('settings.env.scope.local')}</span>
+      <span className="qa-scope-bar-note">{t('settings.env.scope.note')}</span>
     </div>
 
     <div className="qa-set-grid" style={{ marginTop: 14 }}>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="code" size={14} /> Global variables</span><span className="qa-scope-tag" data-scope="global">all requests</span></div>
+        <div className="qa-panel-head"><span><Icon name="code" size={14} /> {t('settings.env.globalVars')}</span><span className="qa-scope-tag" data-scope="global">{t('settings.env.allRequests')}</span></div>
         <div className="qa-set-body">
-          <KVTable rows={vars.globals} onChange={g => setVars({ ...vars, globals: g })} keyPh="Variable" valPh="Value" />
-          <div className="qa-auth-note"><Icon name="zap" size={13} /><span>Reference as <code>{'{{name}}'}</code> · dynamic: <code>{'{{$timestamp}}'}</code> <code>{'{{$guid}}'}</code> <code>{'{{$randomInt}}'}</code></span></div>
+          <KVTable rows={vars.globals} onChange={g => setVars({ ...vars, globals: g })} keyPh={t('settings.env.variable')} valPh={t('settings.env.value')} />
+          <div className="qa-auth-note"><Icon name="zap" size={13} /><span>{t('settings.env.referenceAs')} <code>{'{{name}}'}</code> · {t('settings.env.dynamic')}: <code>{'{{$timestamp}}'}</code> <code>{'{{$guid}}'}</code> <code>{'{{$randomInt}}'}</code></span></div>
         </div>
       </section>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="layers" size={14} /> Collection variables</span>
+        <div className="qa-panel-head"><span><Icon name="layers" size={14} /> {t('settings.env.collectionVars')}</span>
           <div style={{ width: 168 }}><Dropdown value={colEdit} options={colList.map(c => ({ value: c.id, label: c.name }))} onChange={setColEdit} /></div>
         </div>
         <div className="qa-set-body">
-          <KVTable rows={colVars} onChange={list => setVars({ ...vars, collections: { ...vars.collections, [colEdit]: list } })} keyPh="Variable" valPh="Value" />
+          <KVTable rows={colVars} onChange={list => setVars({ ...vars, collections: { ...vars.collections, [colEdit]: list } })} keyPh={t('settings.env.variable')} valPh={t('settings.env.value')} />
         </div>
       </section>
     </div>
 
     <div className="qa-set-grid" style={{ marginTop: 18 }}>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> Environment variables</span>
+        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('settings.env.environmentVars')}</span>
           <div style={{ width: 150 }}><Dropdown value={envEdit} options={Object.keys(vars.environments)} onChange={setEnvEdit} /></div>
         </div>
         <div className="qa-set-body">
-          <KVTable rows={vars.environments[envEdit] || []} onChange={list => setVars({ ...vars, environments: { ...vars.environments, [envEdit]: list } })} keyPh="Variable" valPh="Value" />
+          <KVTable rows={vars.environments[envEdit] || []} onChange={list => setVars({ ...vars, environments: { ...vars.environments, [envEdit]: list } })} keyPh={t('settings.env.variable')} valPh={t('settings.env.value')} />
         </div>
       </section>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="shield" size={14} /> Network &amp; TLS</span></div>
+        <div className="qa-panel-head"><span><Icon name="shield" size={14} /> {t('settings.env.networkTls')}</span></div>
         <div className="qa-set-body">
           <div className="qa-opt-row">
             <div className="qa-opt-text">
-              <strong>SSL certificate verification</strong>
-              <em>Default for all requests. Disable to accept self-signed certificates in test environments.</em>
+              <strong>{t('settings.env.ssl')}</strong>
+              <em>{t('settings.env.sslHint')}</em>
             </div>
             <button className="pf-toggle" data-on={sslVerify ? '1' : '0'} onClick={() => setSslVerify(!sslVerify)} aria-label="toggle ssl"><span /></button>
           </div>
-          {!sslVerify && <div className="qa-opt-warn"><Icon name="shield" size={13} /> Verification is OFF globally — untrusted certificates will be accepted.</div>}
+          {!sslVerify && <div className="qa-opt-warn"><Icon name="shield" size={13} /> {t('settings.env.sslWarn')}</div>}
         </div>
       </section>
     </div>
@@ -110,6 +114,7 @@ function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
 
 // ── Cookie Jar ────────────────────────────────────────────────────────────
 function CookieSettings({ cookies, setCookies }) {
+  const { t } = useI18n();
   const blank = () => ({ id: 'ck' + Date.now().toString(36), name: '', value: '', domain: '', path: '/', expires: '', httpOnly: false, secure: true, sameSite: 'Lax', on: true });
   const upd = (id, d) => setCookies(cookies.map(c => c.id === id ? { ...c, ...d } : c));
   const del = (id) => setCookies(cookies.filter(c => c.id !== id));
@@ -118,12 +123,16 @@ function CookieSettings({ cookies, setCookies }) {
   return (
     <div className="qa-set-grid" style={{ gridTemplateColumns: '1fr' }}>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> Cookie Jar</span>
-          <span className="qa-meta">{`${cookies.filter(c => c.on).length} active · ${domains.length} domain${domains.length !== 1 ? 's' : ''}`}</span></div>
+        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('settings.cookies.title')}</span>
+          <span className="qa-meta">{t('settings.cookies.activeSummary', {
+            active: cookies.filter(c => c.on).length,
+            domains: domains.length,
+            domainLabel: t(domains.length === 1 ? 'settings.cookies.domainOne' : 'settings.cookies.domainMany'),
+          })}</span></div>
         <div className="qa-set-body">
           <div className="qa-ckjar-head">
             <span />
-            <span>Name</span><span>Value</span><span>Domain</span><span>Path</span><span>Expires</span><span>Flags</span><span />
+            <span>{t('settings.cookies.name')}</span><span>{t('settings.cookies.value')}</span><span>{t('settings.cookies.domain')}</span><span>{t('settings.cookies.path')}</span><span>{t('settings.cookies.expires')}</span><span>{t('settings.cookies.flags')}</span><span />
           </div>
           {cookies.map(c => (
             <div className="qa-ckjar-row" key={c.id} data-off={c.on ? '0' : '1'}>
@@ -137,11 +146,11 @@ function CookieSettings({ cookies, setCookies }) {
                 <button className="qa-ckflag" data-on={c.secure ? '1' : '0'} onClick={() => upd(c.id, { secure: !c.secure })} title="Secure">S</button>
                 <button className="qa-ckflag" data-on={c.httpOnly ? '1' : '0'} onClick={() => upd(c.id, { httpOnly: !c.httpOnly })} title="HttpOnly">H</button>
               </div>
-              <button className="qa-kv-del" onClick={() => del(c.id)} aria-label="delete cookie"><Icon name="trash" size={13} /></button>
+              <button className="qa-kv-del" onClick={() => del(c.id)} aria-label={t('settings.cookies.delete')}><Icon name="trash" size={13} /></button>
             </div>
           ))}
-          <button className="qa-kv-add" onClick={add}><Icon name="plus" size={13} /> Add cookie</button>
-          <div className="qa-auth-note"><Icon name="shield" size={13} /><span>Cookies are replayed as a <code>Cookie:</code> header on requests whose host matches the domain. <code>S</code> = Secure, <code>H</code> = HttpOnly.</span></div>
+          <button className="qa-kv-add" onClick={add}><Icon name="plus" size={13} /> {t('settings.cookies.add')}</button>
+          <div className="qa-auth-note"><Icon name="shield" size={13} /><span>{t('settings.cookies.note')}</span></div>
         </div>
       </section>
     </div>
@@ -149,6 +158,7 @@ function CookieSettings({ cookies, setCookies }) {
 }
 
 function ApiSettings() {
+  const { t } = useI18n();
   const profiles = window.QA.CRED_PROFILES;
   const [sel, setSel] = useStateST(profiles[0] ? profiles[0].id : '');
   const typeLabel = { aws: 'AWS SigV4', bearer: 'Bearer', basic: 'Basic' };
@@ -157,11 +167,11 @@ function ApiSettings() {
     return (
       <div className="qa-set-grid qa-set-grid--api">
         <section className="qa-panel">
-          <div className="qa-panel-head"><span><Icon name="key" size={14} /> Credential profiles</span><button className="qa-link">+ New</button></div>
+          <div className="qa-panel-head"><span><Icon name="key" size={14} /> {t('settings.api.credentials')}</span><button className="qa-link">{t('settings.api.new')}</button></div>
           <div className="qa-set-body">
             <div className="qa-auth-note">
               <Icon name="key" size={13} />
-              <span>No credential profiles yet. Add one to store AWS, Bearer, or Basic credentials for re-use across requests.</span>
+              <span>{t('settings.api.empty')}</span>
             </div>
           </div>
         </section>
@@ -174,7 +184,7 @@ function ApiSettings() {
   return (
     <div className="qa-set-grid qa-set-grid--api">
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="key" size={14} /> Credential profiles</span><button className="qa-link">+ New</button></div>
+        <div className="qa-panel-head"><span><Icon name="key" size={14} /> {t('settings.api.credentials')}</span><button className="qa-link">{t('settings.api.new')}</button></div>
         <div className="qa-set-body qa-creds">
           {profiles.map(c => (
             <button key={c.id} className="qa-cred" data-active={c.id === sel ? '1' : '0'} onClick={() => setSel(c.id)}>
@@ -191,27 +201,27 @@ function ApiSettings() {
         <div className="qa-set-body">
           {p.type === 'aws' && (
             <>
-              <FieldRow label="AWS profile">
+              <FieldRow label={t('settings.api.awsProfile')}>
                 <Dropdown value={p.name} options={profiles.filter(x => x.type === 'aws').map(x => x.name)} onChange={() => {}} />
               </FieldRow>
-              <FieldRow label="Access Key ID"><input className="qa-inp" defaultValue="AKIA●●●●●●●●●●●●7QD2" readOnly /></FieldRow>
-              <FieldRow label="Secret Access Key"><SecretInput value={'wJalr●●●●●●●●●●●●●●●●●●●●EXAMPLEKEY'} onChange={() => {}} /></FieldRow>
+              <FieldRow label={t('settings.api.accessKey')}><input className="qa-inp" defaultValue="AKIA●●●●●●●●●●●●7QD2" readOnly /></FieldRow>
+              <FieldRow label={t('settings.api.secretKey')}><SecretInput value={'wJalr●●●●●●●●●●●●●●●●●●●●EXAMPLEKEY'} onChange={() => {}} /></FieldRow>
               <div className="qa-field-grid">
-                <FieldRow label="Region"><input className="qa-inp" defaultValue={p.region} readOnly /></FieldRow>
-                <FieldRow label="Service"><input className="qa-inp" defaultValue="execute-api" readOnly /></FieldRow>
+                <FieldRow label={t('settings.api.region')}><input className="qa-inp" defaultValue={p.region} readOnly /></FieldRow>
+                <FieldRow label={t('settings.api.service')}><input className="qa-inp" defaultValue="execute-api" readOnly /></FieldRow>
               </div>
-              <div className="qa-auth-note"><Icon name="shield" size={13} /> Stored locally. Used to sign requests with Signature V4.</div>
+              <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.api.storedLocal')}</div>
             </>
           )}
           {p.type === 'bearer' && (
-            <FieldRow label="Token" hint="Sent as Authorization: Bearer <token>">
+            <FieldRow label={t('settings.api.token')} hint={t('settings.api.tokenHint')}>
               <SecretInput value={'eyJhbGciOiJIUzI1●●●●●●●●●●●●'} onChange={() => {}} />
             </FieldRow>
           )}
           {p.type === 'basic' && (
             <>
-              <FieldRow label="Username"><input className="qa-inp" defaultValue="qa-runner" readOnly /></FieldRow>
-              <FieldRow label="Password"><SecretInput value={'●●●●●●●●●●●●'} onChange={() => {}} /></FieldRow>
+              <FieldRow label={t('settings.api.username')}><input className="qa-inp" defaultValue="qa-runner" readOnly /></FieldRow>
+              <FieldRow label={t('settings.api.password')}><SecretInput value={'●●●●●●●●●●●●'} onChange={() => {}} /></FieldRow>
             </>
           )}
         </div>
@@ -221,21 +231,31 @@ function ApiSettings() {
 }
 
 function AppearanceSettings({ accent, setAccent }) {
+  const { locale, setLocale, t } = useI18n();
   const ACC = window.QATheme.ACCENTS;
   return (
     <div className="qa-set-grid">
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="zap" size={14} /> Accent color</span></div>
+        <div className="qa-panel-head"><span><Icon name="zap" size={14} /> {t('settings.appearance.accentColor')}</span></div>
         <div className="qa-set-body">
-          <FieldRow label="Accent">
+          <FieldRow label={t('settings.appearance.accent')}>
             <div className="tw-accents">
-              <button className="tw-acc tw-acc--auto" data-active={accent === 'auto' ? '1' : '0'} onClick={() => setAccent('auto')} title="Default">A</button>
+              <button className="tw-acc tw-acc--auto" data-active={accent === 'auto' ? '1' : '0'} onClick={() => setAccent('auto')} title={t('settings.appearance.default')}>A</button>
               {Object.entries(ACC).map(([name, hex]) => (
                 <button key={name} className="tw-acc" data-active={accent === hex ? '1' : '0'} style={{ background: hex }} onClick={() => setAccent(hex)} title={name} />
               ))}
             </div>
           </FieldRow>
-          <div className="qa-auth-note"><Icon name="shield" size={13} /> Applies across the whole app and is saved on this machine.</div>
+          <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.appearance.note')}</div>
+        </div>
+      </section>
+      <section className="qa-panel">
+        <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('settings.appearance.language')}</span></div>
+        <div className="qa-set-body">
+          <FieldRow label={t('settings.appearance.languageLabel')}>
+            <Dropdown value={locale} options={LOCALES} onChange={setLocale} />
+          </FieldRow>
+          <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.appearance.languageNote')}</div>
         </div>
       </section>
     </div>
@@ -243,6 +263,7 @@ function AppearanceSettings({ accent, setAccent }) {
 }
 
 function LlmSettings() {
+  const { t } = useI18n();
   const [cfg, setCfg] = useStateST(() => window.loadLlmCfg());
   const MODELS = { openai: ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.2', 'gpt-5.5-codex'] };
   const DEF_MODEL = { builtin: 'claude-haiku-4-5', openai: 'gpt-5.4-mini', custom: '' };
@@ -253,30 +274,30 @@ function LlmSettings() {
   return (
     <div className="qa-set-grid qa-set-grid--api">
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="sparkle" size={14} /> Generation provider</span></div>
+        <div className="qa-panel-head"><span><Icon name="sparkle" size={14} /> {t('settings.llm.provider')}</span></div>
         <div className="qa-set-body">
-          <FieldRow label="Provider"><Dropdown value={cfg.provider} options={window.LLM_PROVIDERS} onChange={setProvider} /></FieldRow>
+          <FieldRow label={t('settings.llm.providerLabel')}><Dropdown value={cfg.provider} options={window.LLM_PROVIDERS} onChange={setProvider} /></FieldRow>
           {!builtin && (
             <>
-              <FieldRow label="Model">
+              <FieldRow label={t('settings.llm.model')}>
                 {cfg.provider === 'openai'
                   ? <Dropdown value={cfg.model || 'gpt-5.4-mini'} options={MODELS.openai} onChange={(m) => save({ model: m })} />
                   : <input className="qa-inp" value={cfg.model} onChange={e => save({ model: e.target.value })} placeholder="model id, e.g. llama-3.1-70b" />}
               </FieldRow>
-              <FieldRow label="API key"><SecretInput value={cfg.key} onChange={(v) => save({ key: v })} placeholder="sk-…" /></FieldRow>
+              <FieldRow label={t('settings.llm.apiKey')}><SecretInput value={cfg.key} onChange={(v) => save({ key: v })} placeholder="sk-…" /></FieldRow>
               {cfg.provider === 'custom' && (
-                <FieldRow label="Endpoint (OpenAI-compatible)"><input className="qa-inp" value={cfg.baseUrl} onChange={e => save({ baseUrl: e.target.value })} placeholder="https://…/v1/chat/completions" /></FieldRow>
+                <FieldRow label={t('settings.llm.endpoint')}><input className="qa-inp" value={cfg.baseUrl} onChange={e => save({ baseUrl: e.target.value })} placeholder="https://…/v1/chat/completions" /></FieldRow>
               )}
-              <div className="qa-auth-note"><Icon name="shield" size={13} /> Key is stored only in this browser (localStorage) and sent directly to your provider.</div>
+              <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.llm.keyNote')}</div>
             </>
           )}
-          {builtin && <div className="qa-auth-note"><Icon name="zap" size={13} /> {claudeOk ? 'Uses the built-in Claude model — no key required.' : 'Built-in Claude is unavailable here — pick a provider and add a key.'}</div>}
+          {builtin && <div className="qa-auth-note"><Icon name="zap" size={13} /> {claudeOk ? t('settings.llm.builtinOk') : t('settings.llm.builtinUnavailable')}</div>}
         </div>
       </section>
       <section className="qa-panel">
-        <div className="qa-panel-head"><span><Icon name="fileText" size={14} /> How it’s used</span></div>
+        <div className="qa-panel-head"><span><Icon name="fileText" size={14} /> {t('settings.llm.used')}</span></div>
         <div className="qa-set-body">
-          <p className="qa-set-copy">Test Gen turns specs, BDD features, PRDs and PDFs into classified test cases. The <strong>AI</strong> engine uses the provider set here; the <strong>Heuristic</strong> engine runs fully offline as a fallback.</p>
+          <p className="qa-set-copy">{t('settings.llm.copy')}</p>
         </div>
       </section>
     </div>
@@ -284,13 +305,20 @@ function LlmSettings() {
 }
 
 function SettingsPage({ accent, setAccent, initialTab, vars, setVars, cookies, setCookies, sslVerify, setSslVerify }) {
+  const { t } = useI18n();
   const [tab, setTab] = useStateST(initialTab || 'appearance');
   React.useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
-  const tabs = [['appearance', 'Appearance'], ['env', 'Environment'], ['cookies', 'Cookies'], ['api', 'API & Credentials'], ['llm', 'AI / LLM']];
+  const tabs = [
+    ['appearance', t('settings.tab.appearance')],
+    ['env', t('settings.tab.env')],
+    ['cookies', t('settings.tab.cookies')],
+    ['api', t('settings.tab.api')],
+    ['llm', t('settings.tab.llm')],
+  ];
   return (
     <div className="qa-settings">
       <div className="qa-settings-head">
-        <h2>Settings</h2>
+        <h2>{t('settings.title')}</h2>
         <div className="qa-segs qa-segs--mini">
           {tabs.map(([k, l]) => <button key={k} data-active={tab === k ? '1' : '0'} onClick={() => setTab(k)}>{l}</button>)}
         </div>

@@ -2,10 +2,32 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Runner } from '../qa/Runner.jsx';
+import { I18nProvider } from '../qa/i18n.jsx';
+
+function installLocalStorage(seed = {}) {
+  let store = { ...seed };
+  const storage = {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+  Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
+}
+
+function renderRunner(props) {
+  return render(
+    <I18nProvider>
+      <Runner {...props} />
+    </I18nProvider>
+  );
+}
 
 describe('Runner runs real requests + live assertions (canned fallback)', () => {
   afterEach(() => cleanup());
   beforeEach(() => {
+    installLocalStorage({ qa_locale: 'en-US' });
     window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
       { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
     ] }] }];
@@ -15,8 +37,8 @@ describe('Runner runs real requests + live assertions (canned fallback)', () => 
 
   it('reports assertion pass/total from the live response', async () => {
     const tests = { r1: [{ type: 'status', op: 'eq', value: 200, on: true }] };
-    render(<Runner env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} tests={tests}
-                   cookies={[]} sslVerify={true} oauthTokens={{}} />);
+    renderRunner({ env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, tests,
+                   cookies: [], sslVerify: true, oauthTokens: {} });
     fireEvent.click(screen.getByRole('button', { name: /Run 1 request/ }));
     await waitFor(() => expect(screen.getByText('1/1')).toBeInTheDocument(), { timeout: 4000 });
   });
