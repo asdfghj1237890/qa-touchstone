@@ -58,3 +58,36 @@ function setAtPath(obj, path, value) {
   cur[last] = value;
   return true;
 }
+
+function scalarLeaves(body) {
+  const set = new Set();
+  if (body != null && typeof body === 'object') {
+    walkJson(body, (_p, _k, v) => { if (v != null && typeof v !== 'object') set.add(String(v)); });
+  } else if (body != null) {
+    set.add(String(body));
+  }
+  return set;
+}
+
+// True when the attacker's response actually reflects the owner's object:
+// (a) the owner id value is echoed in the body, or
+// (b) scalar-leaf Jaccard overlap with the owner reference >= MATCH_THRESHOLD.
+export function matchesOwner(attackResp, ownerRef, ownerIdValue) {
+  const aBody = attackResp && attackResp.body;
+  const idv = String(ownerIdValue);
+  if (aBody != null && typeof aBody === 'object') {
+    if (scalarLeaves(aBody).has(idv)) return true;
+  } else if (typeof aBody === 'string') {
+    if (aBody.includes(idv)) return true;
+  }
+  const oBody = ownerRef && ownerRef.body;
+  if (aBody && typeof aBody === 'object' && oBody && typeof oBody === 'object') {
+    const A = scalarLeaves(aBody), O = scalarLeaves(oBody);
+    if (O.size === 0) return false;
+    let inter = 0;
+    for (const x of O) if (A.has(x)) inter++;
+    const union = A.size + O.size - inter;
+    if (union > 0 && inter / union >= MATCH_THRESHOLD) return true;
+  }
+  return false;
+}
