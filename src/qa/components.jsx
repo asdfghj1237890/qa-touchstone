@@ -207,7 +207,31 @@ function highlightJson(json) {
   );
 }
 
-Object.assign(window, { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniCheck, Dropdown, fmtBytesShared, highlightJson });
+function FieldRow({ label, children, hint }) {
+  return (
+    <div className="qa-field">
+      <label className="qa-field-label">{label}</label>
+      <div className="qa-field-control">{children}</div>
+      {hint && <div className="qa-field-hint">{hint}</div>}
+    </div>
+  );
+}
+
+function SecretInput({ value, onChange, placeholder }) {
+  const { t } = useI18n();
+  const [show, setShow] = React.useState(false);
+  return (
+    <div className="qa-secret">
+      <input type={show ? 'text' : 'password'} value={value} placeholder={placeholder}
+             onChange={e => onChange(e.target.value)} />
+      <button onClick={() => setShow(s => !s)} aria-label={t('common.toggleVisibility')}>
+        <Icon name={show ? 'eyeOff' : 'eye'} size={14} />
+      </button>
+    </div>
+  );
+}
+
+Object.assign(window, { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniCheck, Dropdown, fmtBytesShared, highlightJson, FieldRow, SecretInput });
 
 // Shared LLM config (used by Test Gen + Settings; persisted in localStorage).
 const LLM_DEFAULT_CFG = { provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: 'https://api.openai.com/v1/chat/completions' };
@@ -223,5 +247,5 @@ function loadLlmCfg() {
 function saveLlmCfg(cfg) { try { localStorage.setItem('qa_llm_cfg', JSON.stringify(cfg)); } catch {} }
 Object.assign(window, { LLM_DEFAULT_CFG, LLM_PROVIDERS, loadLlmCfg, saveLlmCfg });
 
-export { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniCheck, Dropdown, fmtBytesShared, highlightJson };
+export { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniCheck, Dropdown, fmtBytesShared, highlightJson, FieldRow, SecretInput };
 export { LLM_DEFAULT_CFG, LLM_PROVIDERS, loadLlmCfg, saveLlmCfg };
