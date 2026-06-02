@@ -1,6 +1,6 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
-import { applyIdLocation } from '../qa/bola.js';
+import { applyIdLocation, matchesOwner } from '../qa/bola.js';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 
@@ -37,5 +37,27 @@ describe('applyIdLocation', () => {
     const r = applyIdLocation({ ...baseReq(), method: 'POST', body: '{"a":1}' }, { kind: 'body', path: 'order.id' }, 9);
     expect(JSON.parse(r.body)).toEqual({ a: 1 });
     expect(r._idApplied).toBe(false);
+  });
+});
+
+const resp = (body) => ({ status: 200, body });
+
+describe('matchesOwner', () => {
+  it('matches when the owner id value is echoed as a leaf in the attack body', () => {
+    expect(matchesOwner(resp({ id: 99, name: 'Bob' }), resp({ id: 1 }), 99)).toBe(true);
+  });
+  it('matches when scalar-leaf overlap with the owner reference is >= threshold', () => {
+    const owner = resp({ a: 'x', b: 'y', c: 'z' });
+    const attack = resp({ a: 'x', b: 'y', c: 'z', extra: 'q' }); // 3/4 overlap = 0.75
+    expect(matchesOwner(attack, owner, 'noecho')).toBe(true);
+  });
+  it('does not match when overlap is below threshold and id is not echoed', () => {
+    expect(matchesOwner(resp({ a: '1', b: '2' }), resp({ c: '3', d: '4' }), 'zzz')).toBe(false);
+  });
+  it('falls back to a substring check for a non-JSON attack body', () => {
+    expect(matchesOwner(resp('order 99 belongs to bob'), resp({ id: 1 }), 99)).toBe(true);
+  });
+  it('returns false when the owner reference body has no leaves', () => {
+    expect(matchesOwner(resp({ a: 1 }), resp({}), 'zzz')).toBe(false);
   });
 });
