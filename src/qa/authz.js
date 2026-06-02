@@ -5,7 +5,10 @@
 import './setup.js';
 
 export const SECURITY_STORAGE_KEY = 'qa_security_matrix';
-export const DEFAULT_DENY_SET = [401, 403];
+// 404 is included by default: APIs commonly return "not found" instead of 403
+// to hide a protected resource's existence, so it counts as a denial. Override
+// per matrix (e.g. back to [401, 403]) when a 404 should mean "missing", not "denied".
+export const DEFAULT_DENY_SET = [401, 403, 404];
 
 // Map a real HTTP status to an authorization outcome.
 export function classifyOutcome(status, denySet = DEFAULT_DENY_SET) {
