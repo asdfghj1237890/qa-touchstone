@@ -68,6 +68,7 @@ function NavRail({ route, setRoute, busy, flashAt, active }) {
     { key: 'api', icon: 'send', label: t('route.api') },
     { key: 'realtime', icon: 'activity', label: t('route.realtime') },
     { key: 'runner', icon: 'play', label: t('route.runner') },
+    { key: 'security', icon: 'shield', label: t('route.security') },
     { key: 'monitors', icon: 'clock', label: t('route.monitors') },
     { key: 'docs', icon: 'fileText', label: t('route.docs') },
     { key: 'perf', icon: 'gauge', label: t('route.perf') },
