@@ -12,6 +12,7 @@ import { SettingsPage } from './qa/SettingsPage.jsx';
 import { PerfTest } from './qa/PerfTest.jsx';
 import { RealtimePage } from './qa/Realtime.jsx';
 import { Runner } from './qa/Runner.jsx';
+import { SecurityPage } from './qa/Security.jsx';
 import { DocsPage } from './qa/Docs.jsx';
 import { cookieMatches } from './qa/cookies.js';
 import { MONITOR_SCHEDULER_INTERVAL_MS, MONITOR_STORAGE_KEY, MonitorsPage, nextMonitorDueAt, normalizeMonitor, runMonitorCollection } from './qa/Monitors.jsx';
@@ -67,7 +68,7 @@ function WindowControls() {
   );
 }
 
-const ROUTE_KEYS = { home: 'route.home', api: 'route.api', realtime: 'route.realtime', runner: 'route.runner', perf: 'route.perf', testgen: 'route.testgen', docs: 'route.docs', monitors: 'route.monitors', settings: 'route.settings' };
+const ROUTE_KEYS = { home: 'route.home', api: 'route.api', realtime: 'route.realtime', runner: 'route.runner', perf: 'route.perf', testgen: 'route.testgen', docs: 'route.docs', monitors: 'route.monitors', settings: 'route.settings', security: 'route.security' };
 
 // Which collection owns a given request id (for collection-scoped variables).
 function collectionOf(reqId) {
@@ -359,6 +360,7 @@ function AppShell() {
           {route === 'perf' && <PerfTest env={env} vars={vars} onRunningChange={setPerfRunning} />}
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
+          {route === 'security' && <SecurityPage env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} setOauthTokens={setOauthTokens} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
           {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} vars={vars} cookies={cookies} sslVerify={sslVerify} tests={tests} oauthTokens={oauthTokens}
                                                   monitors={monitors} setMonitors={setMonitors} running={monitorRunning}
