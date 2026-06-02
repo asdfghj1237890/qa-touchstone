@@ -169,6 +169,19 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const editing = identities.find(i => i.id === editId);
   const drawerCell = drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId];
 
+  const scanWithAI = async () => {
+    if (!drawer || !drawerCell || !drawerCell.response) return;
+    setAiScan({ busy: true, error: null });
+    try {
+      const extra = await scanSensitiveLLM(drawerCell.response);
+      const { reqId, idId } = drawer;
+      setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: { ...r[reqId][idId], findings: [...(r[reqId][idId].findings || []), ...extra] } } }));
+      setAiScan({ busy: false, error: null });
+    } catch (e) {
+      setAiScan({ busy: false, error: String((e && e.message) || e) });
+    }
+  };
+
   return (
     <div className="qa-sec">
       <div className="qa-sec-head">
@@ -286,6 +299,25 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
             </>
           )}
           {drawerCell.error && <div className="qa-sec-drawer-err">{drawerCell.error}</div>}
+          {drawerCell.findings && drawerCell.findings.length > 0 && (
+            <>
+              <span className="qa-sec-drawer-label">{t('security.findings.title')}</span>
+              <ul className="qa-sec-findings">
+                {drawerCell.findings.slice().sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)).map((f, i) => (
+                  <li key={i} className={`qa-sev--${f.severity}`}>
+                    <span className="qa-sec-find-sev">{t('security.severity.' + f.severity)}</span>
+                    <span className="qa-sec-find-oracle">{t('security.oracle.' + f.oracle)}</span>
+                    <code>{f.path}</code>
+                    {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <button className="qa-link" onClick={scanWithAI} disabled={aiScan.busy}>
+            <Icon name="zap" size={13} /> {aiScan.busy ? t('security.findings.aiScanning') : t('security.findings.scanAI')}
+          </button>
+          {aiScan.error && <div className="qa-sec-drawer-err">{aiScan.error}</div>}
           <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
         </div>
