@@ -93,9 +93,9 @@ describe('absolute-URL imports stay callable', () => {
     const parsed = qaParseImport(text);
     expect(parsed.error).toBeUndefined();
     expect(parsed.format).toBe('Postman v2.1');
-    expect(parsed.collection.folders).toHaveLength(6);
+    expect(parsed.collection.folders).toHaveLength(7);
     const reqs = parsed.collection.folders.flatMap((f) => f.requests);
-    expect(reqs).toHaveLength(22);
+    expect(reqs).toHaveLength(26);
     expect(reqs.every((r) => /^https:\/\//.test(r.path))).toBe(true);
     // each absolute URL must execute as-is (no env base prepended)
     const sample = reqs.find((r) => r.path === 'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true');
