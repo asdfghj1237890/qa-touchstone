@@ -105,3 +105,84 @@ export function bolaSeverity(method, verdict) {
   if (verdict === 'unconfirmed') return 'medium';
   return null;
 }
+
+function respStatus(resp) { return resp && typeof resp.status === 'number' ? resp.status : null; }
+function errStr(e) { return String((e && e.message) || e); }
+function reqMeta(test, identity, idValue) {
+  return { method: test.method, path: test.path, identity: identity.name || identity.id, idValue: String(idValue) };
+}
+
+// Run object-level authz tests. `runner(test, identity, idValue) => Promise<response>`
+// is injected (the page builds+mutates+executes). Streams each finished cell via
+// opts.onCell(testId, attackerId|null, ownerId, cell). Honors opts.signal.
+export async function runBola(state, runner, opts = {}) {
+  const { signal, onCell } = opts;
+  const denySet = state.denySet || [401, 403, 404];
+  const results = {};
+  for (const test of state.tests || []) {
+    if (signal && signal.aborted) return results;
+    const idVals = test.idValues || {};
+    const owners = (state.identities || []).filter(i => idVals[i.id] != null && idVals[i.id] !== '');
+    const reference = {};
+    results[test.id] = { reference, attacks: {} };
+
+    for (const O of owners) {
+      if (signal && signal.aborted) return results;
+      let cell;
+      try {
+        const resp = await runner(test, O, idVals[O.id]);
+        cell = { phase: 'ref', status: respStatus(resp), response: resp || null, request: reqMeta(test, O, idVals[O.id]), error: null };
+      } catch (e) {
+        cell = { phase: 'ref', status: null, response: null, request: null, error: errStr(e) };
+      }
+      reference[O.id] = cell;
+      if (onCell) onCell(test.id, null, O.id, cell);
+    }
+
+    for (const A of owners) {
+      results[test.id].attacks[A.id] = {};
+      for (const O of owners) {
+        if (A.id === O.id) continue;
+        if (signal && signal.aborted) return results;
+        let cell;
+        try {
+          const resp = await runner(test, A, idVals[O.id]);
+          const status = respStatus(resp);
+          const ref = reference[O.id];
+          const refOk = ref && typeof ref.status === 'number' && ref.status >= 200 && ref.status <= 299;
+          const matched = refOk ? matchesOwner(resp, ref.response, idVals[O.id]) : false;
+          const verdict = classifyBola(test.method, status, matched, denySet);
+          const severity = bolaSeverity(test.method, verdict);
+          const finding = severity ? {
+            oracle: 'object-authz', severity,
+            title: verdict === 'vuln' ? 'Cross-object access confirmed' : 'Cross-object access (unconfirmed)',
+            path: `${test.method} ${test.path}`,
+            evidence: `as ${A.name || A.id} → ${O.name || O.id}'s id`, source: 'rule',
+          } : null;
+          cell = { phase: 'attack', status, matched, verdict, severity, finding, response: resp || null, request: reqMeta(test, A, idVals[O.id]), error: null };
+        } catch (e) {
+          cell = { phase: 'attack', status: null, matched: false, verdict: 'inconclusive', severity: null, finding: null, response: null, request: null, error: errStr(e) };
+        }
+        results[test.id].attacks[A.id][O.id] = cell;
+        if (onCell) onCell(test.id, A.id, O.id, cell);
+      }
+    }
+  }
+  return results;
+}
+
+// Tally attack-cell verdicts across all tests (reference cells excluded).
+export function summarizeBola(results) {
+  const s = { total: 0, vuln: 0, unconfirmed: 0, pass: 0, inconclusive: 0 };
+  for (const tid in results) {
+    const atk = (results[tid] && results[tid].attacks) || {};
+    for (const a in atk) {
+      for (const o in atk[a]) {
+        const v = atk[a][o] && atk[a][o].verdict;
+        if (!v) continue;
+        s.total++; if (s[v] !== undefined) s[v]++;
+      }
+    }
+  }
+  return s;
+}

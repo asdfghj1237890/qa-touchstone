@@ -1,6 +1,6 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
-import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity } from '../qa/bola.js';
+import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola } from '../qa/bola.js';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 
@@ -88,5 +88,63 @@ describe('bolaSeverity', () => {
     expect(bolaSeverity('GET', 'unconfirmed')).toBe('medium');
     expect(bolaSeverity('GET', 'pass')).toBe(null);
     expect(bolaSeverity('GET', 'inconclusive')).toBe(null);
+  });
+});
+
+const idAlice = { id: 'alice', name: 'Alice', auth: {} };
+const idBob   = { id: 'bob',   name: 'Bob',   auth: {} };
+const test1 = { id: 't1', reqId: 'r1', method: 'GET', path: '/users/{id}', idLocation: { kind: 'path', index: 1 }, idValues: { alice: 'A1', bob: 'B1' } };
+
+describe('runBola', () => {
+  const baseState = { identities: [idAlice, idBob], tests: [test1], denySet: [401, 403, 404] };
+
+  it('runs a reference pass then attacker×owner attacks, flagging confirmed vuln', async () => {
+    // Every call returns the SAME body (so attacker body == owner reference → matched).
+    const runner = () => Promise.resolve({ status: 200, body: { secret: 'shared' } });
+    const seen = [];
+    const results = await runBola(baseState, runner, { onCell: (tid, a, o, cell) => seen.push([tid, a, o, cell.phase]) });
+    expect(results.t1.reference.alice.status).toBe(200);
+    expect(results.t1.attacks.alice.bob.verdict).toBe('vuln');
+    expect(results.t1.attacks.bob.alice.severity).toBe('high');
+    expect(results.t1.attacks.alice.bob.finding.oracle).toBe('object-authz');
+    // 2 reference + 2 attack cells streamed
+    expect(seen.filter(s => s[3] === 'ref').length).toBe(2);
+    expect(seen.filter(s => s[3] === 'attack').length).toBe(2);
+  });
+
+  it('marks a denied cross-access as pass', async () => {
+    const runner = (t, identity, idValue) => Promise.resolve(idValue === 'A1' && identity.id === 'bob' ? { status: 403, body: {} } : { status: 200, body: { id: 1 } });
+    const results = await runBola(baseState, runner, {});
+    expect(results.t1.attacks.bob.alice.verdict).toBe('pass');
+  });
+
+  it('caps at unconfirmed when the owner could not read its own object (ref not 2xx)', async () => {
+    let n = 0;
+    const runner = () => { n++; return Promise.resolve(n <= 2 ? { status: 500, body: {} } : { status: 200, body: { x: 1 } }); };
+    const results = await runBola(baseState, runner, {});
+    // references both 500 → matched forced false → 2xx attacks can only be unconfirmed
+    expect(['unconfirmed', 'inconclusive']).toContain(results.t1.attacks.alice.bob.verdict);
+    expect(results.t1.attacks.alice.bob.verdict).not.toBe('vuln');
+  });
+
+  it('skips identities with no id value for the test', async () => {
+    const state = { ...baseState, tests: [{ ...test1, idValues: { alice: 'A1' } }] };
+    let calls = 0;
+    await runBola(state, () => { calls++; return Promise.resolve({ status: 200, body: {} }); }, {});
+    expect(calls).toBe(1);   // only Alice's reference; no attack pairs possible
+  });
+
+  it('stops early when the abort signal is set', async () => {
+    const c = new AbortController(); c.abort();
+    let calls = 0;
+    await runBola(baseState, () => { calls++; return Promise.resolve({ status: 200, body: {} }); }, { signal: c.signal });
+    expect(calls).toBe(0);
+  });
+});
+
+describe('summarizeBola', () => {
+  it('tallies attack verdicts (not reference cells)', () => {
+    const results = { t1: { reference: { a: { status: 200 } }, attacks: { a: { b: { verdict: 'vuln' } }, b: { a: { verdict: 'pass' } } } } };
+    expect(summarizeBola(results)).toEqual({ total: 2, vuln: 1, unconfirmed: 0, pass: 1, inconclusive: 0 });
   });
 });
