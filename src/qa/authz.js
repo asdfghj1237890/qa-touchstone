@@ -65,3 +65,46 @@ export function setRow(state, reqId, expectation) {
   for (const id of state.identities) row[id.id] = expectation;
   return { ...state, expect: { ...state.expect, [reqId]: row } };
 }
+
+// Run the matrix. `runner(endpoint, identity) => Promise<response>` is injected
+// so tests can stub it and the page can plug in the real executor. Streams each
+// finished cell via opts.onCell(reqId, identityId, cell). Honors opts.signal.
+export async function runMatrix(state, runner, opts = {}) {
+  const { signal, onCell } = opts;
+  const denySet = state.denySet || DEFAULT_DENY_SET;
+  const results = {};
+  for (const ep of state.endpoints) {
+    results[ep.reqId] = results[ep.reqId] || {};
+    for (const id of state.identities) {
+      if (signal && signal.aborted) return results;
+      const expectation = (state.expect[ep.reqId] || {})[id.id] || defaultExpectation(id);
+      if (expectation === 'skip') continue;
+      let cell;
+      try {
+        const resp = await runner(ep, id);
+        const status = resp && typeof resp.status === 'number' ? resp.status : null;
+        const outcome = classifyOutcome(status, denySet);
+        cell = { status, outcome, verdict: verdictFor(expectation, outcome), timeMs: (resp && resp.time) || 0, response: resp || null, error: null };
+      } catch (e) {
+        cell = { status: null, outcome: 'other', verdict: 'inconclusive', timeMs: 0, response: null, error: String((e && e.message) || e) };
+      }
+      results[ep.reqId][id.id] = cell;
+      if (onCell) onCell(ep.reqId, id.id, cell);
+    }
+  }
+  return results;
+}
+
+// Tally verdicts across a results grid for the summary chips.
+export function summarize(results) {
+  const s = { total: 0, pass: 0, fail: 0, vuln: 0, inconclusive: 0 };
+  for (const reqId in results) {
+    for (const idId in results[reqId]) {
+      const v = results[reqId][idId] && results[reqId][idId].verdict;
+      if (!v) continue;
+      s.total++;
+      if (s[v] !== undefined) s[v]++;
+    }
+  }
+  return s;
+}
