@@ -13,9 +13,9 @@ describe('classifyOutcome', () => {
     expect(classifyOutcome(401)).toBe('denied');
     expect(classifyOutcome(403)).toBe('denied');
   });
-  it('honors a custom denySet (e.g. 404 hides a resource)', () => {
-    expect(classifyOutcome(404, [401, 403, 404])).toBe('denied');
-    expect(classifyOutcome(404)).toBe('other');
+  it('treats 404 as denied by default (hidden resource) but a custom set can exclude it', () => {
+    expect(classifyOutcome(404)).toBe('denied');
+    expect(classifyOutcome(404, [401, 403])).toBe('other');
   });
   it('everything else is other, incl. null/NaN (transport error)', () => {
     expect(classifyOutcome(500)).toBe('other');
@@ -24,7 +24,7 @@ describe('classifyOutcome', () => {
     expect(classifyOutcome(undefined)).toBe('other');
   });
   it('exposes the default deny set', () => {
-    expect(DEFAULT_DENY_SET).toEqual([401, 403]);
+    expect(DEFAULT_DENY_SET).toEqual([401, 403, 404]);
   });
 });
 
