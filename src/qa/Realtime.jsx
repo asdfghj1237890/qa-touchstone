@@ -1,13 +1,14 @@
 import React from 'react';
 import './setup.js';
 import { Icon, Spinner, highlightJson } from './components.jsx';
+import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — Realtime client: WebSocket + Server-Sent Events ────────
 const { useState: useStateRT, useRef: useRefRT, useEffect: useEffectRT } = React;
 
 const RT_PROTOCOLS = [
-  { key: 'ws', label: 'WebSocket', scheme: 'wss://' },
-  { key: 'sse', label: 'Server-Sent Events', scheme: 'https://' },
+  { key: 'ws', labelKey: 'realtime.ws', scheme: 'wss://' },
+  { key: 'sse', labelKey: 'realtime.sse', scheme: 'https://' },
 ];
 
 // Canned inbound traffic the mock server "pushes" once connected.
@@ -27,6 +28,7 @@ const SSE_SCRIPT = [
 function rtNow() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`; }
 
 function RealtimeClient({ env }) {
+  const { t } = useI18n();
   const [proto, setProto] = useStateRT('ws');
   const [url, setUrl] = useStateRT('wss://staging.api.acme.dev/ws/events');
   const [status, setStatus] = useStateRT('disconnected'); // disconnected | connecting | open | closed
@@ -54,7 +56,7 @@ function RealtimeClient({ env }) {
     setStatus('connecting'); setMsgs([]);
     const t0 = setTimeout(() => {
       setStatus('open');
-      push({ dir: 'sys', body: `Connected to ${url}` });
+      push({ dir: 'sys', body: t('realtime.connectedTo', { url }) });
       const script = isWs ? WS_SCRIPT : SSE_SCRIPT;
       script.forEach(s => {
         const t = setTimeout(() => push({ dir: 'in', body: s.body, event: s.event }), s.delay);
@@ -78,7 +80,7 @@ function RealtimeClient({ env }) {
   const disconnect = () => {
     clearTimers();
     setStatus('closed');
-    push({ dir: 'sys', body: 'Connection closed (1000)' });
+    push({ dir: 'sys', body: t('realtime.closed') });
   };
 
   const sendMsg = () => {
@@ -98,7 +100,7 @@ function RealtimeClient({ env }) {
       <div className="rt-bar">
         <div className="qa-segs rt-proto">
           {RT_PROTOCOLS.map(p => (
-            <button key={p.key} data-active={proto === p.key ? '1' : '0'} onClick={() => switchProto(p.key)}>{p.label}</button>
+            <button key={p.key} data-active={proto === p.key ? '1' : '0'} onClick={() => switchProto(p.key)}>{t(p.labelKey)}</button>
           ))}
         </div>
         <div className="rt-url">
@@ -107,23 +109,23 @@ function RealtimeClient({ env }) {
                  placeholder={isWs ? 'wss://host/path' : 'https://host/stream'} disabled={connected} />
         </div>
         {connected || status === 'connecting'
-          ? <button className="rt-btn rt-btn--off" onClick={disconnect}>{status === 'connecting' ? <Spinner size={14} /> : <Icon name="stop" size={14} />} {status === 'connecting' ? 'Connecting' : 'Disconnect'}</button>
-          : <button className="rt-btn" onClick={connect}><Icon name="bolt" size={14} /> Connect</button>}
+          ? <button className="rt-btn rt-btn--off" onClick={disconnect}>{status === 'connecting' ? <Spinner size={14} /> : <Icon name="stop" size={14} />} {status === 'connecting' ? t('common.connecting') : t('common.disconnect')}</button>
+          : <button className="rt-btn" onClick={connect}><Icon name="bolt" size={14} /> {t('common.connect')}</button>}
       </div>
 
       <div className="rt-statusline">
-        <span className="rt-stat" data-status={status}>{status}</span>
+        <span className="rt-stat" data-status={status}>{t(`realtime.status.${status}`)}</span>
         <span className="qa-meta">{isWs ? 'WebSocket' : 'text/event-stream'}</span>
         <span className="rt-counts"><span className="rt-c-in">↓ {inCount}</span> <span className="rt-c-out">↑ {outCount}</span></span>
-        {msgs.length > 0 && <button className="qa-link" onClick={() => setMsgs([])}>Clear</button>}
+        {msgs.length > 0 && <button className="qa-link" onClick={() => setMsgs([])}>{t('common.clear')}</button>}
       </div>
 
       <div className="rt-stream" ref={scrollRef}>
         {msgs.length === 0 && (
           <div className="pf-empty rt-empty">
             <div className="pf-empty-icon"><Icon name={isWs ? 'bolt' : 'activity'} size={26} stroke={1.5} /></div>
-            <div className="pf-empty-title">{isWs ? 'WebSocket' : 'Event stream'} not connected</div>
-            <div className="pf-empty-sub">Connect to {isWs ? 'open a bidirectional socket' : 'subscribe to the server event stream'}.</div>
+            <div className="pf-empty-title">{isWs ? t('realtime.empty.wsTitle') : t('realtime.empty.sseTitle')}</div>
+            <div className="pf-empty-sub">{isWs ? t('realtime.empty.wsSub') : t('realtime.empty.sseSub')}</div>
           </div>
         )}
         {msgs.map((m, i) => (
@@ -144,12 +146,12 @@ function RealtimeClient({ env }) {
                     placeholder='{"type":"subscribe","channel":"orders"}' disabled={!connected}
                     onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMsg(); }} />
           <button className="rt-send" onClick={sendMsg} disabled={!connected}>
-            <Icon name="send" size={14} /> Send
+            <Icon name="send" size={14} /> {t('realtime.send')}
           </button>
         </div>
       )}
       {!isWs && connected && (
-        <div className="rt-ssehint"><Icon name="activity" size={13} /> SSE is one-way (server → client) — events stream in automatically. The client cannot send.</div>
+        <div className="rt-ssehint"><Icon name="activity" size={13} /> {t('realtime.sseHint')}</div>
       )}
     </div>
   );
@@ -157,11 +159,12 @@ function RealtimeClient({ env }) {
 function safeChannel(s) { try { return JSON.parse(s).channel || JSON.parse(s).type || 'message'; } catch { return 'message'; } }
 
 function RealtimePage({ env }) {
+  const { t } = useI18n();
   return (
     <div className="qa-realtime">
       <div className="rt-head">
-        <h2>Realtime</h2>
-        <p>Test WebSocket sockets and Server-Sent Event streams — connect, watch the live feed, and send frames.</p>
+        <h2>{t('realtime.title')}</h2>
+        <p>{t('realtime.subtitle')}</p>
       </div>
       <RealtimeClient env={env} />
     </div>

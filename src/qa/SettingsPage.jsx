@@ -22,9 +22,9 @@ function PathRow({ title, path }) {
 function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
   const { t } = useI18n();
   const paths = [
-    { title: 'Platform Tools', path: '/Users/qa/tools/platform' },
-    { title: 'Certificates', path: '/Users/qa/certs/device' },
-    { title: 'Postman Collections', path: '/Users/qa/collections' },
+    { title: t('settings.env.path.platformTools'), path: '/Users/qa/tools/platform' },
+    { title: t('settings.env.path.certificates'), path: '/Users/qa/certs/device' },
+    { title: t('settings.env.path.postmanCollections'), path: '/Users/qa/collections' },
   ];
   const envNames = Object.keys(vars.environments || {});
   const [envEdit, setEnvEdit] = useStateST(envNames[0] || 'None');
@@ -102,7 +102,7 @@ function EnvSettings({ vars, setVars, sslVerify, setSslVerify }) {
               <strong>{t('settings.env.ssl')}</strong>
               <em>{t('settings.env.sslHint')}</em>
             </div>
-            <button className="pf-toggle" data-on={sslVerify ? '1' : '0'} onClick={() => setSslVerify(!sslVerify)} aria-label="toggle ssl"><span /></button>
+            <button className="pf-toggle" data-on={sslVerify ? '1' : '0'} onClick={() => setSslVerify(!sslVerify)} aria-label={t('request.options.sslToggle')}><span /></button>
           </div>
           {!sslVerify && <div className="qa-opt-warn"><Icon name="shield" size={13} /> {t('settings.env.sslWarn')}</div>}
         </div>
@@ -137,9 +137,9 @@ function CookieSettings({ cookies, setCookies }) {
           {cookies.map(c => (
             <div className="qa-ckjar-row" key={c.id} data-off={c.on ? '0' : '1'}>
               <MiniCheck on={c.on} onClick={() => upd(c.id, { on: !c.on })} />
-              <input className="qa-ckjar-in" value={c.name} placeholder="name" onChange={e => upd(c.id, { name: e.target.value })} />
-              <input className="qa-ckjar-in" value={c.value} placeholder="value" onChange={e => upd(c.id, { value: e.target.value })} />
-              <input className="qa-ckjar-in" value={c.domain} placeholder="domain" onChange={e => upd(c.id, { domain: e.target.value })} />
+              <input className="qa-ckjar-in" value={c.name} placeholder={t('settings.cookies.placeholder.name')} onChange={e => upd(c.id, { name: e.target.value })} />
+              <input className="qa-ckjar-in" value={c.value} placeholder={t('settings.cookies.placeholder.value')} onChange={e => upd(c.id, { value: e.target.value })} />
+              <input className="qa-ckjar-in" value={c.domain} placeholder={t('settings.cookies.placeholder.domain')} onChange={e => upd(c.id, { domain: e.target.value })} />
               <input className="qa-ckjar-in qa-ckjar-sm" value={c.path} placeholder="/" onChange={e => upd(c.id, { path: e.target.value })} />
               <input className="qa-ckjar-in qa-ckjar-sm" value={c.expires} placeholder="—" onChange={e => upd(c.id, { expires: e.target.value })} />
               <div className="qa-ckjar-flags">
@@ -161,7 +161,7 @@ function ApiSettings() {
   const { t } = useI18n();
   const profiles = window.QA.CRED_PROFILES;
   const [sel, setSel] = useStateST(profiles[0] ? profiles[0].id : '');
-  const typeLabel = { aws: 'AWS SigV4', bearer: 'Bearer', basic: 'Basic' };
+  const typeLabel = { aws: t('settings.api.type.aws'), bearer: t('settings.api.type.bearer'), basic: t('settings.api.type.basic') };
 
   if (!profiles.length) {
     return (
@@ -271,12 +271,16 @@ function LlmSettings() {
   const setProvider = (v) => save({ provider: v, model: DEF_MODEL[v] });
   const builtin = cfg.provider === 'builtin';
   const claudeOk = !!(window.claude && window.claude.complete);
+  const providerOptions = window.LLM_PROVIDERS.map(p => ({
+    ...p,
+    label: t(`settings.llm.provider.${p.value}`),
+  }));
   return (
     <div className="qa-set-grid qa-set-grid--api">
       <section className="qa-panel">
         <div className="qa-panel-head"><span><Icon name="sparkle" size={14} /> {t('settings.llm.provider')}</span></div>
         <div className="qa-set-body">
-          <FieldRow label={t('settings.llm.providerLabel')}><Dropdown value={cfg.provider} options={window.LLM_PROVIDERS} onChange={setProvider} /></FieldRow>
+          <FieldRow label={t('settings.llm.providerLabel')}><Dropdown value={cfg.provider} options={providerOptions} onChange={setProvider} /></FieldRow>
           {!builtin && (
             <>
               <FieldRow label={t('settings.llm.model')}>

@@ -1,5 +1,6 @@
 import React from 'react';
 import './setup.js';
+import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — icons + shared atoms ───────────────────────────────────
 // Simple stroke icons (Lucide-style 24x24 paths) and small shared components.
@@ -145,8 +146,9 @@ function Spinner({ size = 16 }) {
 
 // Tiny toggle row used in params/headers tables.
 function MiniCheck({ on, onClick }) {
+  const { t } = useI18n();
   return (
-    <button onClick={onClick} className="qa-minicheck" data-on={on ? '1' : '0'} aria-label="toggle row">
+    <button onClick={onClick} className="qa-minicheck" data-on={on ? '1' : '0'} aria-label={t('common.toggleRow')}>
       {on && <Icon name="check" size={11} stroke={3} />}
     </button>
   );

@@ -356,7 +356,7 @@ function PerfTest({ env, vars, onRunningChange }) {
   // session's finalizer.
   const stop = () => {
     if (acc.current) acc.current.stopped = true;
-    try { api.stopCommand(); } catch {}
+    try { Promise.resolve(api.stopCommand()).catch(() => {}); } catch {}
   };
 
   const clearHistory = () => {
@@ -382,7 +382,7 @@ function PerfTest({ env, vars, onRunningChange }) {
     return () => {
       mountedRef.current = false;
       if (acc.current) acc.current.stopped = true;
-      try { api.stopCommand(); } catch {}
+      try { Promise.resolve(api.stopCommand()).catch(() => {}); } catch {}
     };
   }, []);
 

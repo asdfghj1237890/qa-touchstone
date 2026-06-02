@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, MiniCheck } from './components.jsx';
+import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — code snippet generator (cURL / Python / JS / HTTPie) ────
 const { useState: useStateCG } = React;
@@ -108,6 +109,7 @@ const QA_LANGS = [
 ];
 
 function CodeModal({ req, env, varMap, cookies, onClose }) {
+  const { t } = useI18n();
   const [lang, setLang] = useStateCG('curl');
   const [resolve, setResolve] = useStateCG(true);
   const [copied, setCopied] = useStateCG(false);
@@ -118,18 +120,18 @@ function CodeModal({ req, env, varMap, cookies, onClose }) {
     <div className="qa-modal-scrim" onMouseDown={onClose}>
       <div className="qa-modal qa-codegen" onMouseDown={ev => ev.stopPropagation()}>
         <div className="qa-modal-head">
-          <span className="qa-modal-title"><Icon name="code" size={15} /> Code snippet</span>
+          <span className="qa-modal-title"><Icon name="code" size={15} /> {t('codegen.title')}</span>
           <div className="qa-modal-head-route"><MethodBadge method={req.method} size="sm" /> <span>{e.url}</span></div>
-          <button className="qa-iconbtn" onClick={onClose} aria-label="close"><Icon name="x" size={15} /></button>
+          <button className="qa-iconbtn" onClick={onClose} aria-label={t('common.close')}><Icon name="x" size={15} /></button>
         </div>
         <div className="qa-codegen-bar">
           <div className="qa-segs qa-segs--mini">
             {QA_LANGS.map(l => <button key={l.key} data-active={lang === l.key ? '1' : '0'} onClick={() => setLang(l.key)}>{l.label}</button>)}
           </div>
           <label className="qa-codegen-resolve">
-            <MiniCheck on={resolve} onClick={() => setResolve(r => !r)} /> Resolve {'{{variables}}'}
+            <MiniCheck on={resolve} onClick={() => setResolve(r => !r)} /> {t('codegen.resolveVars')}
           </label>
-          <button className="qa-hist-expbtn" onClick={copy}><Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? 'Copied' : 'Copy'}</button>
+          <button className="qa-hist-expbtn" onClick={copy}><Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? t('common.copied') : t('common.copy')}</button>
         </div>
         <div className="qa-codegen-body">
           <pre className="qa-codegen-pre">{code}</pre>

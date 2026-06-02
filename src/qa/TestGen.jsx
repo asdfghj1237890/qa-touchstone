@@ -2,6 +2,7 @@ import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, Spinner } from './components.jsx';
 import { qaCallLLM } from './llm.js';
+import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────
 const { useState: useTG } = React;
@@ -192,9 +193,9 @@ function parseText(src) {
 }
 
 const TYPE_CHIP = {
-  happy:    { label: 'Happy path', color: 'oklch(0.78 0.14 150)' },
-  edge:     { label: 'Edge',       color: 'oklch(0.8 0.14 70)' },
-  negative: { label: 'Negative',   color: 'oklch(0.72 0.16 18)' },
+  happy:    { labelKey: 'testgen.type.happy', color: 'oklch(0.78 0.14 150)' },
+  edge:     { labelKey: 'testgen.type.edge', color: 'oklch(0.8 0.14 70)' },
+  negative: { labelKey: 'testgen.type.negative', color: 'oklch(0.72 0.16 18)' },
 };
 
 // ── LLM generation ────────────────────────────────────────────────────────
@@ -250,12 +251,13 @@ function extractCases(raw) {
 }
 
 function CaseCard({ c, index, onAdd }) {
+  const { t } = useI18n();
   const [open, setOpen] = useTG(index < 2);
   const chip = TYPE_CHIP[c.type];
   return (
     <div className="tg-case qa-anim-in" style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
       <button className="tg-case-head" onClick={() => setOpen(o => !o)}>
-        <span className="tg-chip" style={{ color: chip.color, borderColor: chip.color + '66', background: chip.color + '1a' }}>{chip.label}</span>
+        <span className="tg-chip" style={{ color: chip.color, borderColor: chip.color + '66', background: chip.color + '1a' }}>{t(chip.labelKey)}</span>
         <span className="tg-case-title">{c.title}</span>
         <MethodBadge method={c.method} size="sm" />
         <span className="tg-case-status" style={{ color: window.QATheme.statusColor(c.status) }}>{c.status}</span>
@@ -265,7 +267,7 @@ function CaseCard({ c, index, onAdd }) {
         <div className="tg-case-body">
           <div className="tg-path">
             <MethodBadge method={c.method} size="sm" /> <code>{c.path}</code>
-            {c.draft && <span className="tg-draft"><Icon name="link" size={11} /> map endpoint</span>}
+            {c.draft && <span className="tg-draft"><Icon name="link" size={11} /> {t('testgen.mapEndpoint')}</span>}
           </div>
           <div className="tg-steps">
             {c.steps.map((s, i) => {
@@ -273,11 +275,11 @@ function CaseCard({ c, index, onAdd }) {
               return <div key={i} className="tg-step"><span className="tg-step-kw">{kw}</span><span>{s.replace(/^(Given|When|Then|And|But)\s*/i, '')}</span></div>;
             })}
           </div>
-          <div className="tg-assert-label">Assertions</div>
+          <div className="tg-assert-label">{t('testgen.assertions')}</div>
           <div className="tg-asserts">
             {c.assertions.map((a, i) => <div key={i} className="tg-assert"><Icon name="check" size={12} /> <code>{a}</code></div>)}
           </div>
-          <button className="tg-addone" onClick={() => onAdd && onAdd(c)}><Icon name="plus" size={12} /> Add to request tests</button>
+          <button className="tg-addone" onClick={() => onAdd && onAdd(c)}><Icon name="plus" size={12} /> {t('testgen.addOne')}</button>
         </div>
       )}
     </div>
@@ -285,6 +287,7 @@ function CaseCard({ c, index, onAdd }) {
 }
 
 function TestGen({ openSettings, onAddTests }) {
+  const { t } = useI18n();
   const [source, setSource] = useTG('bdd');
   const [toast, setToast] = useTG('');
   const caseAsserts = (c) => {
@@ -295,12 +298,12 @@ function TestGen({ openSettings, onAddTests }) {
   const addAll = () => {
     let n = 0;
     cases.forEach(c => { if (onAddTests && onAddTests(c.method, c.path, caseAsserts(c))) n++; });
-    setToast(n ? `Added tests to ${n} request${n !== 1 ? 's' : ''} in the API client` : 'No matching requests in collections');
+    setToast(n ? t('testgen.toast.addedAll', { count: n, requestLabel: t(n === 1 ? 'testgen.toast.requestOne' : 'testgen.toast.requestMany') }) : t('testgen.toast.noMatches'));
     setTimeout(() => setToast(''), 2600);
   };
   const addOne = (c) => {
     const ok = onAddTests && onAddTests(c.method, c.path, caseAsserts(c));
-    setToast(ok ? `Added ${caseAsserts(c).length} assertions to ${c.method} ${c.path}` : `No matching request for ${c.method} ${c.path}`);
+    setToast(ok ? t('testgen.toast.addedOne', { count: caseAsserts(c).length, method: c.method, path: c.path }) : t('testgen.toast.noMatch', { method: c.method, path: c.path }));
     setTimeout(() => setToast(''), 2600);
   };
   const [input, setInput] = useTG(SAMPLE_BDD);
@@ -323,7 +326,7 @@ function TestGen({ openSettings, onAddTests }) {
     setErr(''); setCases([]);
     try {
       if (name.endsWith('.pdf')) {
-        if (!window.pdfjsLib) { setErr('PDF reader not available.'); return; }
+        if (!window.pdfjsLib) { setErr(t('testgen.err.pdfUnavailable')); return; }
         setExtracting(f.name);
         const buf = await f.arrayBuffer();
         const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
@@ -333,7 +336,7 @@ function TestGen({ openSettings, onAddTests }) {
           const c = await page.getTextContent();
           text += c.items.map(i => i.str).join(' ') + '\n';
         }
-        setSource('text'); setInput(text.trim() || '(no extractable text in PDF)');
+        setSource('text'); setInput(text.trim() || t('testgen.err.noExtract'));
         setExtracting('');
       } else {
         const text = await f.text();
@@ -341,7 +344,7 @@ function TestGen({ openSettings, onAddTests }) {
         setSource(s); setInput(text);
       }
     } catch (ex) {
-      setExtracting(''); setErr('Could not read file: ' + ex.message);
+      setExtracting(''); setErr(t('testgen.err.readFile', { message: ex.message }));
     }
   };
 
@@ -349,8 +352,8 @@ function TestGen({ openSettings, onAddTests }) {
     setBusy(true); setErr(''); setCases([]);
     setTimeout(() => {
       const result = source === 'bdd' ? parseBDD(input) : source === 'openapi' ? parseOpenAPI(input) : parseText(input);
-      if (result === null) { setErr('Could not parse — check the spec is valid JSON.'); setBusy(false); return; }
-      if (result.length === 0) { setErr('No testable statements found in the input.'); setBusy(false); return; }
+      if (result === null) { setErr(t('testgen.err.invalidJson')); setBusy(false); return; }
+      if (result.length === 0) { setErr(t('testgen.err.noStatements')); setBusy(false); return; }
       setCases(result); setBusy(false);
     }, 1100);
   };
@@ -359,19 +362,19 @@ function TestGen({ openSettings, onAddTests }) {
     setErr(''); setCases([]);
     if (engine === 'heuristic') { runHeuristic(); return; }
     if (cfg.provider !== 'builtin' && !cfg.key.trim()) {
-      setErr('No API key set. Add one in Settings → AI / LLM, or use Claude (built-in).'); return;
+      setErr(t('testgen.err.noKey')); return;
     }
     if (cfg.provider === 'builtin' && !(window.claude && window.claude.complete)) {
-      setErr('Built-in Claude isn’t available here. Connect your own provider in Settings → AI / LLM, or use the Heuristic engine.'); return;
+      setErr(t('testgen.err.builtinUnavailable')); return;
     }
     setBusy(true);
     try {
       const raw = await qaCallLLM(buildPrompt(source, input));
       const parsed = extractCases(raw);
-      if (!parsed || !parsed.length) { setErr('The model didn’t return parseable cases. Try again, or use the Heuristic engine.'); setBusy(false); return; }
+      if (!parsed || !parsed.length) { setErr(t('testgen.err.badModelOutput')); setBusy(false); return; }
       setCases(parsed); setBusy(false);
     } catch (ex) {
-      setErr('LLM request failed: ' + ex.message + '. Check your key/endpoint, or use the Heuristic engine.'); setBusy(false);
+      setErr(t('testgen.err.llmFailed', { message: ex.message })); setBusy(false);
     }
   };
 
@@ -387,52 +390,55 @@ function TestGen({ openSettings, onAddTests }) {
     <div className="tg">
       <div className="tg-source">
         <div className="tg-source-head">
-          <h2>Generate test cases</h2>
-          <p>Turn a spec, BDD feature, PRD, or PDF into runnable, classified test cases.</p>
+          <h2>{t('testgen.title')}</h2>
+          <p>{t('testgen.subtitle')}</p>
         </div>
         <div className="qa-segs qa-segs--mini tg-srctabs">
-          <button data-active={source === 'bdd' ? '1' : '0'} onClick={() => switchSource('bdd')}>BDD / Gherkin</button>
-          <button data-active={source === 'openapi' ? '1' : '0'} onClick={() => switchSource('openapi')}>OpenAPI</button>
-          <button data-active={source === 'text' ? '1' : '0'} onClick={() => switchSource('text')}>Text / PRD</button>
+          <button data-active={source === 'bdd' ? '1' : '0'} onClick={() => switchSource('bdd')}>{t('testgen.source.bdd')}</button>
+          <button data-active={source === 'openapi' ? '1' : '0'} onClick={() => switchSource('openapi')}>{t('testgen.source.openapi')}</button>
+          <button data-active={source === 'text' ? '1' : '0'} onClick={() => switchSource('text')}>{t('testgen.source.text')}</button>
         </div>
         <div className="tg-editor-label">
-          <span><Icon name="fileText" size={13} /> {extracting ? `extracting ${extracting}…` : fileName}</span>
-          <button className="qa-link" onClick={() => fileRef.current && fileRef.current.click()}><Icon name="upload" size={12} /> Upload file</button>
+          <span><Icon name="fileText" size={13} /> {extracting ? t('testgen.extracting', { file: extracting }) : fileName}</span>
+          <button className="qa-link" onClick={() => fileRef.current && fileRef.current.click()}><Icon name="upload" size={12} /> {t('testgen.upload')}</button>
           <input ref={fileRef} type="file" accept=".txt,.md,.feature,.json,.pdf" style={{ display: 'none' }} onChange={onFile} />
         </div>
         <textarea className="tg-editor" spellCheck="false" value={input} onChange={e => setInput(e.target.value)}
-                  placeholder="Paste a spec, feature file, or requirements — or upload a .pdf / .txt / .json" />
-        <div className="tg-hint"><Icon name="upload" size={11} /><span>Drop in a <strong>.pdf</strong>, <strong>.txt</strong>, <strong>.feature</strong> or <strong>.json</strong> — PDFs are read and their text extracted automatically.</span></div>
+                  placeholder={t('testgen.placeholder')} />
+        <div className="tg-hint"><Icon name="upload" size={11} /><span>{t('testgen.hint')}</span></div>
 
         <div className="tg-engine">
           <div className="qa-segs qa-segs--mini">
-            <button data-active={engine === 'ai' ? '1' : '0'} onClick={() => setEngine('ai')}><Icon name="sparkle" size={13} /> AI</button>
-            <button data-active={engine === 'heuristic' ? '1' : '0'} onClick={() => setEngine('heuristic')}><Icon name="code" size={13} /> Heuristic</button>
+            <button data-active={engine === 'ai' ? '1' : '0'} onClick={() => setEngine('ai')}><Icon name="sparkle" size={13} /> {t('testgen.engine.ai')}</button>
+            <button data-active={engine === 'heuristic' ? '1' : '0'} onClick={() => setEngine('heuristic')}><Icon name="code" size={13} /> {t('testgen.engine.heuristic')}</button>
           </div>
-          {engine === 'ai' && <span className="tg-engine-model">{modelLabel}{aiBuiltin ? ' · no key' : ''}</span>}
-          <button className="qa-link tg-cfg-toggle" onClick={() => openSettings && openSettings('llm')}><Icon name="settings" size={12} /> LLM settings</button>
+          {engine === 'ai' && <span className="tg-engine-model">{modelLabel}{aiBuiltin ? ` · ${t('testgen.noKey')}` : ''}</span>}
+          <button className="qa-link tg-cfg-toggle" onClick={() => openSettings && openSettings('llm')}><Icon name="settings" size={12} /> {t('testgen.settings')}</button>
         </div>
 
         <button className="tg-gen" onClick={generate} disabled={busy || !!extracting}>
           {busy ? <Spinner size={14} /> : <Icon name="sparkle" size={15} />}
-          {busy ? (engine === 'ai' ? 'Asking model…' : 'Generating…') : (engine === 'ai' ? 'Generate with AI' : 'Generate test cases')}
+          {busy ? (engine === 'ai' ? t('testgen.asking') : t('testgen.generating')) : (engine === 'ai' ? t('testgen.generateAi') : t('testgen.generate'))}
         </button>
       </div>
 
       <div className="tg-output">
         {cases.length > 0 && (
           <div className="tg-summary qa-fade">
-            <div className="tg-sum-main"><strong>{cases.length}</strong> test cases · <strong>{endpoints}</strong> endpoints{drafts ? <> · <strong>{drafts}</strong> need mapping</> : null}</div>
+            <div className="tg-sum-main">
+              {t('testgen.summary', { cases: cases.length, endpoints })}
+              {drafts ? <>{t('testgen.summaryDrafts', { drafts })}</> : null}
+            </div>
             <div className="tg-sum-chips">
               {Object.entries(TYPE_CHIP).map(([k, v]) => counts[k] ? (
-                <span key={k} className="tg-chip" style={{ color: v.color, borderColor: v.color + '66', background: v.color + '1a' }}>{counts[k]} {v.label}</span>
+                <span key={k} className="tg-chip" style={{ color: v.color, borderColor: v.color + '66', background: v.color + '1a' }}>{counts[k]} {t(v.labelKey)}</span>
               ) : null)}
-              <button className="tg-addall" onClick={addAll}><Icon name="plus" size={13} /> Add all to collection</button>
+              <button className="tg-addall" onClick={addAll}><Icon name="plus" size={13} /> {t('testgen.addAll')}</button>
             </div>
           </div>
         )}
         {cases.length > 0 && drafts > 0 && (
-          <div className="tg-note qa-fade"><Icon name="link" size={13} /> {drafts} case{drafts > 1 ? 's were' : ' was'} drafted from free text — confirm the HTTP method &amp; path before running.</div>
+          <div className="tg-note qa-fade"><Icon name="link" size={13} /> {t('testgen.draftNote', { drafts, caseLabel: t(drafts > 1 ? 'testgen.caseMany' : 'testgen.caseOne') })}</div>
         )}
 
         <div className="tg-list">
@@ -440,15 +446,15 @@ function TestGen({ openSettings, onAddTests }) {
             <div className="tg-busy">
               <Spinner size={18} />
               <div>{engine === 'ai'
-                ? `${modelLabel} is reading the ${source === 'bdd' ? 'feature' : source === 'openapi' ? 'spec' : 'document'} & drafting cases…`
-                : `Analysing ${source === 'bdd' ? 'scenarios' : source === 'openapi' ? 'operations' : 'requirements'} & deriving assertions…`}</div>
+                ? t('testgen.busy.ai', { model: modelLabel, source: t(source === 'bdd' ? 'testgen.busy.source.feature' : source === 'openapi' ? 'testgen.busy.source.spec' : 'testgen.busy.source.document') })
+                : t('testgen.busy.heuristic', { source: t(source === 'bdd' ? 'testgen.busy.source.scenarios' : source === 'openapi' ? 'testgen.busy.source.operations' : 'testgen.busy.source.requirements') })}</div>
             </div>
           )}
           {!busy && cases.length === 0 && !err && (
             <div className="tg-empty">
               <div className="tg-empty-icon"><Icon name="sparkle" size={26} stroke={1.5} /></div>
-              <div className="tg-empty-title">No cases yet</div>
-              <div className="tg-empty-sub">Paste or upload a spec on the left and hit <kbd>Generate</kbd>.</div>
+              <div className="tg-empty-title">{t('testgen.empty.title')}</div>
+              <div className="tg-empty-sub">{t('testgen.empty.subBefore')} <kbd>{t('testgen.generate')}</kbd>{t('testgen.empty.subAfter')}</div>
             </div>
           )}
           {err && <div className="tg-err"><Icon name="x" size={15} /> {err}</div>}

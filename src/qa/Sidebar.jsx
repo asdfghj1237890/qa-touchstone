@@ -149,7 +149,7 @@ function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, 
             <div className="qa-search">
               <Icon name="search" size={13} />
               <input placeholder={t('sidebar.searchRequests')} value={query} onChange={e => setQuery(e.target.value)} />
-              {query && <button onClick={() => setQuery('')} aria-label="clear"><Icon name="x" size={12} /></button>}
+              {query && <button onClick={() => setQuery('')} aria-label={t('common.clear')}><Icon name="x" size={12} /></button>}
             </div>
             <button className="qa-side-import" title={t('sidebar.importTitle')} onClick={() => setImporting(true)}>
               <Icon name="download" size={14} /> {t('sidebar.import')}
