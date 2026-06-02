@@ -1,7 +1,8 @@
 // ── QA Companion — run a saved request for real (shared by Runner/Monitors) ─
 // Builds the same request shape the API client sends, resolves variables,
 // matches cookies, and calls executeRequest. Outside Tauri, executeRequest
-// falls back to canned responses, so batch callers still work in dev/test.
+// attempts browser live fetch in dev and falls back to canned responses; tests
+// stay deterministic on the canned path.
 import './setup.js';
 import { executeRequest } from './executor.js';
 import { buildReq } from './buildReq.js';
