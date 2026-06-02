@@ -29,15 +29,20 @@ export function normalizePath(p) { return String(p).replace(/\[\d+\]/g, '[]'); }
 // (objects and primitives alike, so key-name rules fire on object-valued keys),
 // then recursing into objects/arrays. Array elements get an indexed path so
 // sensitive-data findings can point at the exact element.
-export function walkJson(node, visit, path = '') {
+// `depth` is an internal recursion-depth guard: a pathologically deep (or
+// hostile/fuzzed) body could otherwise blow the call stack. Real API responses
+// are nowhere near WALK_MAX_DEPTH, so capping silently (no throw) is correct.
+export const WALK_MAX_DEPTH = 64;
+export function walkJson(node, visit, path = '', depth = 0) {
   if (node == null || typeof node !== 'object') return;
+  if (depth >= WALK_MAX_DEPTH) return;   // stop recursing, do not throw
   const isArr = Array.isArray(node);
   const keys = isArr ? node.map((_, i) => String(i)) : Object.keys(node);
   for (const k of keys) {
     const v = node[k];
     const p = path ? (isArr ? `${path}[${k}]` : `${path}.${k}`) : (isArr ? `[${k}]` : k);
     visit(p, isArr ? '' : k, v);
-    if (v && typeof v === 'object') walkJson(v, visit, p);
+    if (v && typeof v === 'object') walkJson(v, visit, p, depth + 1);
   }
 }
 
@@ -45,6 +50,9 @@ export const DEFAULT_ORACLE_CONFIG = { sensitive: true, schema: true, llm: false
 
 // Each rule matches by key-name (`key`) and/or value-regex (`value`). `luhn`
 // requires the matched value to pass a Luhn check (cuts card false positives).
+// Tradeoff: Luhn cuts most false positives but will still flag any Luhn-valid
+// 13–19 digit number (e.g. a sequence/order id), not just real cards; for a
+// scanner, over-flagging is the safe direction.
 const RULES = [
   { id: 'jwt',         group: 'secrets',  severity: 'high',     title: 'JWT in response',          value: /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}\b/ },
   { id: 'aws-key',     group: 'secrets',  severity: 'high',     title: 'AWS access key id',        value: /\bAKIA[0-9A-Z]{16}\b/ },
@@ -137,6 +145,9 @@ export function checkSchema(body, contract, config = DEFAULT_ORACLE_CONFIG) {
   for (const p of Object.keys(present)) {
     if (!(p in contract)) {
       findings.push({ oracle: 'schema', severity: 'low', title: 'Undeclared field', path: p, evidence: '', source: 'rule' });
+      // Nullable tolerance (deliberate): skip the type-mismatch check whenever
+      // either side is 'null'. A field that was null in the baseline, or that
+      // becomes null now, should not report a spurious type mismatch.
     } else if (present[p] !== contract[p].type && contract[p].type !== 'null' && present[p] !== 'null') {
       findings.push({ oracle: 'schema', severity: 'medium', title: 'Type mismatch', path: p, evidence: `${contract[p].type} → ${present[p]}`, source: 'rule' });
     }
@@ -156,14 +167,26 @@ export function runOracles(cell, ctx = {}) {
   const { baseline, config = DEFAULT_ORACLE_CONFIG } = ctx;
   const resp = cell && cell.response;
   if (!resp) return [];
-  const sensitive = scanSensitive(resp, config);
-  const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
-  const schema = is2xx && baseline ? checkSchema(resp.body, baseline, config) : [];
-  const leakPaths = new Set(sensitive.map(f => normalizePath(f.path)));
-  for (const f of schema) {
-    if (f.title === 'Undeclared field' && leakPaths.has(f.path)) f.severity = 'high';
+  // Safety net: an oracle should never crash a whole matrix run on a hostile or
+  // malformed body. Collect findings incrementally and, if anything unexpected
+  // throws, return what we gathered so far rather than propagating out.
+  // (scanSensitive/checkSchema still throw on programmer error in isolation;
+  // the catch only protects the matrix-run boundary.)
+  const findings = [];
+  try {
+    const sensitive = scanSensitive(resp, config);
+    findings.push(...sensitive);
+    const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+    const schema = is2xx && baseline ? checkSchema(resp.body, baseline, config) : [];
+    const leakPaths = new Set(sensitive.map(f => normalizePath(f.path)));
+    for (const f of schema) {
+      if (f.title === 'Undeclared field' && leakPaths.has(f.path)) f.severity = 'high';
+    }
+    findings.push(...schema);
+  } catch {
+    return findings;
   }
-  return [...sensitive, ...schema];
+  return findings;
 }
 
 // Tally findings by severity across the matrix results grid.
