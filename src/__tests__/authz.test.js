@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { classifyOutcome, verdictFor, DEFAULT_DENY_SET } from '../qa/authz.js';
 import { anonIdentity, defaultExpectation, withDefaults, setColumn, setRow } from '../qa/authz.js';
+import { runMatrix, summarize } from '../qa/authz.js';
 
 describe('classifyOutcome', () => {
   it('2xx is allowed', () => {
@@ -86,5 +87,62 @@ describe('setColumn / setRow', () => {
     expect(state.expect.r1.admin).toBe('skip');
     expect(state.expect.r1.anon).toBe('skip');
     expect(state.expect.r2.admin).toBe('allow'); // untouched
+  });
+});
+
+describe('runMatrix', () => {
+  const state = withDefaults({
+    identities: [anonIdentity(), { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } }],
+    endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
+    expect: { r1: { anon: 'deny', admin: 'allow' } },
+    denySet: [401, 403],
+  });
+
+  it('classifies each cell from the injected runner', async () => {
+    // anon → 401 (denied, expected deny → pass); admin → 200 (allowed, expected allow → pass)
+    const runner = (ep, id) => Promise.resolve({ status: id.id === 'anon' ? 401 : 200, time: 5 });
+    const seen = [];
+    const results = await runMatrix(state, runner, { onCell: (rid, iid, cell) => seen.push([rid, iid, cell.verdict]) });
+    expect(results.r1.anon.verdict).toBe('pass');
+    expect(results.r1.admin.verdict).toBe('pass');
+    expect(seen.length).toBe(2);  // onCell streamed both
+  });
+
+  it('flags deny-expected-but-allowed as vuln', async () => {
+    const runner = () => Promise.resolve({ status: 200, time: 1 });
+    const results = await runMatrix(state, runner, {});
+    expect(results.r1.anon.verdict).toBe('vuln');
+  });
+
+  it('skips cells whose expectation is skip', async () => {
+    const skipState = setRow(state, 'r1', 'skip');
+    let calls = 0;
+    await runMatrix(skipState, () => { calls++; return Promise.resolve({ status: 200 }); }, {});
+    expect(calls).toBe(0);
+  });
+
+  it('records a runner throw as inconclusive with an error', async () => {
+    const runner = () => Promise.reject(new Error('boom'));
+    const results = await runMatrix(state, runner, {});
+    expect(results.r1.admin.verdict).toBe('inconclusive');
+    expect(results.r1.admin.error).toMatch(/boom/);
+  });
+
+  it('stops early when the abort signal is set', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let calls = 0;
+    await runMatrix(state, () => { calls++; return Promise.resolve({ status: 200 }); }, { signal: controller.signal });
+    expect(calls).toBe(0);
+  });
+});
+
+describe('summarize', () => {
+  it('tallies verdicts across the results grid', () => {
+    const results = {
+      r1: { anon: { verdict: 'pass' }, admin: { verdict: 'vuln' } },
+      r2: { anon: { verdict: 'fail' }, admin: { verdict: 'inconclusive' } },
+    };
+    expect(summarize(results)).toEqual({ total: 4, pass: 1, fail: 1, vuln: 1, inconclusive: 1 });
   });
 });
