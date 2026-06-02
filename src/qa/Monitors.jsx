@@ -8,7 +8,9 @@ import { useI18n } from './useI18n.js';
 // ── QA Touchstone — Monitors: scheduled collection runs ────────────────────
 const { useState: useStateMON, useRef: useRefMON, useEffect: useEffMON } = React;
 
-const CADENCES = ['Every 5 minutes', 'Every 15 minutes', 'Every hour', 'Every 6 hours', 'Daily at 02:00', 'Weekly'];
+export const MONITOR_STORAGE_KEY = 'qa_monitors';
+export const MONITOR_SCHEDULER_INTERVAL_MS = 1000;
+export const CADENCES = ['Every 5 minutes', 'Every 15 minutes', 'Every hour', 'Every 6 hours', 'Daily at 02:00', 'Weekly'];
 const CADENCE_KEYS = {
   'Every 5 minutes': 'monitors.cadence.5m',
   'Every 15 minutes': 'monitors.cadence.15m',
@@ -18,14 +20,97 @@ const CADENCE_KEYS = {
   Weekly: 'monitors.cadence.weekly',
 };
 const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const FIXED_CADENCE_MS = {
+  'Every 5 minutes': 5 * MINUTE_MS,
+  'Every 15 minutes': 15 * MINUTE_MS,
+  'Every hour': HOUR_MS,
+  'Every 6 hours': 6 * HOUR_MS,
+};
 
 function cadenceLabel(cadence, t) {
   return CADENCE_KEYS[cadence] ? t(CADENCE_KEYS[cadence]) : cadence;
 }
-function nextRunLabel(value, t) {
-  if (value === 'paused') return t('monitors.paused');
-  if (value === 'in 5 min') return t('monitors.in5min');
-  return value;
+export function nextMonitorDueAt(cadence, from = Date.now()) {
+  if (cadence === 'Daily at 02:00') {
+    const d = new Date(from);
+    d.setHours(2, 0, 0, 0);
+    if (d.getTime() <= from) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  if (cadence === 'Weekly') return from + 7 * DAY_MS;
+  return from + (FIXED_CADENCE_MS[cadence] || FIXED_CADENCE_MS['Every 15 minutes']);
+}
+
+export function normalizeMonitor(mon, now = Date.now()) {
+  const enabled = mon.enabled !== false;
+  const rawDue = Number(mon.nextDueAt);
+  return {
+    ...mon,
+    enabled,
+    nextDueAt: enabled && Number.isFinite(rawDue) && rawDue > 0 ? rawDue : (enabled ? nextMonitorDueAt(mon.cadence, now) : null),
+    nextRun: enabled ? (mon.nextRun || '') : 'paused',
+    runs: Array.isArray(mon.runs) ? mon.runs.slice() : [],
+  };
+}
+
+export function nextRunLabel(mon, t, now = Date.now()) {
+  if (!mon || mon.enabled === false) return t('monitors.paused');
+  const dueAt = Number(mon.nextDueAt);
+  if (!Number.isFinite(dueAt) || dueAt <= 0) {
+    if (mon.nextRun === 'in 5 min') return t('monitors.in5min');
+    return mon.nextRun || t('monitors.dueNow');
+  }
+  const diff = dueAt - now;
+  if (diff <= 0) return t('monitors.dueNow');
+  if (diff < MINUTE_MS) return t('monitors.inLessThanMinute');
+  if (diff < HOUR_MS) return t('monitors.inMinutes', { count: Math.ceil(diff / MINUTE_MS) });
+  if (diff < DAY_MS) return t('monitors.inHours', { count: Math.ceil(diff / HOUR_MS) });
+  return t('monitors.inDays', { count: Math.ceil(diff / DAY_MS) });
+}
+
+function monitorEnv(mon, fallbackEnv) {
+  return window.QA.ENVIRONMENTS.find((e) => e.label === mon.env) || fallbackEnv || { label: 'None', baseUrl: '' };
+}
+
+export async function runMonitorCollection(mon, ctx = {}) {
+  const col = window.QA.COLLECTIONS.find(c => c.id === (mon && mon.collectionId));
+  if (!col) return null;
+  const runEnv = monitorEnv(mon, ctx.env);
+  const reqs = col.folders.flatMap(f => f.requests);
+  let passed = 0, failed = 0, totalMs = 0;
+  for (const r of reqs) {
+    let resp;
+    try {
+      resp = await qaRunSavedRequest(r, {
+        env: runEnv,
+        vars: ctx.vars,
+        cookies: ctx.cookies || [],
+        sslVerify: ctx.sslVerify !== false,
+        oauthToken: (ctx.oauthTokens || {})[r.id],
+        collectionId: col.id,
+      });
+    } catch (e) {
+      resp = { status: 0, time: 0 };
+    }
+    totalMs += resp.time || 0;
+    const asserts = window.qaRunAssertions((ctx.tests || {})[r.id] || [], resp);
+    // A request with no assertions counts as pass iff status < 400.
+    const ok = asserts.length ? asserts.every(a => a.pass) : (resp.status >= 200 && resp.status < 400);
+    if (ok) passed += 1; else failed += 1;
+  }
+  const now = new Date();
+  return {
+    at: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+    atMs: now.getTime(),
+    trigger: ctx.trigger || 'manual',
+    status: failed ? 'fail' : 'pass',
+    passed,
+    failed,
+    ms: totalMs,
+  };
 }
 
 // Sparkline bar of recent run outcomes.
@@ -42,7 +127,7 @@ function RunSparks({ runs }) {
   );
 }
 
-function MonitorCard({ mon, onToggle, onRun, running, collectionName }) {
+function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }) {
   const { t } = useI18n();
   const last = mon.runs[0];
   const total = mon.runs.length;
@@ -64,7 +149,7 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName }) {
       <div className="mon-card-stats">
         <div className="mon-stat"><span className="mon-stat-v">{cadenceLabel(mon.cadence, t)}</span><span className="mon-stat-l">{t('monitors.schedule')}</span></div>
         <div className="mon-stat"><span className="mon-stat-v" data-good={uptime >= 95 ? '1' : '0'}>{uptime}%</span><span className="mon-stat-l">{t('monitors.uptime')}</span></div>
-        <div className="mon-stat"><span className="mon-stat-v">{mon.enabled ? nextRunLabel(mon.nextRun, t) : t('monitors.paused')}</span><span className="mon-stat-l">{t('monitors.nextRun')}</span></div>
+        <div className="mon-stat"><span className="mon-stat-v">{nextRunLabel(mon, t, now)}</span><span className="mon-stat-l">{t('monitors.nextRun')}</span></div>
       </div>
 
       <RunSparks runs={mon.runs} />
@@ -89,11 +174,30 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName }) {
   );
 }
 
-function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tests = {}, oauthTokens = {} }) {
+function MonitorsPage({
+  env,
+  setRoute,
+  vars,
+  cookies = [],
+  sslVerify = true,
+  tests = {},
+  oauthTokens = {},
+  monitors: controlledMonitors,
+  setMonitors: setControlledMonitors,
+  running: controlledRunning,
+  onRunMonitor,
+  onToggleMonitor,
+  onCreateMonitor,
+}) {
   const { t } = useI18n();
-  const [monitors, setMonitors] = useStateMON(() => window.QA.MONITORS.map(m => ({ ...m, runs: m.runs.slice() })));
-  const [running, setRunning] = useStateMON(null);
+  const [localMonitors, setLocalMonitors] = useStateMON(() => window.QA.MONITORS.map(m => normalizeMonitor(m)));
+  const [localRunning, setLocalRunning] = useStateMON(null);
   const [creating, setCreating] = useStateMON(false);
+  const [nowTick, setNowTick] = useStateMON(Date.now());
+  const isControlled = Array.isArray(controlledMonitors) && typeof setControlledMonitors === 'function';
+  const monitors = isControlled ? controlledMonitors : localMonitors;
+  const setMonitors = isControlled ? setControlledMonitors : setLocalMonitors;
+  const running = controlledRunning == null ? localRunning : controlledRunning;
   const mountedRef = useRefMON(true);
   // Synchronous re-entry guard: React `running` state isn't updated within the
   // same tick, so a fast double-click would otherwise start two concurrent runs.
@@ -103,45 +207,36 @@ function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tes
   // effect would leave mountedRef stuck false and make runNow's post-await guard
   // skip setMonitors/setRunning forever (button stuck on "Running…").
   useEffMON(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  useEffMON(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), MONITOR_SCHEDULER_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
   const colName = (id) => (window.QA.COLLECTIONS.find(c => c.id === id) || {}).name || id;
 
-  const toggle = (id) => setMonitors(ms => ms.map(m => m.id === id ? { ...m, enabled: !m.enabled, nextRun: !m.enabled ? 'in 5 min' : 'paused' } : m));
+  const toggle = onToggleMonitor || ((id) => setMonitors(ms => ms.map(m => {
+    if (m.id !== id) return m;
+    const enabled = !m.enabled;
+    return { ...m, enabled, nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null, nextRun: enabled ? '' : 'paused' };
+  })));
 
-  const runNow = (id) => {
+  const runNow = onRunMonitor || ((id) => {
     if (runningRef.current) return;
     const mon = monitors.find(m => m.id === id);
-    const col = window.QA.COLLECTIONS.find(c => c.id === (mon && mon.collectionId));
-    if (!col) return;
+    if (!mon) return;
     runningRef.current = true;
-    setRunning(id);
-    const reqs = col.folders.flatMap(f => f.requests);
+    setLocalRunning(id);
     (async () => {
       try {
-        let passed = 0, failed = 0, totalMs = 0;
-        for (const r of reqs) {
-          let resp;
-          try {
-            resp = await qaRunSavedRequest(r, { env, vars, cookies, sslVerify, oauthToken: oauthTokens[r.id], collectionId: col.id });
-          } catch (e) {
-            resp = { status: 0, time: 0 };
-          }
-          totalMs += resp.time || 0;
-          const asserts = window.qaRunAssertions(tests[r.id] || [], resp);
-          // A request with no assertions counts as pass iff status < 400.
-          const ok = asserts.length ? asserts.every(a => a.pass) : (resp.status >= 200 && resp.status < 400);
-          if (ok) passed += 1; else failed += 1;
-        }
+        const run = await runMonitorCollection(mon, { env, vars, cookies, sslVerify, tests, oauthTokens, trigger: 'manual' });
+        if (!run) return;
         if (!mountedRef.current) return;
-        const now = new Date();
-        const at = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const run = { at, status: failed ? 'fail' : 'pass', passed, failed, ms: totalMs };
-        setMonitors(ms2 => ms2.map(m => m.id === id ? { ...m, runs: [run, ...m.runs].slice(0, 20) } : m));
+        setMonitors(ms2 => ms2.map(m => m.id === id ? { ...m, nextDueAt: nextMonitorDueAt(m.cadence), runs: [run, ...m.runs].slice(0, 20) } : m));
       } finally {
         runningRef.current = false;
-        if (mountedRef.current) setRunning(null);
+        if (mountedRef.current) setLocalRunning(null);
       }
     })();
-  };
+  });
 
   const activeCount = monitors.filter(m => m.enabled).length;
   const failingCount = monitors.filter(m => m.enabled && m.runs[0] && m.runs[0].status === 'fail').length;
@@ -162,7 +257,7 @@ function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tes
 
       <div className="mon-grid">
         {monitors.map(m => (
-          <MonitorCard key={m.id} mon={m} onToggle={toggle} onRun={runNow} running={running === m.id} collectionName={colName(m.collectionId)} />
+          <MonitorCard key={m.id} mon={m} onToggle={toggle} onRun={runNow} running={running === m.id} collectionName={colName(m.collectionId)} now={nowTick} />
         ))}
         {!monitors.length && (
           <div className="qa-auth-note" style={{ gridColumn: '1 / -1' }}>
@@ -173,7 +268,11 @@ function MonitorsPage({ env, setRoute, vars, cookies = [], sslVerify = true, tes
       </div>
 
       {creating && <NewMonitorModal env={env} onClose={() => setCreating(false)}
-        onCreate={(m) => { setMonitors(ms => [{ ...m, id: 'mon-' + Date.now().toString(36), runs: [], nextRun: 'in 5 min', enabled: true }, ...ms]); setCreating(false); }} />}
+        onCreate={(m) => {
+          const create = onCreateMonitor || ((next) => setMonitors(ms => [normalizeMonitor(next), ...ms]));
+          create({ ...m, id: 'mon-' + Date.now().toString(36), runs: [], nextRun: '', enabled: true });
+          setCreating(false);
+        }} />}
     </div>
   );
 }

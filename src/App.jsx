@@ -14,7 +14,7 @@ import { RealtimePage } from './qa/Realtime.jsx';
 import { Runner } from './qa/Runner.jsx';
 import { DocsPage } from './qa/Docs.jsx';
 import { cookieMatches } from './qa/cookies.js';
-import { MonitorsPage } from './qa/Monitors.jsx';
+import { MONITOR_SCHEDULER_INTERVAL_MS, MONITOR_STORAGE_KEY, MonitorsPage, nextMonitorDueAt, normalizeMonitor, runMonitorCollection } from './qa/Monitors.jsx';
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
 import { buildReq } from './qa/buildReq.js';
@@ -81,6 +81,14 @@ function hostOf(url) {
   try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
 }
 // cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
+function loadInitialMonitors() {
+  try {
+    const raw = localStorage.getItem(MONITOR_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return parsed.map(m => normalizeMonitor(m));
+  } catch {}
+  return window.QA.MONITORS.map(m => normalizeMonitor(m));
+}
 
 function AppShell() {
   const { t } = useI18n();
@@ -104,13 +112,72 @@ function AppShell() {
   const [oauthTokens, setOauthTokens] = useStateApp({}); // { [reqId]: { token, type, expiresAt, scope } }
   const [logoFlash, setLogoFlash] = useStateApp(0); // bumps on a successful response to flash the brand mark
   const [perfRunning, setPerfRunning] = useStateApp(false); // true while a performance test is in flight
+  const [monitors, setMonitors] = useStateApp(loadInitialMonitors);
+  const [monitorRunning, setMonitorRunning] = useStateApp(null);
   const sendSeq = useRefApp(0);
+  const monitorsRef = useRefApp(monitors);
+  const monitorCtxRef = useRefApp({});
+  const monitorRunningRef = useRefApp(null);
+
+  const runMonitorById = (id, trigger = 'manual') => {
+    if (monitorRunningRef.current) return;
+    const mon = monitorsRef.current.find(m => m.id === id);
+    if (!mon) return;
+    monitorRunningRef.current = id;
+    setMonitorRunning(id);
+    (async () => {
+      try {
+        const run = await runMonitorCollection(mon, { ...monitorCtxRef.current, trigger });
+        const now = Date.now();
+        setMonitors(ms => ms.map(m => {
+          if (m.id !== id) return m;
+          const nextDueAt = m.enabled ? nextMonitorDueAt(m.cadence, now) : null;
+          return run
+            ? { ...m, nextDueAt, nextRun: '', runs: [run, ...(m.runs || [])].slice(0, 20) }
+            : { ...m, nextDueAt, nextRun: '' };
+        }));
+      } finally {
+        if (monitorRunningRef.current === id) monitorRunningRef.current = null;
+        setMonitorRunning(null);
+      }
+    })();
+  };
+
+  const toggleMonitor = (id) => setMonitors(ms => ms.map(m => {
+    if (m.id !== id) return m;
+    const enabled = !m.enabled;
+    return { ...m, enabled, nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null, nextRun: enabled ? '' : 'paused' };
+  }));
+
+  const createMonitor = (mon) => setMonitors(ms => [normalizeMonitor(mon), ...ms]);
 
   // Apply theme whenever the accent changes; persist it.
   useEffectApp(() => {
     window.QATheme.applyTheme(rootRef.current, { direction: 'graphite', accent, density: 'comfortable', uiFont: 'mono' });
     try { localStorage.setItem('qa_accent', accent); } catch {}
   }, [accent]);
+
+  useEffectApp(() => { monitorsRef.current = monitors; }, [monitors]);
+
+  useEffectApp(() => {
+    monitorCtxRef.current = { env, vars, cookies, sslVerify, tests, oauthTokens };
+  }, [env, vars, cookies, sslVerify, tests, oauthTokens]);
+
+  useEffectApp(() => {
+    try { localStorage.setItem(MONITOR_STORAGE_KEY, JSON.stringify(monitors)); } catch {}
+  }, [monitors]);
+
+  useEffectApp(() => {
+    const tick = () => {
+      if (monitorRunningRef.current) return;
+      const now = Date.now();
+      const due = monitorsRef.current.find(m => m.enabled && Number(m.nextDueAt) <= now);
+      if (due) runMonitorById(due.id, 'schedule');
+    };
+    tick();
+    const timer = setInterval(tick, MONITOR_SCHEDULER_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   const openSettings = (tab = 'appearance') => { setSettingsTab(tab); setRoute('settings'); };
 
@@ -293,7 +360,10 @@ function AppShell() {
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
-          {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} vars={vars} cookies={cookies} sslVerify={sslVerify} tests={tests} oauthTokens={oauthTokens} />}
+          {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} vars={vars} cookies={cookies} sslVerify={sslVerify} tests={tests} oauthTokens={oauthTokens}
+                                                  monitors={monitors} setMonitors={setMonitors} running={monitorRunning}
+                                                  onRunMonitor={(id) => runMonitorById(id, 'manual')}
+                                                  onToggleMonitor={toggleMonitor} onCreateMonitor={createMonitor} />}
           {route === 'testgen' && <TestGen openSettings={openSettings} onAddTests={addTestsForCase} />}
           {route === 'api' && (
             <div className="qa-api">

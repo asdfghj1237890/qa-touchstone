@@ -39,8 +39,8 @@ Tauri app 裡。
   variables；透過本機 cookie jar replay 符合 domain/path 的 cookies。
 - **Collection Runner**：批次執行選定 requests，支援 CSV/JSON data
   iteration，並用 live responses 計算 assertions。
-- **Monitors**：建立 monitor cards，並用「Run now」觸發真實 collection
-  checks。背景 cadence 排程仍是後續工作。
+- **Monitors**：建立 monitor cards，可手動觸發真實 collection checks；啟用後
+  也會在 app 執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
   提供 live metrics、SLO scoring、history 與可匯出的 reports。
 - **AI assistance**：從 BDD、OpenAPI、PRD 或類 PDF 文字產生分類好的測試案例；
