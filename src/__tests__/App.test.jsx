@@ -12,9 +12,22 @@ const RAIL_LABELS = [
   'Monitors', 'API Docs', 'Performance', 'Settings',
 ];
 
+function installLocalStorage(seed = {}) {
+  let store = { ...seed };
+  const storage = {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+  Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
+}
+
 describe('App (redesign shell)', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    installLocalStorage({ qa_locale: 'en-US' });
   });
 
   it('renders the title bar and lands on Home', () => {
@@ -90,6 +103,16 @@ describe('App (redesign shell)', () => {
     expect(screen.getByText('Appearance')).toBeInTheDocument();
     expect(screen.getByText('Environment')).toBeInTheDocument();
     expect(screen.getByText('AI / LLM')).toBeInTheDocument();
+  });
+
+  it('switches the UI language to Traditional Chinese', () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByText('English (US)').closest('button'));
+    fireEvent.click(screen.getByRole('button', { name: '繁體中文' }));
+    expect(document.documentElement.lang).toBe('zh-TW');
+    expect(document.querySelector('.qa-titlebar-route').textContent).toBe('設定');
+    expect(screen.getByRole('button', { name: '首頁' })).toBeInTheDocument();
   });
 
   it('renders the remaining feature routes without crashing', () => {

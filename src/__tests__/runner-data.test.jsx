@@ -11,11 +11,33 @@ vi.mock('../qa/sendRequest.js', () => ({
 }));
 
 import { Runner } from '../qa/Runner.jsx';
+import { I18nProvider } from '../qa/i18n.jsx';
+
+function installLocalStorage(seed = {}) {
+  let store = { ...seed };
+  const storage = {
+    getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
+    setItem: (key, value) => { store[key] = String(value); },
+    removeItem: (key) => { delete store[key]; },
+    clear: () => { store = {}; },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+  Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
+}
+
+function renderRunner(props) {
+  return render(
+    <I18nProvider>
+      <Runner {...props} />
+    </I18nProvider>
+  );
+}
 
 describe('Runner data iteration', () => {
   afterEach(() => cleanup());
 
   beforeEach(() => {
+    installLocalStorage({ qa_locale: 'en-US' });
     runMock.mockReset();
     runMock.mockResolvedValue({ status: 200, statusText: 'OK', time: 1, size: 0, body: {}, headers: {} });
     window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
@@ -26,16 +48,14 @@ describe('Runner data iteration', () => {
   });
 
   it('passes each CSV row as local variables to the real request helper', async () => {
-    render(
-      <Runner
-        env={{ label: 'None', baseUrl: '' }}
-        vars={window.QA.VARIABLES}
-        tests={{}}
-        cookies={[]}
-        sslVerify={true}
-        oauthTokens={{}}
-      />
-    );
+    renderRunner({
+      env: { label: 'None', baseUrl: '' },
+      vars: window.QA.VARIABLES,
+      tests: {},
+      cookies: [],
+      sslVerify: true,
+      oauthTokens: {},
+    });
 
     fireEvent.change(screen.getByPlaceholderText(/CSV \/ JSON/), {
       target: { value: 'userId\n42\n43' },

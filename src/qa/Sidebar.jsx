@@ -3,6 +3,7 @@ import './setup.js';
 import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo, highlightJson } from './components.jsx';
 import { exportCollection } from './ExportData.jsx';
 import { ImportModal } from './ImportData.jsx';
+import { useI18n } from './useI18n.js';
 
 // ── QA Companion — nav rail + collections sidebar ─────────────────────────
 const { useState } = React;
@@ -60,16 +61,17 @@ function exportHistory(items, fmt) {
 }
 
 function NavRail({ route, setRoute, busy, flashAt, active }) {
+  const { t } = useI18n();
   const items = [
-    { key: 'home', icon: 'home', label: 'Home' },
-    { key: 'testgen', icon: 'sparkle', label: 'Test Gen' },
-    { key: 'api', icon: 'send', label: 'API Client' },
-    { key: 'realtime', icon: 'activity', label: 'Realtime' },
-    { key: 'runner', icon: 'play', label: 'Runner' },
-    { key: 'monitors', icon: 'clock', label: 'Monitors' },
-    { key: 'docs', icon: 'fileText', label: 'API Docs' },
-    { key: 'perf', icon: 'gauge', label: 'Performance' },
-    { key: 'settings', icon: 'settings', label: 'Settings' },
+    { key: 'home', icon: 'home', label: t('route.home') },
+    { key: 'testgen', icon: 'sparkle', label: t('route.testgen') },
+    { key: 'api', icon: 'send', label: t('route.api') },
+    { key: 'realtime', icon: 'activity', label: t('route.realtime') },
+    { key: 'runner', icon: 'play', label: t('route.runner') },
+    { key: 'monitors', icon: 'clock', label: t('route.monitors') },
+    { key: 'docs', icon: 'fileText', label: t('route.docs') },
+    { key: 'perf', icon: 'gauge', label: t('route.perf') },
+    { key: 'settings', icon: 'settings', label: t('route.settings') },
   ];
   return (
     <nav className="qa-rail">
@@ -103,6 +105,7 @@ function CollectionRow({ req, active, onClick }) {
 }
 
 function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, onSelectHistory, onImport, dataVersion }) {
+  const { t } = useI18n();
   const { COLLECTIONS, ENVIRONMENTS } = window.QA;
   // Default to the first collection open; everything else collapsed. Avoids
   // hard-coding seed IDs that may not exist after the workspace is reshaped.
@@ -122,21 +125,21 @@ function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, 
     <aside className="qa-side">
       {/* Environment selector */}
       <div className="qa-side-env">
-        <label className="qa-side-label"><Icon name="globe" size={12} /> Environment</label>
+        <label className="qa-side-label"><Icon name="globe" size={12} /> {t('sidebar.environment')}</label>
         <Dropdown value={env.label} options={ENVIRONMENTS.map(e => e.label)}
                   onChange={(label) => setEnv(ENVIRONMENTS.find(x => x.label === label))} />
         {env.baseUrl
           ? <div className="qa-env-url">{env.baseUrl}</div>
-          : <div className="qa-env-url qa-env-url--empty">No base URL set</div>}
+          : <div className="qa-env-url qa-env-url--empty">{t('sidebar.noBaseUrl')}</div>}
       </div>
 
       {/* Tabs: collections / history */}
       <div className="qa-side-tabs">
         <button data-active={tab === 'collections' ? '1' : '0'} onClick={() => setTab('collections')}>
-          <Icon name="layers" size={13} /> Collections
+          <Icon name="layers" size={13} /> {t('sidebar.collections')}
         </button>
         <button data-active={tab === 'history' ? '1' : '0'} onClick={() => setTab('history')}>
-          <Icon name="history" size={13} /> History
+          <Icon name="history" size={13} /> {t('sidebar.history')}
         </button>
       </div>
 
@@ -145,19 +148,19 @@ function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, 
           <div className="qa-side-tools">
             <div className="qa-search">
               <Icon name="search" size={13} />
-              <input placeholder="Search requests" value={query} onChange={e => setQuery(e.target.value)} />
+              <input placeholder={t('sidebar.searchRequests')} value={query} onChange={e => setQuery(e.target.value)} />
               {query && <button onClick={() => setQuery('')} aria-label="clear"><Icon name="x" size={12} /></button>}
             </div>
-            <button className="qa-side-import" title="Import Postman / OpenAPI" onClick={() => setImporting(true)}>
-              <Icon name="download" size={14} /> Import
+            <button className="qa-side-import" title={t('sidebar.importTitle')} onClick={() => setImporting(true)}>
+              <Icon name="download" size={14} /> {t('sidebar.import')}
             </button>
             <div className="qa-side-exportwrap">
-              <button className="qa-side-import qa-side-iconbtn" title="Export collection to Postman JSON" onClick={() => setExportMenu(m => !m)}>
+              <button className="qa-side-import qa-side-iconbtn" title={t('sidebar.exportTitle')} onClick={() => setExportMenu(m => !m)}>
                 <Icon name="upload" size={14} />
               </button>
               {exportMenu && (
                 <div className="qa-export-menu">
-                  <div className="qa-export-menu-h">Export as Postman JSON</div>
+                  <div className="qa-export-menu-h">{t('sidebar.exportAsPostman')}</div>
                   {COLLECTIONS.map(c => (
                     <button key={c.id} onClick={() => { window.exportCollection(c, env); setExportMenu(false); }}>
                       <Icon name="folder" size={13} /> <span>{c.name}</span><span className="qa-col-count">{c.count}</span>
@@ -198,18 +201,18 @@ function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, 
 
       {tab === 'history' && (
         <div className="qa-side-scroll">
-          {history.length === 0 && <div className="qa-empty-mini">No requests yet</div>}
+          {history.length === 0 && <div className="qa-empty-mini">{t('sidebar.noRequests')}</div>}
           {history.length > 0 && (
             <div className="qa-hist-bar">
-              <span className="qa-meta">{hSel.length ? `${hSel.length} selected` : `${history.length} calls`}</span>
+              <span className="qa-meta">{hSel.length ? t('sidebar.selected', { count: hSel.length }) : t('sidebar.calls', { count: history.length })}</span>
               <div className="qa-hist-export">
                 <button className="qa-hist-expbtn" disabled={!hSel.length} onClick={() => setHMenu(m => !m)}>
-                  <Icon name="download" size={12} /> Export
+                  <Icon name="download" size={12} /> {t('sidebar.export')}
                 </button>
                 {hMenu && hSel.length > 0 && (
                   <div className="qa-hist-menu">
                     {['html', 'json', 'csv'].map(f => (
-                      <button key={f} onClick={() => { exportHistory(hSel.slice().sort((a, b) => a - b).map(i => history[i]), f); setHMenu(false); }}>{f.toUpperCase()} report</button>
+                      <button key={f} onClick={() => { exportHistory(hSel.slice().sort((a, b) => a - b).map(i => history[i]), f); setHMenu(false); }}>{t('sidebar.report', { format: f.toUpperCase() })}</button>
                     ))}
                   </div>
                 )}

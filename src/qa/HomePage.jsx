@@ -1,20 +1,22 @@
 import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, PulseLogo } from './components.jsx';
+import { useI18n } from './useI18n.js';
 
 // ── QA Companion — Home dashboard ─────────────────────────────────────────
 function HomePage({ setRoute, history, onOpenRequest, env }) {
+  const { t } = useI18n();
   const tiles = [
-    { key: 'testgen', icon: 'sparkle', title: 'Test Generation', desc: 'Turn a spec, BDD feature, or PRD into classified test cases.', cta: 'Generate', onClick: () => setRoute('testgen') },
-    { key: 'api', icon: 'send', title: 'API Client', desc: 'Build requests, switch environments, and inspect responses.', cta: 'Open client', onClick: () => setRoute('api') },
-    { key: 'perf', icon: 'gauge', title: 'Performance', desc: 'Run performance, load, and stress tests with live metrics.', cta: 'Open tests', onClick: () => setRoute('perf') },
-    { key: 'settings', icon: 'key', title: 'Credentials & Env', desc: 'Manage credential profiles, tokens, and environment paths.', cta: 'Open settings', onClick: () => setRoute('settings') },
+    { key: 'testgen', icon: 'sparkle', title: t('home.tile.testgen.title'), desc: t('home.tile.testgen.desc'), cta: t('home.tile.testgen.cta'), onClick: () => setRoute('testgen') },
+    { key: 'api', icon: 'send', title: t('home.tile.api.title'), desc: t('home.tile.api.desc'), cta: t('home.tile.api.cta'), onClick: () => setRoute('api') },
+    { key: 'perf', icon: 'gauge', title: t('home.tile.perf.title'), desc: t('home.tile.perf.desc'), cta: t('home.tile.perf.cta'), onClick: () => setRoute('perf') },
+    { key: 'settings', icon: 'key', title: t('home.tile.settings.title'), desc: t('home.tile.settings.desc'), cta: t('home.tile.settings.cta'), onClick: () => setRoute('settings') },
   ];
   const caps = [
-    { icon: 'shield', label: '5 auth methods' },
-    { icon: 'layers', label: 'Postman collections' },
-    { icon: 'terminal', label: 'Local execution' },
-    { icon: 'gauge', label: 'Load & stress testing' },
+    { icon: 'shield', label: t('home.cap.auth') },
+    { icon: 'layers', label: t('home.cap.collections') },
+    { icon: 'terminal', label: t('home.cap.execution') },
+    { icon: 'gauge', label: t('home.cap.load') },
   ];
   const collTotal = window.QA.COLLECTIONS.reduce((n, c) => n + c.count, 0);
 
@@ -25,7 +27,7 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
           <div className="qa-home-badge"><PulseLogo size={42} /></div>
           <div>
             <h1>QA Companion</h1>
-            <p>Local-first API client for QA workflows — Postman-compatible.</p>
+            <p>{t('home.subtitle')}</p>
           </div>
           <span className="qa-chip">v0.14.0</span>
         </header>
@@ -44,8 +46,8 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
         <div className="qa-home-cols">
           <section className="qa-panel">
             <div className="qa-panel-head">
-              <span><Icon name="history" size={14} /> Recent requests</span>
-              <button className="qa-link" onClick={() => setRoute('api')}>View client</button>
+              <span><Icon name="history" size={14} /> {t('home.recent')}</span>
+              <button className="qa-link" onClick={() => setRoute('api')}>{t('home.viewClient')}</button>
             </div>
             <div className="qa-recent">
               {history.slice(0, 5).map((h, i) => (
@@ -60,12 +62,12 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
           </section>
 
           <section className="qa-panel">
-            <div className="qa-panel-head"><span><Icon name="globe" size={14} /> Workspace</span></div>
+            <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('home.workspace')}</span></div>
             <div className="qa-ws">
-              <div className="qa-ws-row"><span>Active environment</span><strong>{env.label}</strong></div>
-              <div className="qa-ws-row"><span>Collections</span><strong>{window.QA.COLLECTIONS.length}</strong></div>
-              <div className="qa-ws-row"><span>Saved requests</span><strong>{collTotal}</strong></div>
-              <div className="qa-ws-row"><span>Credential profiles</span><strong>{window.QA.CRED_PROFILES.length}</strong></div>
+              <div className="qa-ws-row"><span>{t('home.activeEnv')}</span><strong>{env.label}</strong></div>
+              <div className="qa-ws-row"><span>{t('home.collections')}</span><strong>{window.QA.COLLECTIONS.length}</strong></div>
+              <div className="qa-ws-row"><span>{t('home.savedRequests')}</span><strong>{collTotal}</strong></div>
+              <div className="qa-ws-row"><span>{t('home.credentialProfiles')}</span><strong>{window.QA.CRED_PROFILES.length}</strong></div>
             </div>
             <div className="qa-caps">
               {caps.map(c => (

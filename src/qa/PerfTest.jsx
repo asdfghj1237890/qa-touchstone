@@ -4,6 +4,7 @@ import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
 import api from '../api/index.js';
 import { buildScript } from './k6gen.js';
 import { makeState, feed, snapshot } from './k6parse.js';
+import { useI18n } from './useI18n.js';
 
 // ── QA Companion — Performance / Load / Stress (SLO · stages · history) ────
 const { useState: usePF, useRef: useRefPF, useEffect: useEffPF } = React;
@@ -62,11 +63,11 @@ function TargetRequestOption({ item }) {
 // previous synthetic-mode peaks (120/200/500) would hammer public demo APIs.
 // Users can crank stages up in the editor for their own infrastructure.
 const TYPE_META = {
-  performance: { label: 'Performance', icon: 'activity', blurb: 'Baseline latency & throughput under expected load.',
+  performance: { labelKey: 'perf.type.performance', icon: 'activity', blurbKey: 'perf.blurb.performance',
     stages: [{ d: 8, t: 5 }, { d: 30, t: 5 }, { d: 4, t: 0 }], slo: { p80: 200, p90: 300, p95: 400, p99: 600, err: 1 } },
-  load:        { label: 'Load', icon: 'users', blurb: 'Sustained peak traffic for a fixed duration.',
+  load:        { labelKey: 'perf.type.load', icon: 'users', blurbKey: 'perf.blurb.load',
     stages: [{ d: 15, t: 15 }, { d: 40, t: 15 }, { d: 8, t: 0 }], slo: { p80: 400, p90: 600, p95: 800, p99: 1200, err: 2 } },
-  stress:      { label: 'Stress', icon: 'gauge', blurb: 'Ramp beyond expected to find breaking points.',
+  stress:      { labelKey: 'perf.type.stress', icon: 'gauge', blurbKey: 'perf.blurb.stress',
     stages: [{ d: 12, t: 20 }, { d: 14, t: 30 }, { d: 14, t: 40 }, { d: 8, t: 0 }], slo: { p80: 800, p90: 1100, p95: 1500, p99: 2500, err: 10 } },
 };
 const DEFAULT_CONN = { keepAlive: true, timeout: 30000, maxConns: 200 };
@@ -201,7 +202,7 @@ function exportRuns(list, fmt) {
 // Format a seconds value for the time axis: 8 -> "8s", 63 -> "63s".
 const fmtSecs = (s) => `${Math.round(s)}s`;
 
-function Chart({ pts, max, color, label, unit, dur }) {
+function Chart({ pts, max, color, label, unit, dur, emptyLabel = 'No data yet' }) {
   const [hover, setHover] = usePF(null); // { i, leftPct, topPct, t, v } | null
   const n = pts.length;
   const coords = pts.map((v, i) => [(i / Math.max(1, N_POINTS - 1)) * 100, 100 - (Math.min(v, max) / max) * 100]);
@@ -246,7 +247,7 @@ function Chart({ pts, max, color, label, unit, dur }) {
               </div>
             </>
           )}
-          {n < 2 && <div className="pf-chart-empty">No data yet</div>}
+          {n < 2 && <div className="pf-chart-empty">{emptyLabel}</div>}
         </div>
       </div>
       <div className="pf-chart-xaxis">
@@ -278,6 +279,7 @@ function Stepper({ value, onChange, min = 0, disabled, width = 110 }) {
 }
 
 function PerfTest({ env, vars, onRunningChange }) {
+  const { t } = useI18n();
   const [targetCollection, setTargetCollection] = usePF(() => window.QA.COLLECTIONS[0]?.id || '');
   const [target, setTarget] = usePF('usr-list');
   const [type, setType] = usePF('load');
@@ -530,16 +532,16 @@ function PerfTest({ env, vars, onRunningChange }) {
     const { p80, p90, p95, p99, err } = final.m;
     const sentSomething = final.m.sent > 0;
     const rows = [
-      { label: 'p80 response time', actual: p80, unit: 'ms', limit: slo.p80, pass: sentSomething && p80 <= slo.p80 },
-      { label: 'p90 response time', actual: p90, unit: 'ms', limit: slo.p90, pass: sentSomething && p90 <= slo.p90 },
-      { label: 'p95 response time', actual: p95, unit: 'ms', limit: slo.p95, pass: sentSomething && p95 <= slo.p95 },
-      { label: 'p99 response time', actual: p99, unit: 'ms', limit: slo.p99, pass: sentSomething && p99 <= slo.p99 },
-      { label: 'Error rate', actual: err, unit: '%', limit: slo.err, pass: sentSomething && err <= slo.err },
+      { label: t('perf.row.p80'), actual: p80, unit: 'ms', limit: slo.p80, pass: sentSomething && p80 <= slo.p80 },
+      { label: t('perf.row.p90'), actual: p90, unit: 'ms', limit: slo.p90, pass: sentSomething && p90 <= slo.p90 },
+      { label: t('perf.row.p95'), actual: p95, unit: 'ms', limit: slo.p95, pass: sentSomething && p95 <= slo.p95 },
+      { label: t('perf.row.p99'), actual: p99, unit: 'ms', limit: slo.p99, pass: sentSomething && p99 <= slo.p99 },
+      { label: t('perf.errorRate'), actual: err, unit: '%', limit: slo.err, pass: sentSomething && err <= slo.err },
     ];
     const pass = sentSomething && !runErr && rows.every((r) => r.pass);
     const summary = {
       ts: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      type, typeLabel: TYPE_META[type].label, maxVus, dur: total,
+      type, typeLabel: t(TYPE_META[type].labelKey), maxVus, dur: total,
       m: final.m, latSeries: final.latSeries, rpsSeries: final.rpsSeries,
       dist: final.dist, broke: final.broke, slo: { ...slo }, rows, pass,
       error: runErr ? String(runErr) : null,
@@ -573,35 +575,36 @@ function PerfTest({ env, vars, onRunningChange }) {
   const maxLat = shown && shown.latSeries.length ? Math.max(200, ...shown.latSeries) * 1.1 : 200;
   const maxRps = shown && shown.rpsSeries.length ? Math.max(50, ...shown.rpsSeries) * 1.1 : 50;
   const d = (k, better) => (baseline && shown && !running) ? shown.m[k] - baseline.m[k] : null;
+  const activeTypeLabel = t(TYPE_META[type].labelKey);
 
   return (
     <div className="pf">
       <div className="pf-config">
         <div className="pf-config-head">
-          <h2>{TYPE_META[type].label} test</h2>
-          <p>{TYPE_META[type].blurb}</p>
+          <h2>{t('perf.heading', { type: activeTypeLabel })}</h2>
+          <p>{t(TYPE_META[type].blurbKey)}</p>
         </div>
 
-        <label className="qa-side-label">Test type</label>
+        <label className="qa-side-label">{t('perf.testType')}</label>
         <div className="pf-types">
           {Object.entries(TYPE_META).map(([k, meta]) => (
             <button key={k} className="pf-type" data-active={type === k ? '1' : '0'} onClick={() => !running && pickType(k)} disabled={running}>
-              <Icon name={meta.icon} size={17} /><span className="pf-type-name">{meta.label}</span>
+              <Icon name={meta.icon} size={17} /><span className="pf-type-name">{t(meta.labelKey)}</span>
             </button>
           ))}
         </div>
 
-        <label className="qa-side-label" style={{ marginTop: 16 }}>Collection</label>
+        <label className="qa-side-label" style={{ marginTop: 16 }}>{t('perf.collection')}</label>
         <Dropdown value={activeCollection} options={collections} onChange={setTargetCollection} />
 
-        <label className="qa-side-label" style={{ marginTop: 16 }}>Target request</label>
+        <label className="qa-side-label" style={{ marginTop: 16 }}>{t('perf.targetRequest')}</label>
         <Dropdown value={target} options={flat} onChange={setTarget} className="pf-target-dd"
                   renderValue={(item) => <TargetRequestOption item={item} />}
                   renderOption={(item) => <TargetRequestOption item={item} />} />
 
-        <div className="pf-sec-label"><span>Load stages</span><span className="qa-meta">{total}s · peak {maxVus} VUs</span></div>
+        <div className="pf-sec-label"><span>{t('perf.loadStages')}</span><span className="qa-meta">{t('perf.stageMeta', { seconds: total, vus: maxVus })}</span></div>
         <div className="pf-stages">
-          <div className="pf-stage pf-stage--head"><span>Duration (s)</span><span>Target VUs</span><span /></div>
+          <div className="pf-stage pf-stage--head"><span>{t('perf.duration')}</span><span>{t('perf.targetVus')}</span><span /></div>
           {stages.map((st, i) => (
             <div className="pf-stage" key={i}>
               <Stepper value={st.d} onChange={v => setStage(i, 'd', v)} min={1} disabled={running} width="100%" />
@@ -609,36 +612,36 @@ function PerfTest({ env, vars, onRunningChange }) {
               <button className="pf-stage-del" onClick={() => !running && delStage(i)} disabled={running || stages.length <= 1}><Icon name="x" size={12} /></button>
             </div>
           ))}
-          <button className="pf-stage-add" onClick={() => !running && addStage()} disabled={running}><Icon name="plus" size={12} /> Add stage</button>
+          <button className="pf-stage-add" onClick={() => !running && addStage()} disabled={running}><Icon name="plus" size={12} /> {t('perf.addStage')}</button>
         </div>
 
-        <div className="pf-sec-label"><span>Pass / fail thresholds</span><span className="qa-meta">SLO · ms</span></div>
+        <div className="pf-sec-label"><span>{t('perf.thresholds')}</span><span className="qa-meta">{t('perf.slo')}</span></div>
         <div className="pf-slo-grid">
           {['p80', 'p90', 'p95', 'p99'].map(k => (
             <div className="pf-slo-cell" key={k}><span>{k} ≤</span><Stepper value={slo[k]} onChange={v => setSlo({ ...slo, [k]: v })} min={1} disabled={running} width="76px" /></div>
           ))}
         </div>
         <div className="pf-params" style={{ marginTop: 10 }}>
-          <div className="pf-param"><span>Error rate<em>%</em></span><Stepper value={slo.err} onChange={v => setSlo({ ...slo, err: v })} min={0} disabled={running} /></div>
+          <div className="pf-param"><span>{t('perf.errorRate')}<em>%</em></span><Stepper value={slo.err} onChange={v => setSlo({ ...slo, err: v })} min={0} disabled={running} /></div>
         </div>
 
-        <div className="pf-sec-label"><span>Connection</span></div>
+        <div className="pf-sec-label"><span>{t('perf.connection')}</span></div>
         <div className="pf-params">
-          <div className="pf-param"><span>Keep-alive</span>
+          <div className="pf-param"><span>{t('perf.keepAlive')}</span>
             <button className="pf-toggle" data-on={conn.keepAlive ? '1' : '0'} disabled={running} onClick={() => setConn({ ...conn, keepAlive: !conn.keepAlive })}><span /></button>
           </div>
-          <div className="pf-param"><span>Timeout<em>ms</em></span><Stepper value={conn.timeout} onChange={v => setConn({ ...conn, timeout: v })} min={1} disabled={running} /></div>
-          <div className="pf-param"><span>Max connections</span><Stepper value={conn.maxConns} onChange={v => setConn({ ...conn, maxConns: v })} min={1} disabled={running} /></div>
+          <div className="pf-param"><span>{t('perf.timeout')}<em>ms</em></span><Stepper value={conn.timeout} onChange={v => setConn({ ...conn, timeout: v })} min={1} disabled={running} /></div>
+          <div className="pf-param"><span>{t('perf.maxConnections')}</span><Stepper value={conn.maxConns} onChange={v => setConn({ ...conn, maxConns: v })} min={1} disabled={running} /></div>
         </div>
 
         <button className="pf-run" data-running={running ? '1' : '0'} onClick={run}>
           {running ? <Icon name="stop" size={15} /> : <Icon name="play" size={15} />}
-          {running ? 'Stop test' : 'Run test'}
+          {running ? t('perf.stop') : t('perf.run')}
         </button>
         {phase !== 'idle' && (
           <div className="pf-prog">
             <div className="pf-prog-bar"><span style={{ width: `${Math.round(progress * 100)}%` }} /></div>
-            <div className="pf-prog-meta"><span>{Math.round(progress * total)}s / {total}s</span><span>{running ? 'running' : 'completed'}</span></div>
+            <div className="pf-prog-meta"><span>{Math.round(progress * total)}s / {total}s</span><span>{running ? t('perf.running') : t('perf.completed')}</span></div>
           </div>
         )}
       </div>
@@ -647,7 +650,7 @@ function PerfTest({ env, vars, onRunningChange }) {
         {!shown ? (
           <div className="pf-empty">
             <div className="pf-empty-icon"><Icon name="gauge" size={28} stroke={1.5} /></div>
-            <div className="pf-empty-title">Configure & run a test</div>
+            <div className="pf-empty-title">{t('perf.emptyTitle')}</div>
             <div className="pf-empty-sub"><MethodBadge method={tgt.method} size="sm" /> {tgt.name} · {maxVus} VUs · {total}s</div>
           </div>
         ) : (
@@ -656,8 +659,8 @@ function PerfTest({ env, vars, onRunningChange }) {
               <div className="pf-verdict" data-pass={shown.pass ? '1' : '0'}>
                 <div className="pf-verdict-head">
                   <Icon name={shown.pass ? 'check' : 'x'} size={16} stroke={3} />
-                  <strong>{shown.pass ? 'PASS' : 'FAIL'}</strong><span>against SLO</span>
-                  {viewIdx > 0 && <span className="pf-viewing">· viewing run from {shown.ts}</span>}
+                  <strong>{shown.pass ? t('common.pass') : t('common.fail')}</strong><span>{t('perf.verdictAgainst')}</span>
+                  {viewIdx > 0 && <span className="pf-viewing">{t('perf.viewing', { time: shown.ts })}</span>}
                 </div>
                 <div className="pf-vrows">
                   {shown.rows.map((r, i) => (
@@ -665,37 +668,37 @@ function PerfTest({ env, vars, onRunningChange }) {
                       <Icon name={r.pass ? 'check' : 'x'} size={12} stroke={3} />
                       <span className="pf-vrow-label">{r.label}</span>
                       <strong>{r.actual}{r.unit}</strong>
-                      <span className="qa-meta">limit {r.limit}{r.unit}</span>
+                      <span className="qa-meta">{t('perf.limit', { value: `${r.limit}${r.unit}` })}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
             {shown.broke && type === 'stress' && (
-              <div className="pf-broke"><Icon name="zap" size={15} /> Breaking point at <strong>~{shown.broke}s</strong> — error rate exceeded 5%.</div>
+              <div className="pf-broke"><Icon name="zap" size={15} /> {t('perf.breaking')} <strong>~{shown.broke}s</strong> {t('perf.breakingTail')}</div>
             )}
             {baseline && (
-              <div className="pf-cmp"><Icon name="history" size={12} /> vs previous run ({baseline.typeLabel}, {baseline.ts})</div>
+              <div className="pf-cmp"><Icon name="history" size={12} /> {t('perf.vsPrevious', { type: baseline.typeLabel, time: baseline.ts })}</div>
             )}
 
             <div className="pf-stats">
-              <Stat label="Requests" value={shown.m.sent.toLocaleString()} unit="" />
-              <Stat label="Peak rps" value={shown.m.rps.toLocaleString()} unit="" accent delta={d('rps')} better="high" />
-              <Stat label="Avg" value={shown.m.avg} unit=" ms" delta={d('avg')} better="low" />
+              <Stat label={t('perf.stat.requests')} value={shown.m.sent.toLocaleString()} unit="" />
+              <Stat label={t('perf.stat.peakRps')} value={shown.m.rps.toLocaleString()} unit="" accent delta={d('rps')} better="high" />
+              <Stat label={t('perf.stat.avg')} value={shown.m.avg} unit=" ms" delta={d('avg')} better="low" />
               <Stat label="p80" value={shown.m.p80} unit=" ms" delta={d('p80')} better="low" />
               <Stat label="p90" value={shown.m.p90} unit=" ms" delta={d('p90')} better="low" />
               <Stat label="p95" value={shown.m.p95} unit=" ms" delta={d('p95')} better="low" />
               <Stat label="p99" value={shown.m.p99} unit=" ms" delta={d('p99')} better="low" />
-              <Stat label="Errors" value={shown.m.err} unit=" %" delta={d('err')} better="low" />
+              <Stat label={t('perf.stat.errors')} value={shown.m.err} unit=" %" delta={d('err')} better="low" />
             </div>
 
             <div className="pf-charts">
-              <Chart pts={shown.latSeries} max={maxLat} color="var(--accent)" label="Response time (p50)" unit=" ms" dur={chartDur} />
-              <Chart pts={shown.rpsSeries} max={maxRps} color="oklch(0.78 0.15 150)" label="Requests / sec" unit="" dur={chartDur} />
+              <Chart pts={shown.latSeries} max={maxLat} color="var(--accent)" label={t('perf.chart.latency')} unit=" ms" dur={chartDur} emptyLabel={t('perf.noDataYet')} />
+              <Chart pts={shown.rpsSeries} max={maxRps} color="oklch(0.78 0.15 150)" label={t('perf.chart.rps')} unit="" dur={chartDur} emptyLabel={t('perf.noDataYet')} />
             </div>
 
             <div className="pf-dist">
-              <div className="pf-dist-head"><span>Status distribution</span><span className="qa-meta">{totalResp.toLocaleString()} responses</span></div>
+              <div className="pf-dist-head"><span>{t('perf.statusDistribution')}</span><span className="qa-meta">{t('perf.responses', { count: totalResp.toLocaleString() })}</span></div>
               <div className="pf-dist-bar">
                 <span style={{ width: `${dist.ok / totalResp * 100}%`, background: 'oklch(0.76 0.15 150)' }} />
                 <span style={{ width: `${dist.c4 / totalResp * 100}%`, background: 'oklch(0.78 0.15 70)' }} />
@@ -706,42 +709,42 @@ function PerfTest({ env, vars, onRunningChange }) {
                 <span><i style={{ background: 'oklch(0.76 0.15 150)' }} /> 2xx · {dist.ok.toLocaleString()}</span>
                 <span><i style={{ background: 'oklch(0.78 0.15 70)' }} /> 4xx · {dist.c4.toLocaleString()}</span>
                 <span><i style={{ background: 'oklch(0.68 0.18 18)' }} /> 5xx · {dist.c5.toLocaleString()}</span>
-                <span><i style={{ background: 'oklch(0.62 0.02 260)' }} /> network · {netCount.toLocaleString()}</span>
+                <span><i style={{ background: 'oklch(0.62 0.02 260)' }} /> {t('perf.network')} · {netCount.toLocaleString()}</span>
               </div>
             </div>
 
             {runs.length > 0 && (
               <div className="pf-history">
                 <div className="pf-history-head">
-                  <span><Icon name="history" size={13} /> Run history</span>
+                  <span><Icon name="history" size={13} /> {t('perf.runHistory')}</span>
                   <div className="pf-history-actions">
-                    <span className="qa-meta">{selected.length ? `${selected.length} selected` : `${runs.length} runs`}</span>
+                    <span className="qa-meta">{selected.length ? t('perf.selected', { count: selected.length }) : t('perf.runs', { count: runs.length })}</span>
                     <div className="pf-export">
                       <button className="pf-hbtn" disabled={!selected.length} onClick={() => setHMenu(m => !m)}>
-                        <Icon name="download" size={13} /> Export{selected.length ? ` (${selected.length})` : ''}
+                        <Icon name="download" size={13} /> {selected.length ? t('perf.exportSelected', { count: selected.length }) : t('perf.export')}
                       </button>
                       {hMenu && selected.length > 0 && (
                         <div className="pf-export-menu">
                           {['json', 'csv', 'html'].map(f => (
                             <button key={f} onClick={() => { exportRuns(selected.slice().sort((a, b) => a - b).map(i => runs[i]), f); setHMenu(false); }}>
-                              {f.toUpperCase()} report
+                              {t('perf.report', { format: f.toUpperCase() })}
                             </button>
                           ))}
                         </div>
                       )}
                     </div>
-                    <button className="pf-hbtn pf-hbtn--danger" onClick={clearHistory}><Icon name="trash" size={13} /> Clear</button>
+                    <button className="pf-hbtn pf-hbtn--danger" onClick={clearHistory}><Icon name="trash" size={13} /> {t('perf.clear')}</button>
                   </div>
                 </div>
                 {runs.map((r, i) => (
                   <div key={i} className="pf-run-row" data-active={!running && i === viewIdx ? '1' : '0'}>
                     <span className="pf-run-check"><MiniCheck on={selected.includes(i)} onClick={() => toggleSel(i)} /></span>
                     <button className="pf-run-main" onClick={() => !running && setViewIdx(i)}>
-                      <span className="pf-run-pass" data-pass={r.pass ? '1' : '0'}>{r.pass ? 'PASS' : 'FAIL'}</span>
+                      <span className="pf-run-pass" data-pass={r.pass ? '1' : '0'}>{r.pass ? t('common.pass') : t('common.fail')}</span>
                       <span className="pf-run-type">{r.typeLabel}</span>
                       <span className="qa-meta">{r.maxVus} VUs</span>
                       <span className="pf-run-metric">p95 <strong>{r.m.p95}</strong>ms</span>
-                      <span className="pf-run-metric">err <strong>{r.m.err}</strong>%</span>
+                      <span className="pf-run-metric">{t('perf.errShort')} <strong>{r.m.err}</strong>%</span>
                       <span className="pf-run-ts qa-meta">{r.ts}</span>
                     </button>
                   </div>
