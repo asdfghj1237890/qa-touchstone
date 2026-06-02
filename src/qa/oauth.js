@@ -114,3 +114,25 @@ export async function exchangeOAuthTokenWithFetch(tokenRequest) {
   }
   return parseOAuthTokenResponse(data, tokenRequest.oauthContext);
 }
+
+// Obtain a token end-to-end: build the token request, then exchange it. Inside
+// Tauri the transport is injected (`executeRequest`) so the exchange goes
+// through the Rust backend and avoids browser CORS; otherwise it falls back to
+// `fetch`. Rejections propagate to the caller. Shared by the API client shell
+// and the Security page so the behavior stays identical.
+export async function requestOAuthToken(oauth2Config, varMap, opts = {}) {
+  const { sslVerify = true, executeRequest } = opts;
+  const tokenRequest = buildOAuthTokenRequest(oauth2Config || {}, varMap);
+  const tauri = typeof window !== 'undefined' && !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+  if (tauri && executeRequest) {
+    const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
+    if (!resp || resp.status < 200 || resp.status >= 300) {
+      const detail = resp && resp.body && typeof resp.body === 'object'
+        ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body))
+        : '';
+      throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
+    }
+    return parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
+  }
+  return exchangeOAuthTokenWithFetch(tokenRequest);
+}
