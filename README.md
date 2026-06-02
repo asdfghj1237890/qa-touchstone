@@ -41,8 +41,9 @@ The current public-facing scope is API testing only:
   variables; replay matching cookies through the local cookie jar.
 - **Collection Runner**: run selected requests, iterate over CSV/JSON data, and
   score assertions on live responses.
-- **Monitors**: create monitor cards and trigger live "Run now" collection
-  checks. Background cadence scheduling is still follow-up work.
+- **Monitors**: create monitor cards, run live checks manually, and let enabled
+  monitors execute automatically on their configured cadence while the app is
+  running.
 - **Performance testing**: generate and run k6 performance, load, and stress
   tests with live metrics, SLO scoring, history, and exportable reports.
 - **AI assistance**: generate classified test cases from BDD, OpenAPI, PRD, or

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import App from '../App.jsx';
 
 // The redesigned QA Companion is a single-window app with a left nav rail and
@@ -28,6 +28,9 @@ describe('App (redesign shell)', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
     installLocalStorage({ qa_locale: 'en-US' });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders the title bar and lands on Home', () => {
@@ -123,5 +126,24 @@ describe('App (redesign shell)', () => {
       expect(content).toBeTruthy();
       expect(content.textContent.length).toBeGreaterThan(0);
     });
+  });
+
+  it('runs due monitors on the background cadence before the Monitors route is opened', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-06-02T00:00:00Z').getTime();
+    vi.setSystemTime(now);
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 7, size: 4, body: { ok: true }, headers: {} } };
+    window.QA.MONITORS = [{ id: 'm1', name: 'M', collectionId: 'c1', env: 'None', cadence: 'Every 5 minutes',
+      region: 'us-east-1', enabled: true, nextDueAt: now - 1, runs: [] }];
+
+    render(<App />);
+    await vi.advanceTimersByTimeAsync(3000);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monitors' }));
+    expect(screen.getByText(/1\/1 passed/)).toBeInTheDocument();
   });
 });
