@@ -182,3 +182,24 @@ describe('persistence', () => {
     expect(loadMatrixConfig()).toBe(null);
   });
 });
+
+describe('runMatrix — request capture', () => {
+  const reqState = withDefaults({
+    identities: [{ id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } }],
+    endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
+    expect: { r1: { admin: 'allow' } },
+    denySet: [401, 403],
+  });
+  it('captures cell.request from a { request, response } runner', async () => {
+    const runner = () => Promise.resolve({ request: { method: 'GET', path: '/a', identity: 'admin' }, response: { status: 200, time: 2 } });
+    const results = await runMatrix(reqState, runner, {});
+    expect(results.r1.admin.request).toEqual({ method: 'GET', path: '/a', identity: 'admin' });
+    expect(results.r1.admin.status).toBe(200);
+    expect(results.r1.admin.verdict).toBe('pass');
+  });
+  it('leaves cell.request null for a bare-response runner', async () => {
+    const results = await runMatrix(reqState, () => Promise.resolve({ status: 200, time: 1 }), {});
+    expect(results.r1.admin.request).toBe(null);
+    expect(results.r1.admin.status).toBe(200);
+  });
+});

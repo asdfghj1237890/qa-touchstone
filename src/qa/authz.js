@@ -81,12 +81,17 @@ export async function runMatrix(state, runner, opts = {}) {
       if (expectation === 'skip') continue;
       let cell;
       try {
-        const resp = await runner(ep, id);
+        // The runner may return a bare response, or a { request, response }
+        // wrapper when the caller wants the resolved request captured on the cell.
+        const out = await runner(ep, id);
+        const wrapped = out && typeof out === 'object' && 'response' in out;
+        const resp = wrapped ? out.response : out;
+        const request = wrapped ? (out.request || null) : null;
         const status = resp && typeof resp.status === 'number' ? resp.status : null;
         const outcome = classifyOutcome(status, denySet);
-        cell = { status, outcome, verdict: verdictFor(expectation, outcome), timeMs: (resp && resp.time) || 0, response: resp || null, error: null };
+        cell = { status, outcome, verdict: verdictFor(expectation, outcome), timeMs: (resp && resp.time) || 0, request, response: resp || null, error: null };
       } catch (e) {
-        cell = { status: null, outcome: 'other', verdict: 'inconclusive', timeMs: 0, response: null, error: String((e && e.message) || e) };
+        cell = { status: null, outcome: 'other', verdict: 'inconclusive', timeMs: 0, request: null, response: null, error: String((e && e.message) || e) };
       }
       results[ep.reqId][id.id] = cell;
       if (onCell) onCell(ep.reqId, id.id, cell);
