@@ -10,6 +10,10 @@ import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
 } from './authz.js';
+import {
+  runOracles, inferContract, summarizeFindings, scanSensitiveLLM, worstSeverity,
+  SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
+} from './oracles.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -93,9 +97,12 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [picking, setPicking] = useS(false);
   const [drawer, setDrawer] = useS(null);   // { reqId, idId }
   const abortRef = useRef(null);
+  const baselinesRef = useRef({});   // { [reqId]: contract } — transient, per run
+  const [oracleConfig] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.oracleConfig) || DEFAULT_ORACLE_CONFIG; });
+  const [aiScan, setAiScan] = useS({ busy: false, error: null });
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
-  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET }), [identities, endpoints, expect, denySet]);
+  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig }), [identities, endpoints, expect, denySet, oracleConfig]);
 
   // Persist config (not results) whenever it changes.
   useE(() => { saveMatrixConfig(state); }, [state]);
@@ -140,10 +147,18 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     setRunning(true);
     const partial = rowReqId ? { ...results } : {};
     setResults(partial);
+    if (!rowReqId) baselinesRef.current = {};   // fresh baselines for a full run
     try {
       await runMatrix(target, runner, {
         signal: controller.signal,
-        onCell: (reqId, idId, cell) => setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: cell } })),
+        onCell: (reqId, idId, cell) => {
+          const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+          if (is2xx && cell.response && !baselinesRef.current[reqId]) {
+            baselinesRef.current[reqId] = inferContract(cell.response.body);
+          }
+          const findings = runOracles(cell, { baseline: baselinesRef.current[reqId], config: oracleConfig });
+          setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: { ...cell, findings } } }));
+        },
       });
     } finally {
       setRunning(false);
@@ -223,6 +238,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
                           onClick={() => (cell ? setDrawer({ reqId: ep.reqId, idId: id.id }) : cycleCell(ep.reqId, id.id))}>
                         <span className="qa-sec-exp" onClick={(e) => { e.stopPropagation(); cycleCell(ep.reqId, id.id); }}>{t('security.expect.' + exp)}</span>
                         {cell && <span className="qa-sec-verdict">{cell.status ?? '—'} · {t(VERDICT_LABEL[v] || 'security.cell.notRun')}</span>}
+                        {cell && cell.findings && cell.findings.length > 0 && (
+                          <span className={`qa-sec-findbadge qa-sev--${worstSeverity(cell.findings)}`}>{cell.findings.length}</span>
+                        )}
                       </td>
                     );
                   })}

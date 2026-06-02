@@ -83,4 +83,18 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // The cell text will be "200 · VULN"
     await waitFor(() => expect(screen.getByText(/200.*VULN/)).toBeInTheDocument(), { timeout: 4000 });
   });
+
+  it('surfaces a findings badge when the response leaks sensitive data', async () => {
+    // Override the canned response with an email leak in the body.
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+    fireEvent.click(screen.getByRole('button', { name: /Run all/i }));
+
+    await waitFor(() => expect(document.querySelector('.qa-sec-findbadge')).not.toBeNull(), { timeout: 4000 });
+  });
 });
