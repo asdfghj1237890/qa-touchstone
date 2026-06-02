@@ -118,3 +118,36 @@ describe('checkSchema', () => {
     expect(checkSchema({ id: 1, name: 's', extra: 1 }, base, { ...DEFAULT_ORACLE_CONFIG, schema: false })).toEqual([]);
   });
 });
+
+import { runOracles, summarizeFindings } from '../qa/oracles.js';
+
+describe('runOracles', () => {
+  const baseline = inferContract({ id: 1 });   // body has only `id`
+  it('runs sensitive on any status but schema only on 2xx with a baseline', () => {
+    const cell200 = { status: 200, response: { status: 200, body: { id: 1, surprise: 'x' }, headers: {} } };
+    const f = runOracles(cell200, { baseline });
+    expect(f.some(x => x.oracle === 'schema' && x.title === 'Undeclared field')).toBe(true);
+
+    const cell403 = { status: 403, response: { status: 403, body: { id: 1, surprise: 'x' }, headers: {} } };
+    expect(runOracles(cell403, { baseline }).some(x => x.oracle === 'schema')).toBe(false);
+  });
+  it('cross-bumps an undeclared field that also leaks to high', () => {
+    const cell = { status: 200, response: { status: 200, body: { id: 1, email: 'a@b.co' }, headers: {} } };
+    const f = runOracles(cell, { baseline });
+    const undeclared = f.find(x => x.oracle === 'schema' && x.path === 'email');
+    expect(undeclared.severity).toBe('high');   // bumped from low
+  });
+  it('returns [] when the cell has no response', () => {
+    expect(runOracles({ status: null, response: null }, {})).toEqual([]);
+  });
+});
+
+describe('summarizeFindings', () => {
+  it('tallies findings by severity across the grid', () => {
+    const results = {
+      r1: { a: { findings: [{ severity: 'high' }, { severity: 'low' }] }, b: { findings: [] } },
+      r2: { a: { findings: [{ severity: 'high' }] } },
+    };
+    expect(summarizeFindings(results)).toEqual({ total: 3, bySeverity: { info: 0, low: 1, medium: 0, high: 2, critical: 0 } });
+  });
+});
