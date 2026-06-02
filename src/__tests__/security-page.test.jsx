@@ -115,7 +115,12 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // The drawer's findings list renders the leak path 'email' as a <code>.
     const findings = document.querySelector('.qa-sec-findings');
     expect(within(findings).getByText('email')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Scan with AI/i })).toBeInTheDocument();
+    // No LLM is reachable in jsdom (built-in needs window.claude), so the AI
+    // scan is offered but disabled with a hint rather than failing on click.
+    const aiBtn = screen.getByRole('button', { name: /Scan with AI/i });
+    expect(aiBtn).toBeInTheDocument();
+    expect(aiBtn).toBeDisabled();
+    expect(screen.getByText(/Configure AI in Settings/i)).toBeInTheDocument();
   });
 
   it('shows a severity summary chip and an aggregated findings panel after a run', async () => {

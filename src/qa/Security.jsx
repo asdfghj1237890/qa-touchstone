@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Icon, MethodBadge } from './components.jsx';
+import { Icon, MethodBadge, loadLlmCfg } from './components.jsx';
 import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
@@ -201,6 +201,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     }
   };
 
+  // Is an LLM reachable for the optional AI scan? Mirrors qaCallLLM's preconditions
+  // so we can disable the button with a hint instead of failing only on click.
+  const cfg = loadLlmCfg();
+  const aiReady = cfg.provider === 'builtin'
+    ? !!(window.claude && window.claude.complete)
+    : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl;
+
   return (
     <div className="qa-sec">
       <div className="qa-sec-head">
@@ -359,9 +366,14 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
               </ul>
             </>
           )}
-          <button className="qa-link" onClick={scanWithAI} disabled={aiScan.busy}>
+          {drawerCell.findings && drawerCell.findings.length === 0 && (
+            <span className="qa-sec-drawer-label">{t('security.findings.none')}</span>
+          )}
+          <button className="qa-link" onClick={scanWithAI} disabled={aiScan.busy || !aiReady}
+                  title={!aiReady ? t('security.findings.aiUnavailable') : undefined}>
             <Icon name="zap" size={13} /> {aiScan.busy ? t('security.findings.aiScanning') : t('security.findings.scanAI')}
           </button>
+          {!aiReady && <span className="qa-sec-drawer-label">{t('security.findings.aiUnavailable')}</span>}
           {aiScan.error && <div className="qa-sec-drawer-err">{aiScan.error}</div>}
           <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
