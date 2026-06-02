@@ -360,7 +360,7 @@ function AppShell() {
           {route === 'perf' && <PerfTest env={env} vars={vars} onRunningChange={setPerfRunning} />}
           {route === 'realtime' && <RealtimePage env={env} />}
           {route === 'runner' && <Runner env={env} vars={vars} tests={tests} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} />}
-          {route === 'security' && <SecurityPage env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} oauthTokens={oauthTokens} setOauthTokens={setOauthTokens} />}
+          {route === 'security' && <SecurityPage env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />}
           {route === 'docs' && <DocsPage env={env} onOpenRequest={(id) => { selectRequest(id); setRoute('api'); }} />}
           {route === 'monitors' && <MonitorsPage env={env} setRoute={setRoute} vars={vars} cookies={cookies} sslVerify={sslVerify} tests={tests} oauthTokens={oauthTokens}
                                                   monitors={monitors} setMonitors={setMonitors} running={monitorRunning}
