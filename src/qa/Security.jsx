@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Icon, MethodBadge } from './components.jsx';
+import { Icon, MethodBadge, loadLlmCfg } from './components.jsx';
 import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
@@ -10,6 +10,10 @@ import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
 } from './authz.js';
+import {
+  runOracles, inferContract, summarizeFindings, scanSensitiveLLM, worstSeverity,
+  SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
+} from './oracles.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -93,14 +97,30 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [picking, setPicking] = useS(false);
   const [drawer, setDrawer] = useS(null);   // { reqId, idId }
   const abortRef = useRef(null);
+  const baselinesRef = useRef({});   // { [reqId]: contract } — transient, per run
+  const [oracleConfig] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.oracleConfig) || DEFAULT_ORACLE_CONFIG; });
+  const [aiScan, setAiScan] = useS({ busy: false, error: null });
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
-  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET }), [identities, endpoints, expect, denySet]);
+  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig }), [identities, endpoints, expect, denySet, oracleConfig]);
 
   // Persist config (not results) whenever it changes.
   useE(() => { saveMatrixConfig(state); }, [state]);
 
   const summary = useMemo(() => summarize(results), [results]);
+  const findSummary = useMemo(() => summarizeFindings(results), [results]);
+  const allFindings = useMemo(() => {
+    const out = [];
+    for (const ep of endpoints) {
+      for (const id of identities) {
+        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        for (const f of (cell && cell.findings) || []) {
+          out.push({ ...f, endpoint: ep.path, method: ep.method, identity: id.id === 'anon' ? t('security.anon') : (id.name || id.id) });
+        }
+      }
+    }
+    return out.sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
+  }, [results, endpoints, identities, t]);
 
   const cycleCell = (reqId, idId) => {
     const cur = state.expect[reqId][idId];
@@ -140,10 +160,18 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     setRunning(true);
     const partial = rowReqId ? { ...results } : {};
     setResults(partial);
+    if (!rowReqId) baselinesRef.current = {};   // fresh baselines for a full run
     try {
       await runMatrix(target, runner, {
         signal: controller.signal,
-        onCell: (reqId, idId, cell) => setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: cell } })),
+        onCell: (reqId, idId, cell) => {
+          const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+          if (is2xx && cell.response && !baselinesRef.current[reqId]) {
+            baselinesRef.current[reqId] = inferContract(cell.response.body);
+          }
+          const findings = runOracles(cell, { baseline: baselinesRef.current[reqId], config: oracleConfig });
+          setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: { ...cell, findings } } }));
+        },
       });
     } finally {
       setRunning(false);
@@ -153,6 +181,32 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   const editing = identities.find(i => i.id === editId);
   const drawerCell = drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId];
+
+  const scanWithAI = async () => {
+    if (!drawer || !drawerCell || !drawerCell.response) return;
+    setAiScan({ busy: true, error: null });
+    try {
+      const extra = await scanSensitiveLLM(drawerCell.response);
+      const { reqId, idId } = drawer;
+      // The endpoint/identity may have been removed while the scan was in flight;
+      // skip the merge rather than dereferencing a now-missing cell.
+      setResults(r => {
+        const cell = r[reqId] && r[reqId][idId];
+        if (!cell) return r;
+        return { ...r, [reqId]: { ...r[reqId], [idId]: { ...cell, findings: [...(cell.findings || []), ...extra] } } };
+      });
+      setAiScan({ busy: false, error: null });
+    } catch (e) {
+      setAiScan({ busy: false, error: String((e && e.message) || e) });
+    }
+  };
+
+  // Is an LLM reachable for the optional AI scan? Mirrors qaCallLLM's preconditions
+  // so we can disable the button with a hint instead of failing only on click.
+  const cfg = loadLlmCfg();
+  const aiReady = cfg.provider === 'builtin'
+    ? !!(window.claude && window.claude.complete)
+    : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl;
 
   return (
     <div className="qa-sec">
@@ -170,6 +224,14 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           <span key={k} className={`qa-sec-chip qa-sec-chip--${k}`}>{summary[k] || 0} {t('security.summary.' + k)}</span>
         ))}
       </div>
+
+      {findSummary.total > 0 && (
+        <div className="qa-sec-findsummary">
+          {SEVERITY_ORDER.slice().reverse().filter(s => findSummary.bySeverity[s] > 0).map(s => (
+            <span key={s} className={`qa-sec-findchip qa-sev--${s}`}>{findSummary.bySeverity[s]} {t('security.severity.' + s)}</span>
+          ))}
+        </div>
+      )}
 
       <div className="qa-sec-toolbar">
         <button className="qa-link" onClick={addIdentity}><Icon name="plus" size={13} /> {t('security.addIdentity')}</button>
@@ -223,6 +285,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
                           onClick={() => (cell ? setDrawer({ reqId: ep.reqId, idId: id.id }) : cycleCell(ep.reqId, id.id))}>
                         <span className="qa-sec-exp" onClick={(e) => { e.stopPropagation(); cycleCell(ep.reqId, id.id); }}>{t('security.expect.' + exp)}</span>
                         {cell && <span className="qa-sec-verdict">{cell.status ?? '—'} · {t(VERDICT_LABEL[v] || 'security.cell.notRun')}</span>}
+                        {cell && cell.findings && cell.findings.length > 0 && (
+                          <span className={`qa-sec-findbadge qa-sev--${worstSeverity(cell.findings)}`}>{cell.findings.length}</span>
+                        )}
                       </td>
                     );
                   })}
@@ -230,6 +295,24 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {allFindings.length > 0 && (
+        <div className="qa-sec-findpanel">
+          <h3>{t('security.findings.panelTitle')} ({allFindings.length})</h3>
+          <ul className="qa-sec-findlist">
+            {allFindings.map((f, i) => (
+              <li key={i} className={`qa-sev--${f.severity}`}>
+                <span className="qa-sec-find-sev">{t('security.severity.' + f.severity)}</span>
+                <span className="qa-sec-find-oracle">{t('security.oracle.' + f.oracle)}</span>
+                <MethodBadge method={f.method} size="sm" /> <code>{f.endpoint}</code>
+                <span className="qa-sec-find-id">{f.identity}</span>
+                <code className="qa-sec-find-path">{f.path}</code>
+                {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -268,6 +351,30 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
             </>
           )}
           {drawerCell.error && <div className="qa-sec-drawer-err">{drawerCell.error}</div>}
+          {drawerCell.findings && drawerCell.findings.length > 0 && (
+            <>
+              <span className="qa-sec-drawer-label">{t('security.findings.title')}</span>
+              <ul className="qa-sec-findings">
+                {drawerCell.findings.slice().sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)).map((f, i) => (
+                  <li key={i} className={`qa-sev--${f.severity}`}>
+                    <span className="qa-sec-find-sev">{t('security.severity.' + f.severity)}</span>
+                    <span className="qa-sec-find-oracle">{t('security.oracle.' + f.oracle)}</span>
+                    <code>{f.path}</code>
+                    {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {drawerCell.findings && drawerCell.findings.length === 0 && (
+            <span className="qa-sec-drawer-label">{t('security.findings.none')}</span>
+          )}
+          <button className="qa-link" onClick={scanWithAI} disabled={aiScan.busy || !aiReady}
+                  title={!aiReady ? t('security.findings.aiUnavailable') : undefined}>
+            <Icon name="zap" size={13} /> {aiScan.busy ? t('security.findings.aiScanning') : t('security.findings.scanAI')}
+          </button>
+          {!aiReady && <span className="qa-sec-drawer-label">{t('security.findings.aiUnavailable')}</span>}
+          {aiScan.error && <div className="qa-sec-drawer-err">{aiScan.error}</div>}
           <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
         </div>
