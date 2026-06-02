@@ -11,7 +11,7 @@ export const DEFAULT_DENY_SET = [401, 403];
 export function classifyOutcome(status, denySet = DEFAULT_DENY_SET) {
   if (typeof status !== 'number' || !Number.isFinite(status)) return 'other';
   if (status >= 200 && status <= 299) return 'allowed';
-  if ((denySet || DEFAULT_DENY_SET).includes(status)) return 'denied';
+  if (denySet.includes(status)) return 'denied';
   return 'other';
 }
 
@@ -43,7 +43,7 @@ export function withDefaults(state) {
     const prev = (state.expect && state.expect[ep.reqId]) || {};
     const row = {};
     for (const id of state.identities) {
-      row[id.id] = prev[id.id] || defaultExpectation(id);
+      row[id.id] = prev[id.id] ?? defaultExpectation(id);
     }
     expect[ep.reqId] = row;
   }
@@ -77,7 +77,7 @@ export async function runMatrix(state, runner, opts = {}) {
     results[ep.reqId] = results[ep.reqId] || {};
     for (const id of state.identities) {
       if (signal && signal.aborted) return results;
-      const expectation = (state.expect[ep.reqId] || {})[id.id] || defaultExpectation(id);
+      const expectation = ((state.expect || {})[ep.reqId] || {})[id.id] || defaultExpectation(id);
       if (expectation === 'skip') continue;
       let cell;
       try {
