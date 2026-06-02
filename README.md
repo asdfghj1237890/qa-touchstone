@@ -15,6 +15,23 @@ Postman-compatible API client, live collection execution, background monitors,
 k6 performance testing, AI-assisted test generation, AI response review, and
 exportable API documentation in one Tauri app.
 
+## Screenshots
+
+**Security matrix — identity × endpoint RBAC testing.** Run the same endpoints
+under multiple identities (anonymous, bearer, basic, …); every cell is scored
+allow/deny against the real response, and broken access control (a request that
+should be denied but succeeds) is flagged as a vulnerability.
+
+![Security matrix](docs/screenshots/02-security-matrix.png)
+
+| Home | AI test generation | API client |
+| --- | --- | --- |
+| ![Home](docs/screenshots/01-home.png) | ![AI test generation](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
+| **Generated API docs** | **Performance / load testing** | **Realtime (WebSocket / SSE)** |
+| ![Generated API docs](docs/screenshots/05-api-docs.png) | ![Performance testing](docs/screenshots/06-performance.png) | ![Realtime testing](docs/screenshots/07-realtime.png) |
+
+<sub>Regenerate with `node scripts/capture-screenshots.mjs` while the dev server is running (drives your system Chrome over the DevTools Protocol; set `LOCALE=zh-TW` for a Chinese UI).</sub>
+
 ## Current Scope
 
 The current public-facing scope is API testing only:
@@ -37,6 +54,9 @@ The current public-facing scope is API testing only:
   variables; replay matching cookies through the local cookie jar.
 - **Collection Runner**: run selected requests, iterate over CSV/JSON data, and
   score assertions on live responses.
+- **Security matrix**: run an identity × endpoint RBAC matrix — the same saved
+  requests sent under multiple identities — with per-cell allow/deny expectations,
+  a configurable deny-status set, and broken-access-control (vulnerability) flags.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress

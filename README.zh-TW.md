@@ -15,6 +15,22 @@ Postman 相容 API client、collection 真實執行、背景 monitors、k6 效�
 AI 測試案例產生、AI response review，以及可匯出的 API 文件整合在同一個
 Tauri app 裡。
 
+## 畫面截圖
+
+**安全矩陣 — 身分 × 端點的 RBAC 授權測試。** 用多個身分（匿名、bearer、basic…）
+對同一批端點各跑一次，每一格依真實回應判定 allow/deny；當「應該被拒卻成功」時
+標示為漏洞（broken access control）。
+
+![安全矩陣](docs/screenshots/02-security-matrix.png)
+
+| 首頁 | AI 測試產生 | API client |
+| --- | --- | --- |
+| ![首頁](docs/screenshots/01-home.png) | ![AI 測試產生](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
+| **產生的 API 文件** | **效能 / 負載測試** | **Realtime（WebSocket / SSE）** |
+| ![API 文件](docs/screenshots/05-api-docs.png) | ![效能測試](docs/screenshots/06-performance.png) | ![Realtime](docs/screenshots/07-realtime.png) |
+
+<sub>重生指令：開著 dev server 時執行 `node scripts/capture-screenshots.mjs`（用系統 Chrome 透過 DevTools Protocol 驅動；介面截圖預設英文，要中文介面設 `LOCALE=zh-TW`）。</sub>
+
 ## 目前範圍
 
 目前公開版聚焦在 API 測試：
@@ -37,6 +53,9 @@ Tauri app 裡。
   variables；透過本機 cookie jar replay 符合 domain/path 的 cookies。
 - **Collection Runner**：批次執行選定 requests，支援 CSV/JSON data
   iteration，並用 live responses 計算 assertions。
+- **安全矩陣（Security matrix）**：執行身分 × 端點的 RBAC 矩陣——同一批已存
+  requests 用多個身分各送一次——可逐格設定 allow/deny 預期、可調的拒絕狀態碼集合，
+  並標示 broken access control（漏洞）。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
