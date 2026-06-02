@@ -1,10 +1,18 @@
 # QA Companion
 
+[![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
+[![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#architecture)
+[![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#architecture)
+[![Build: Vite](https://img.shields.io/badge/build-Vite-646CFF.svg)](#development)
+[![Tests: Vitest](https://img.shields.io/badge/tests-Vitest-6E9F18.svg)](#development)
+[![Performance: k6](https://img.shields.io/badge/performance-k6-7D64FF.svg)](#k6-binary)
+[![Data: local-first](https://img.shields.io/badge/data-local--first-2E7D32.svg)](#local-data-and-secrets)
+
 [繁體中文](README.zh-TW.md)
 
 QA Companion is a local-first desktop workspace for API QA. It combines a
-Postman-compatible API client, live collection execution, monitors, k6
-performance testing, AI-assisted test generation, AI response review, and
+Postman-compatible API client, live collection execution, background monitors,
+k6 performance testing, AI-assisted test generation, AI response review, and
 exportable API documentation in one Tauri app.
 
 ## Current Scope
@@ -16,18 +24,6 @@ The current public-facing scope is API testing only:
 - Browser/dev fallback paths for deterministic tests and quick UI iteration
 - Runtime data and credentials stored on the local machine
 - No company-specific services, internal links, or obsolete non-API workflow docs
-
-## What Changed In This Refactor
-
-- Repositioned the product around API QA workflows instead of the earlier broad
-  desktop utility scope.
-- Removed obsolete non-API workflow descriptions from the public README and docs.
-- Kept the useful API testing surface: import, send, run, monitor, review,
-  document, export, and performance-test requests.
-- Promoted live execution paths: Runner and Monitors now evaluate assertions
-  against real responses instead of demo-only data.
-- Consolidated LLM usage through shared settings for Test Gen and response
-  review.
 
 ## Capabilities
 
@@ -41,9 +37,8 @@ The current public-facing scope is API testing only:
   variables; replay matching cookies through the local cookie jar.
 - **Collection Runner**: run selected requests, iterate over CSV/JSON data, and
   score assertions on live responses.
-- **Monitors**: create monitor cards, run live checks manually, and let enabled
-  monitors execute automatically on their configured cadence while the app is
-  running.
+- **Monitors**: run live checks manually or let enabled monitors execute on
+  their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress
   tests with live metrics, SLO scoring, history, and exportable reports.
 - **AI assistance**: generate classified test cases from BDD, OpenAPI, PRD, or
@@ -54,6 +49,34 @@ The current public-facing scope is API testing only:
 
 ## Architecture
 
+```mermaid
+flowchart LR
+  User["QA engineer"] --> Shell["Tauri desktop shell"]
+  Shell --> UI["React + Vite UI"]
+
+  UI --> Client["API Client"]
+  UI --> Runner["Collection Runner"]
+  UI --> Monitors["Background Monitors"]
+  UI --> Perf["Performance Page"]
+  UI --> AI["Test Gen + AI Review"]
+  UI --> Docs["Docs / Codegen / Reports"]
+
+  Client --> Executor["Shared Request Executor"]
+  Runner --> Executor
+  Monitors --> Executor
+
+  Executor --> Vars["Variables + Environments"]
+  Executor --> Cookies["Local Cookie Jar"]
+  Executor --> Rust["Rust Tauri Commands"]
+  Rust --> APIs["Target APIs"]
+
+  Perf --> K6["Bundled k6"]
+  K6 --> APIs
+
+  AI --> LLM["Built-in / OpenAI-compatible LLM"]
+  UI --> Storage["localStorage + local config files"]
+```
+
 - **Frontend**: React 18 + Vite
 - **Desktop shell**: Tauri 2
 - **Backend commands**: Rust, including request execution, process helpers, and
@@ -61,6 +84,25 @@ The current public-facing scope is API testing only:
 - **Performance engine**: k6, materialized into `src-tauri/resources/`
 - **Tests**: Vitest + Testing Library for the frontend and Rust unit tests for
   Tauri helpers
+
+## What Changed In This Refactor
+
+<details>
+<summary>Refactor notes</summary>
+
+- Repositioned the product around API QA workflows instead of the earlier broad
+  desktop utility scope.
+- Removed obsolete non-API workflow descriptions from the public README and docs.
+- Kept the useful API testing surface: import, send, run, monitor, review,
+  document, export, and performance-test requests.
+- Promoted live execution paths: Runner and Monitors evaluate assertions against
+  real responses instead of demo-only data.
+- Added an app-level monitor scheduler so enabled monitors run on cadence while
+  the app is open.
+- Consolidated LLM usage through shared settings for Test Gen and response
+  review.
+
+</details>
 
 ## Requirements
 
@@ -70,6 +112,9 @@ The current public-facing scope is API testing only:
 - k6 is handled by the setup scripts described below
 
 ## Development
+
+<details open>
+<summary>Common commands</summary>
 
 Install dependencies:
 
@@ -107,7 +152,12 @@ Build the desktop app:
 npm run tauri:build
 ```
 
+</details>
+
 ## k6 Binary
+
+<details>
+<summary>k6 setup and release verification</summary>
 
 The Performance page runs real load tests through k6. The binary is not
 committed because it is large and platform-specific.
@@ -131,7 +181,12 @@ When bumping `K6_VERSION=<x.y.z>`, add that release's checksums to the
 `CHECKSUMS` table in `scripts/setup-k6.mjs`; release builds fail closed if the
 checksum is missing or mismatched.
 
+</details>
+
 ## Local Data And Secrets
+
+<details>
+<summary>Stored files and secret handling</summary>
 
 Runtime configuration is stored locally. Common generated files include:
 
@@ -143,7 +198,12 @@ LLM settings are stored in browser localStorage and sent directly to the chosen
 provider. Do not commit credentials, generated cache files, local tokens, or
 machine-specific paths.
 
+</details>
+
 ## Packaging Notes
+
+<details>
+<summary>macOS, Windows, and Gatekeeper notes</summary>
 
 macOS builds produce a `.dmg` under
 `src-tauri/target/release/bundle/dmg/`. Windows builds produce an NSIS
@@ -160,6 +220,8 @@ xattr -dr com.apple.quarantine "/Applications/QA Companion.app"
 ```
 
 For wider distribution, sign and notarize the build.
+
+</details>
 
 ## License
 
