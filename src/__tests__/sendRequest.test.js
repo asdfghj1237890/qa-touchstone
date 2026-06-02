@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { qaRunSavedRequest } from '../qa/sendRequest.js';
+import api from '../api/index.js';
 
 // Outside Tauri, executeRequest falls back to window.QA.RESPONSES[req.id].
 // Seed a collection + canned response and confirm the helper returns it.
 describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
+  afterEach(() => {
+    delete window.__TAURI__;
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
       { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
@@ -39,5 +45,32 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
       { env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, collectionId: 'c1' }
     );
     expect(resp.status).toBe(200);
+  });
+
+  it('uses data/local variables in the actual Tauri request payload', async () => {
+    window.__TAURI__ = true;
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'Get user', path: 'https://api.test/users/{{userId}}' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    const execute = vi.spyOn(api, 'executePostmanRequest').mockResolvedValue({
+      success: true,
+      status: 200,
+      headers: {},
+      body: '{"ok":true}',
+    });
+
+    const resp = await qaRunSavedRequest(
+      { id: 'r1', method: 'GET', path: 'https://api.test/users/{{userId}}' },
+      {
+        env: { label: 'None', baseUrl: '' },
+        vars: window.QA.VARIABLES,
+        collectionId: 'c1',
+        localVars: { userId: '42' },
+      }
+    );
+
+    expect(resp.status).toBe(200);
+    expect(execute.mock.calls[0][0].requestDetails.request.url).toBe('https://api.test/users/42');
   });
 });

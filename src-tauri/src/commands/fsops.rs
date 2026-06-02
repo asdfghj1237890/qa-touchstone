@@ -99,7 +99,7 @@ pub fn cleanup_temp_file(path: String) -> AppResult<()> {
 
 /// Write `content` to a uniquely-named file in the OS temp dir and return its
 /// absolute path. Used to hand a generated script (e.g. for `k6 run`) to a
-/// subprocess invoked via `run_command`.
+/// subprocess invoked via the k6 runner.
 #[tauri::command]
 pub fn write_temp_text(content: String, suffix: Option<String>) -> AppResult<String> {
     use std::io::Write;

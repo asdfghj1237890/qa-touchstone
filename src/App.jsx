@@ -18,6 +18,7 @@ import { MonitorsPage } from './qa/Monitors.jsx';
 import { TestGen } from './qa/TestGen.jsx';
 import { executeRequest } from './qa/executor.js';
 import { buildReq } from './qa/buildReq.js';
+import { buildOAuthTokenRequest, exchangeOAuthTokenWithFetch, parseOAuthTokenResponse } from './qa/oauth.js';
 import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
@@ -238,14 +239,26 @@ function App() {
       });
   };
 
-  // OAuth 2.0 — obtain a token from the configured token endpoint.
-  // Falls back to a simulated token when no real backend / endpoint is reachable.
-  const fetchOAuthToken = (reqId) => {
-    const token = 'eyJhbGciOiJIUzI1NiJ9.' + Math.random().toString(36).slice(2, 10) + '.demo';
-    setOauthTokens(t => ({ ...t, [reqId]: {
-      token, type: 'Bearer', scope: 'read write',
-      expiresAt: Date.now() + 3600 * 1000, obtainedAt: Date.now(),
-    } }));
+  // OAuth 2.0 — obtain a real token from the configured token endpoint. In
+  // Tauri, route through the Rust HTTP backend to avoid browser CORS limits;
+  // in browser/dev fallback, use fetch directly.
+  const fetchOAuthToken = async (targetReq) => {
+    const tokenRequest = buildOAuthTokenRequest(targetReq.auth.oauth2 || {}, activeMap);
+    let token;
+    if (tauriReady()) {
+      const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
+      if (!resp || resp.status < 200 || resp.status >= 300) {
+        const detail = resp && resp.body && typeof resp.body === 'object'
+          ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body))
+          : '';
+        throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
+      }
+      token = parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
+    } else {
+      token = await exchangeOAuthTokenWithFetch(tokenRequest);
+    }
+    setOauthTokens(t => ({ ...t, [targetReq.id]: token }));
+    return token;
   };
 
   return (
@@ -290,7 +303,7 @@ function App() {
                                 collectionId={collectionId} localVars={localList} setLocalVars={setLocalForReq}
                                 cookies={reqCookies} sslVerify={sslVerify} setSslVerify={setSslVerify}
                                 onOpenSettings={openSettings}
-                                oauthToken={oauthTokens[req.id]} onFetchOAuth={() => fetchOAuthToken(req.id)} />
+                                oauthToken={oauthTokens[req.id]} onFetchOAuth={() => fetchOAuthToken(req)} />
                 <div className="qa-split" />
                 <ResponsePanel state={respState} response={response} req={req} env={env}
                                varMap={activeMap} testList={tests[req.id] || []} />

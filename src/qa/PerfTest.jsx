@@ -245,7 +245,6 @@ function PerfTest({ env, vars, onRunningChange }) {
   const [viewIdx, setViewIdx] = usePF(0);
   const [selected, setSelected] = usePF([]);
   const [hMenu, setHMenu] = usePF(false);
-  const [k6Path, setK6Path] = usePF(null);
   const acc = useRefPF({});
   // Synchronous guard against fast double-clicks on Start. Phase-based
   // `running` only flips after React commits — between two rapid clicks the
@@ -258,15 +257,6 @@ function PerfTest({ env, vars, onRunningChange }) {
   // and setState on an unmounted component.
   const mountedRef = useRefPF(true);
   const flat = pfTargets();
-
-  // Resolve the bundled k6.exe once on mount; cached for the lifetime of the page.
-  useEffPF(() => {
-    let cancelled = false;
-    api.getK6Path()
-      .then((p) => { if (!cancelled) setK6Path(p); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
 
   const pickType = (t) => { setType(t); setStages(clone(TYPE_META[t].stages)); setSlo({ ...TYPE_META[t].slo }); };
 
@@ -436,15 +426,14 @@ function PerfTest({ env, vars, onRunningChange }) {
       if (now - lastFlushMs > 150) { lastFlushMs = now; flush(); }
     };
 
-    const k6 = k6Path || 'k6';
     // k6 v2.0+ replaced --no-summary with --summary-mode disabled.
     // --out json=- streams ndjson Point records to stdout (verified manually).
-    // Use structured-args spawn (run_program) — no shell, no quoting bugs.
+    // The Tauri bridge only accepts this fixed k6 shape.
     const args = ['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', scriptPath];
     let runErr = null;
     let exitCode = null;
     try {
-      exitCode = await api.runProgramWithRealTimeOutput(k6, args, undefined, onChunk);
+      exitCode = await api.runK6WithRealTimeOutput(args, undefined, onChunk);
     } catch (e) {
       runErr = e;
     }
@@ -466,7 +455,7 @@ function PerfTest({ env, vars, onRunningChange }) {
       setLive(null); setProgress(0); setPhase('idle');
       return;
     }
-    // run_command resolves with the numeric exit code; non-zero is a failure
+    // run_k6 resolves with the numeric exit code; non-zero is a failure
     // even though the await did not throw.
     if (!runErr && exitCode != null && exitCode !== 0) {
       runErr = `k6 exited with code ${exitCode}`;

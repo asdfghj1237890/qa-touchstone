@@ -128,19 +128,20 @@ describe('api module', () => {
     expect(invokeMock).toHaveBeenCalledWith('stop_command');
   });
 
-  it('runCommandWithRealTimeOutput 先 listen command-output 再 invoke run_command，並回傳 exit code', async () => {
+  it('runK6WithRealTimeOutput 先 listen command-output 再 invoke run_k6，並回傳 exit code', async () => {
     const unlisten = vi.fn();
     listenMock.mockResolvedValue(unlisten);
     invokeMock.mockResolvedValue(0);
     const cb = vi.fn();
-    const code = await api.runCommandWithRealTimeOutput('echo hi', null, cb);
+    const args = ['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'];
+    const code = await api.runK6WithRealTimeOutput(args, null, cb);
     expect(code).toBe(0);
     expect(listenMock).toHaveBeenCalledWith('command-output', expect.any(Function));
-    expect(invokeMock).toHaveBeenCalledWith('run_command', { command: 'echo hi', workingDirectory: null });
+    expect(invokeMock).toHaveBeenCalledWith('run_k6', { args, workingDirectory: null });
     expect(unlisten).toHaveBeenCalledTimes(1); // finally 解除
   });
 
-  it('runCommandWithRealTimeOutput 的 callback 收到事件 payload 字串', async () => {
+  it('runK6WithRealTimeOutput 的 callback 收到事件 payload 字串', async () => {
     let captured = null;
     listenMock.mockImplementation(async (_evt, handler) => {
       handler({ payload: 'line1' }); // 模擬一筆 command-output
@@ -148,8 +149,14 @@ describe('api module', () => {
     });
     invokeMock.mockResolvedValue(0);
     const cb = vi.fn((d) => { captured = d; });
-    await api.runCommandWithRealTimeOutput('x', null, cb);
+    await api.runK6WithRealTimeOutput(['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'], null, cb);
     expect(captured).toBe('line1');
+  });
+
+  it('舊的任意命令 bridge 已停用為 NotPortedError', async () => {
+    await expect(api.runCommandWithRealTimeOutput('echo hi', null, vi.fn())).rejects.toBeInstanceOf(NotPortedError);
+    await expect(api.runProgramWithRealTimeOutput('/bin/echo', ['hi'], null, vi.fn())).rejects.toBeInstanceOf(NotPortedError);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it('getPostmanCollectionPath 轉呼 invoke get_postman_collection_path', async () => {
