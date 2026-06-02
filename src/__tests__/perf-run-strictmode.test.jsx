@@ -15,9 +15,8 @@ describe('PerfTest Run under React.StrictMode', () => {
       { id: 'r1', method: 'GET', name: 'Cat fact', path: 'https://catfact.ninja/fact' },
     ] }] }];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
-    api.getK6Path = vi.fn().mockResolvedValue('k6.exe');
     api.writeTempText = vi.fn().mockResolvedValue('/tmp/script.js');
-    api.runProgramWithRealTimeOutput = vi.fn().mockResolvedValue(0);
+    api.runK6WithRealTimeOutput = vi.fn().mockResolvedValue(0);
     api.cleanupTempFile = vi.fn().mockResolvedValue();
     api.stopCommand = vi.fn();
   });
@@ -31,6 +30,6 @@ describe('PerfTest Run under React.StrictMode', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run test/i }));
     // Without the fix, mountedRef is false after StrictMode's mount cycle, so
     // run() returns after writeTempText and k6 is never spawned.
-    await waitFor(() => expect(api.runProgramWithRealTimeOutput).toHaveBeenCalled(), { timeout: 4000 });
+    await waitFor(() => expect(api.runK6WithRealTimeOutput).toHaveBeenCalled(), { timeout: 4000 });
   });
 });

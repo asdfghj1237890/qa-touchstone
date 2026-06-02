@@ -171,7 +171,9 @@ const createMockElectronAPI = () => ({
   selectDirectory: vi.fn().mockResolvedValue(null),
   onConfigUpdated: vi.fn(),
   removeConfigListener: vi.fn(),
-  runCommandWithRealTimeOutput: vi.fn().mockResolvedValue(0),
+  runCommandWithRealTimeOutput: vi.fn().mockRejectedValue(new Error('not ported')),
+  runProgramWithRealTimeOutput: vi.fn().mockRejectedValue(new Error('not ported')),
+  runK6WithRealTimeOutput: vi.fn().mockResolvedValue(0),
   stopCommand: vi.fn().mockResolvedValue(),
   loadConfig: vi.fn().mockResolvedValue({}),
   saveConfig: vi.fn().mockResolvedValue({ success: true }),
@@ -296,4 +298,4 @@ vi.mock('@mui/x-data-grid/esm/index.css', () => ({
 // Mock any other CSS files that might cause issues
 vi.mock('*.css', () => ({
   default: {}
-})); 
+}));

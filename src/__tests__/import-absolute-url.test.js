@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { qaParseImport } from '../qa/ImportData.jsx';
+import { buildReq } from '../qa/buildReq.js';
 import { buildPayload } from '../qa/executor.js';
 
 // Multi-host imported collections (e.g. the public-apis demo) carry absolute
@@ -65,6 +66,26 @@ describe('absolute-URL imports stay callable', () => {
   it('buildPayload prepends env base for a relative URL', () => {
     const payload = buildPayload(baseReq('/v1/users'), { baseUrl: 'https://api.acme.dev' }, {});
     expect(payload.requestDetails.request.url).toBe('https://api.acme.dev/v1/users');
+  });
+
+  it('buildReq preserves imported request headers', () => {
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'With header', path: 'https://api.test/thing' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = {
+      r1: {
+        params: [],
+        headers: [{ key: 'X-Api-Key', value: '{{apiKey}}', on: true }],
+        body: null,
+        auth: 'none',
+      },
+    };
+
+    const req = buildReq('r1');
+    expect(req.headers).toEqual([
+      { key: 'Accept', value: 'application/json', on: true },
+      { key: 'X-Api-Key', value: '{{apiKey}}', on: true },
+    ]);
   });
 
   it('the shipped demo collection imports as callable absolute-URL requests', () => {

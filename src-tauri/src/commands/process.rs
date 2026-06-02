@@ -1,47 +1,9 @@
 use crate::events::COMMAND_OUTPUT;
 use crate::state::AppState;
 use std::process::Stdio;
-use tauri::{AppHandle, Emitter, State};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::AsyncReadExt;
-
-/// 依平台決定 shell 程式與參數。非 Windows 會套用 nrfjprog 改寫。
-fn shell_invocation(command: &str) -> (String, Vec<String>) {
-    #[cfg(target_os = "windows")]
-    {
-        ("cmd".to_string(), vec!["/C".to_string(), command.to_string()])
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        ("/bin/zsh".to_string(), vec!["-c".to_string(), rewrite_nrfjprog(command)])
-    }
-}
-
-/// macOS/Linux：含 nrfjprog 時改絕對路徑 + sudo（對齊 Electron）。Windows 不會呼叫此函式。
-#[cfg(not(target_os = "windows"))]
-fn rewrite_nrfjprog(command: &str) -> String {
-    if !command.contains("nrfjprog") {
-        return command.to_string();
-    }
-    if let Ok(out) = std::process::Command::new("which").arg("nrfjprog").output() {
-        if out.status.success() {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !path.is_empty() {
-                return format!("sudo {}", command.replace("nrfjprog", &path));
-            }
-        }
-    }
-    for p in [
-        "/usr/local/bin/nrfjprog",
-        "/opt/homebrew/bin/nrfjprog",
-        "/usr/bin/nrfjprog",
-        "/opt/local/bin/nrfjprog",
-    ] {
-        if std::path::Path::new(p).exists() {
-            return format!("sudo {}", command.replace("nrfjprog", p));
-        }
-    }
-    format!("sudo {command}")
-}
 
 /// 通用設定 —— pipe stdout/stderr、設工作目錄、Unix 上的 PATH/process group。
 fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<String>) -> tokio::process::Command {
@@ -64,13 +26,6 @@ fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<Str
     cmd
 }
 
-fn build_command(command: &str, working_directory: &Option<String>) -> tokio::process::Command {
-    let (program, args) = shell_invocation(command);
-    let mut cmd = tokio::process::Command::new(program);
-    cmd.args(args);
-    finalize_cmd(cmd, working_directory)
-}
-
 /// Structured-args spawn — no shell interpretation. Use this for trusted
 /// programs (e.g. the bundled k6 binary) to keep injection surface zero.
 fn build_program(program: &str, args: &[String], working_directory: &Option<String>) -> tokio::process::Command {
@@ -79,8 +34,41 @@ fn build_program(program: &str, args: &[String], working_directory: &Option<Stri
     finalize_cmd(cmd, working_directory)
 }
 
-/// Shared spawn-stream-wait body used by both run_command (shell string) and
-/// run_program (structured args). Returns the exit code (or -1 if killed).
+fn validate_k6_args(args: &[String]) -> Result<(), String> {
+    const PREFIX: [&str; 6] = ["run", "--quiet", "--summary-mode", "disabled", "--out", "json=-"];
+    if args.len() != PREFIX.len() + 1 || !PREFIX.iter().enumerate().all(|(i, expected)| args[i] == *expected) {
+        return Err("Unsupported k6 invocation".into());
+    }
+    let script = std::path::PathBuf::from(&args[PREFIX.len()]);
+    let canon_script = std::fs::canonicalize(&script)
+        .map_err(|e| format!("Invalid k6 script path: {e}"))?;
+    let temp = std::env::temp_dir();
+    let canon_temp = std::fs::canonicalize(&temp).unwrap_or(temp);
+    if !canon_script.starts_with(&canon_temp) {
+        return Err("Refusing to run a k6 script outside the temp dir".into());
+    }
+    if canon_script.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("js")) != Some(true) {
+        return Err("k6 script must be a .js temp file".into());
+    }
+    Ok(())
+}
+
+fn k6_program(app: &AppHandle) -> String {
+    #[cfg(target_os = "windows")]
+    let rel = "resources/k6.exe";
+    #[cfg(not(target_os = "windows"))]
+    let rel = "resources/k6";
+
+    app.path()
+        .resolve(rel, BaseDirectory::Resource)
+        .ok()
+        .filter(|p| p.exists())
+        .and_then(|p| p.to_str().map(String::from))
+        .unwrap_or_else(|| "k6".into())
+}
+
+/// Shared spawn-stream-wait body used by the k6 runner. Returns the exit code
+/// (or -1 if killed).
 async fn spawn_stream_wait(
     state: &AppState,
     app: AppHandle,
@@ -140,28 +128,14 @@ async fn stream_to_events<R: AsyncReadExt + Unpin>(mut reader: R, app: AppHandle
 }
 
 #[tauri::command]
-pub async fn run_command(
+pub async fn run_k6(
     app: AppHandle,
     state: State<'_, AppState>,
-    command: String,
-    working_directory: Option<String>,
-) -> Result<i32, String> {
-    let cmd = build_command(&command, &working_directory);
-    spawn_stream_wait(&state, app, cmd).await
-}
-
-/// Structured equivalent of run_command — no shell interpretation, no quoting
-/// pitfalls. Use this for trusted internal binaries; we ship k6.exe and we
-/// know its path, so the cmd /C string indirection is gratuitous attack
-/// surface for that call site.
-#[tauri::command]
-pub async fn run_program(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    program: String,
     args: Vec<String>,
     working_directory: Option<String>,
 ) -> Result<i32, String> {
+    validate_k6_args(&args)?;
+    let program = k6_program(&app);
     let cmd = build_program(&program, &args, &working_directory);
     spawn_stream_wait(&state, app, cmd).await
 }
@@ -196,42 +170,7 @@ pub fn stop_command(state: State<AppState>) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn shell_invocation_per_platform() {
-        let (prog, args) = shell_invocation("echo hello");
-        #[cfg(target_os = "windows")]
-        {
-            assert_eq!(prog, "cmd");
-            assert_eq!(args, vec!["/C".to_string(), "echo hello".to_string()]);
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            assert_eq!(prog, "/bin/zsh");
-            assert_eq!(args[0], "-c");
-            assert_eq!(args[1], "echo hello"); // 無 nrfjprog → 不改寫
-        }
-    }
-
-    #[tokio::test]
-    async fn spawns_and_collects_output() {
-        let mut cmd = build_command("echo hello", &None);
-        let mut child = cmd.spawn().expect("spawn");
-        let mut out = child.stdout.take().unwrap();
-        let mut s = String::new();
-        let mut buf = [0u8; 1024];
-        loop {
-            let n = out.read(&mut buf).await.unwrap();
-            if n == 0 {
-                break;
-            }
-            s.push_str(&String::from_utf8_lossy(&buf[..n]));
-        }
-        let status = child.wait().await.unwrap();
-        assert_eq!(status.code(), Some(0));
-        assert!(s.contains("hello"), "stdout was: {s:?}");
-    }
-
-    // Structured-args path bypasses cmd /C / zsh -c — proves run_program
+    // Structured-args path bypasses cmd /C / zsh -c.
     // does not need shell interpretation. Spawning the platform's
     // built-in echo program lets us verify args are passed positionally.
     #[tokio::test]
@@ -255,7 +194,25 @@ mod tests {
         assert!(s.contains("hi"), "stdout was: {s:?}");
     }
 
-    // PID-ownership semantics: even if a second run_command finishes BEFORE
+    #[test]
+    fn validate_k6_args_accepts_only_temp_js_script() {
+        let path = std::env::temp_dir().join(format!("qa-k6-{}-test.js", std::process::id()));
+        std::fs::write(&path, "export default function() {}\n").unwrap();
+        let args = vec![
+            "run".into(), "--quiet".into(), "--summary-mode".into(), "disabled".into(),
+            "--out".into(), "json=-".into(), path.to_string_lossy().to_string(),
+        ];
+        assert!(validate_k6_args(&args).is_ok());
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn validate_k6_args_rejects_arbitrary_program_shapes() {
+        let args = vec!["version".into()];
+        assert!(validate_k6_args(&args).is_err());
+    }
+
+    // PID-ownership semantics: even if a second run finishes BEFORE
     // the first (because the first is a longer command), the first's
     // finalizer must not clobber the second's PID. We simulate by directly
     // exercising the lock pattern used inside spawn_stream_wait.

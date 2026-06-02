@@ -80,7 +80,7 @@ function SecretInput({ value, onChange, placeholder }) {
   );
 }
 
-// OAuth 2.0 token configuration + simulated token-endpoint exchange.
+// OAuth 2.0 token configuration + token-endpoint exchange.
 const OAUTH_GRANTS = [
   { value: 'authorization_code', label: 'Authorization Code' },
   { value: 'client_credentials', label: 'Client Credentials' },
@@ -90,18 +90,31 @@ function OAuth2Editor({ a, set, token, onFetch }) {
   const o = a.oauth2 || {};
   const setO = (field, val) => set('oauth2', { ...o, [field]: val });
   const [busy, setBusy] = useStateRB(false);
-  const grant = o.grant || 'authorization_code';
+  const [error, setError] = useStateRB('');
+  const grant = o.grant || 'client_credentials';
   const expIn = token ? Math.max(0, Math.round((token.expiresAt - Date.now()) / 1000)) : 0;
   const expired = token && expIn <= 0;
-  const run = () => { setBusy(true); setTimeout(() => { setBusy(false); onFetch && onFetch(); }, 900); };
+  const run = async () => {
+    if (!onFetch) return;
+    setBusy(true); setError('');
+    try { await onFetch(); }
+    catch (e) { setError(String(e && e.message ? e.message : e)); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="qa-oauth">
       <FieldRow label="Grant type">
         <Dropdown value={grant} options={OAUTH_GRANTS} onChange={v => setO('grant', v)} />
       </FieldRow>
       {grant === 'authorization_code' && (
-        <FieldRow label="Auth URL"><input className="qa-inp" value={o.authUrl || ''} placeholder="https://auth.acme.dev/authorize"
-          onChange={e => setO('authUrl', e.target.value)} /></FieldRow>
+        <>
+          <FieldRow label="Auth URL"><input className="qa-inp" value={o.authUrl || ''} placeholder="https://auth.acme.dev/authorize"
+            onChange={e => setO('authUrl', e.target.value)} /></FieldRow>
+          <FieldRow label="Authorization code"><SecretInput value={o.code || ''} placeholder="code from callback"
+            onChange={v => setO('code', v)} /></FieldRow>
+          <FieldRow label="Redirect URI"><input className="qa-inp" value={o.redirectUri || ''} placeholder="https://app.example/callback"
+            onChange={e => setO('redirectUri', e.target.value)} /></FieldRow>
+        </>
       )}
       <FieldRow label="Access token URL"><input className="qa-inp" value={o.tokenUrl || ''} placeholder="https://auth.acme.dev/oauth/token"
         onChange={e => setO('tokenUrl', e.target.value)} /></FieldRow>
@@ -113,6 +126,14 @@ function OAuth2Editor({ a, set, token, onFetch }) {
       </div>
       <FieldRow label="Scope"><input className="qa-inp" value={o.scope || ''} placeholder="read write"
         onChange={e => setO('scope', e.target.value)} /></FieldRow>
+      {grant === 'password' && (
+        <div className="qa-field-grid">
+          <FieldRow label="Username"><input className="qa-inp" value={o.username || ''} placeholder="user@example.com"
+            onChange={e => setO('username', e.target.value)} /></FieldRow>
+          <FieldRow label="Password"><SecretInput value={o.password || ''} placeholder="password"
+            onChange={v => setO('password', v)} /></FieldRow>
+        </div>
+      )}
 
       {token ? (
         <div className="qa-oauth-token" data-expired={expired ? '1' : '0'}>
@@ -134,6 +155,7 @@ function OAuth2Editor({ a, set, token, onFetch }) {
         {busy ? <Spinner size={13} /> : <Icon name="key" size={14} />}
         {busy ? 'Requesting token…' : token ? 'Get new access token' : 'Get access token'}
       </button>
+      {error && <div className="rn-data-err"><Icon name="x" size={12} /> {error}</div>}
     </div>
   );
 }
@@ -264,7 +286,19 @@ function AssertionsEditor({ rows, onChange }) {
 
 // Per-request Options: SSL verification, local-scope variables, and which
 // stored cookies will be replayed on this request.
+function cookieHostLabel(env, varMap) {
+  const raw = env && env.baseUrl ? String(env.baseUrl) : '';
+  if (!raw) return 'this host';
+  const resolved = window.qaSubstitute ? window.qaSubstitute(raw, varMap || {}) : raw;
+  try { return new URL(resolved).hostname; }
+  catch {
+    try { return new URL(raw).hostname; }
+    catch { return 'configured host'; }
+  }
+}
+
 function OptionsEditor({ req, env, sslVerify, setSslVerify, localVars, setLocalVars, varMap, cookies, collectionId, onOpenSettings }) {
+  const hostLabel = cookieHostLabel(env, varMap);
   return (
     <div className="qa-opts">
       {/* SSL */}
@@ -288,7 +322,7 @@ function OptionsEditor({ req, env, sslVerify, setSslVerify, localVars, setLocalV
 
       {/* Cookies sent */}
       <div className="qa-opt-block">
-        <div className="qa-opt-head"><span><Icon name="globe" size={13} /> Cookies for {env.baseUrl ? new URL(env.baseUrl).hostname : 'this host'}</span>
+        <div className="qa-opt-head"><span><Icon name="globe" size={13} /> Cookies for {hostLabel}</span>
           <button className="qa-link" onClick={() => onOpenSettings && onOpenSettings('cookies')}>Manage jar</button></div>
         {cookies && cookies.length ? (
           <div className="qa-ckmini">

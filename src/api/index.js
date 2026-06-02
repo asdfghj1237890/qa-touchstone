@@ -114,21 +114,12 @@ export const api = {
   getSelectedCredential: notPorted('getSelectedCredential'),
   getApiCredentialConfigs: () => invoke('get_api_credential_configs'),
   setApiCredentialConfigs: (configs) => invoke('set_api_credential_configs', { apiConfigs: configs }),
-  runCommandWithRealTimeOutput: async (command, workingDirectory, callback) => {
+  runCommandWithRealTimeOutput: notPorted('runCommandWithRealTimeOutput'),
+  runProgramWithRealTimeOutput: notPorted('runProgramWithRealTimeOutput'),
+  runK6WithRealTimeOutput: async (args, workingDirectory, callback) => {
     const unlisten = await listen('command-output', (e) => callback(e.payload));
     try {
-      return await invoke('run_command', { command, workingDirectory });
-    } finally {
-      unlisten();
-    }
-  },
-  // Structured-args spawn: no shell, no quoting. Use this for trusted
-  // binaries (e.g. the bundled k6) — eliminates injection risk that a
-  // shell-string call would carry even with internal-only inputs.
-  runProgramWithRealTimeOutput: async (program, args, workingDirectory, callback) => {
-    const unlisten = await listen('command-output', (e) => callback(e.payload));
-    try {
-      return await invoke('run_program', { program, args, workingDirectory });
+      return await invoke('run_k6', { args, workingDirectory });
     } finally {
       unlisten();
     }

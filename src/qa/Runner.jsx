@@ -72,7 +72,7 @@ function Runner({ env, vars, tests, cookies = [], sslVerify = true, oauthTokens 
         const map = window.qaVarMap(vars, env.label, colId, data || undefined);
         let resp;
         try {
-          resp = await qaRunSavedRequest(r, { env, vars, cookies, sslVerify, oauthToken: oauthTokens[r.id], collectionId: colId });
+          resp = await qaRunSavedRequest(r, { env, vars, cookies, sslVerify, oauthToken: oauthTokens[r.id], collectionId: colId, localVars: data || {} });
         } catch (e) {
           resp = { status: 0, statusText: String(e), time: 0, size: 0, body: null, headers: {} };
         }
