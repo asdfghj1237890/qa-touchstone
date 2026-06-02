@@ -108,6 +108,19 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   useE(() => { saveMatrixConfig(state); }, [state]);
 
   const summary = useMemo(() => summarize(results), [results]);
+  const findSummary = useMemo(() => summarizeFindings(results), [results]);
+  const allFindings = useMemo(() => {
+    const out = [];
+    for (const ep of endpoints) {
+      for (const id of identities) {
+        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        for (const f of (cell && cell.findings) || []) {
+          out.push({ ...f, endpoint: ep.path, method: ep.method, identity: id.id === 'anon' ? t('security.anon') : (id.name || id.id) });
+        }
+      }
+    }
+    return out.sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
+  }, [results, endpoints, identities, t]);
 
   const cycleCell = (reqId, idId) => {
     const cur = state.expect[reqId][idId];
@@ -199,6 +212,14 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         ))}
       </div>
 
+      {findSummary.total > 0 && (
+        <div className="qa-sec-findsummary">
+          {SEVERITY_ORDER.slice().reverse().filter(s => findSummary.bySeverity[s] > 0).map(s => (
+            <span key={s} className={`qa-sec-findchip qa-sev--${s}`}>{findSummary.bySeverity[s]} {t('security.severity.' + s)}</span>
+          ))}
+        </div>
+      )}
+
       <div className="qa-sec-toolbar">
         <button className="qa-link" onClick={addIdentity}><Icon name="plus" size={13} /> {t('security.addIdentity')}</button>
         <button className="qa-link" onClick={() => setPicking(true)}><Icon name="plus" size={13} /> {t('security.addEndpoints')}</button>
@@ -261,6 +282,24 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {allFindings.length > 0 && (
+        <div className="qa-sec-findpanel">
+          <h3>{t('security.findings.panelTitle')} ({allFindings.length})</h3>
+          <ul className="qa-sec-findlist">
+            {allFindings.map((f, i) => (
+              <li key={i} className={`qa-sev--${f.severity}`}>
+                <span className="qa-sec-find-sev">{t('security.severity.' + f.severity)}</span>
+                <span className="qa-sec-find-oracle">{t('security.oracle.' + f.oracle)}</span>
+                <MethodBadge method={f.method} size="sm" /> <code>{f.endpoint}</code>
+                <span className="qa-sec-find-id">{f.identity}</span>
+                <code className="qa-sec-find-path">{f.path}</code>
+                {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

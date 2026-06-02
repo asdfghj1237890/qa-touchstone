@@ -117,4 +117,17 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     expect(within(findings).getByText('email')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Scan with AI/i })).toBeInTheDocument();
   });
+
+  it('shows a severity summary chip and an aggregated findings panel after a run', async () => {
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+    fireEvent.click(screen.getByRole('button', { name: /Run all/i }));
+    await waitFor(() => expect(document.querySelector('.qa-sec-findbadge')).not.toBeNull(), { timeout: 4000 });
+    expect(document.querySelector('.qa-sec-findsummary')).not.toBeNull();
+    expect(document.querySelector('.qa-sec-findpanel')).not.toBeNull();
+  });
 });
