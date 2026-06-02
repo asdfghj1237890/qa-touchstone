@@ -38,6 +38,21 @@ describe('applyIdLocation', () => {
     expect(JSON.parse(r.body)).toEqual({ a: 1 });
     expect(r._idApplied).toBe(false);
   });
+  it('returns the request unchanged with _idApplied=false for an unknown kind', () => {
+    const req = baseReq();
+    const r = applyIdLocation(req, { kind: 'header' }, 9);
+    expect(r.url).toBe('/users/42/orders');
+    expect(r._idApplied).toBe(false);
+  });
+  it('flags _idApplied=false when idLocation is null/undefined', () => {
+    expect(applyIdLocation(baseReq(), null, 9)._idApplied).toBe(false);
+    expect(applyIdLocation(baseReq(), undefined, 9)._idApplied).toBe(false);
+  });
+  it('sets a body JSON field at a bracket/array path', () => {
+    const r = applyIdLocation({ method: 'POST', url: '/x', params: [], body: '{"items":[{"id":1}]}' }, { kind: 'body', path: 'items[0].id' }, 9);
+    expect(JSON.parse(r.body)).toEqual({ items: [{ id: 9 }] });
+    expect(r._idApplied).toBe(true);
+  });
 });
 
 const resp = (body) => ({ status: 200, body });
@@ -59,6 +74,16 @@ describe('matchesOwner', () => {
   });
   it('returns false when the owner reference body has no leaves', () => {
     expect(matchesOwner(resp({ a: 1 }), resp({}), 'zzz')).toBe(false);
+  });
+});
+
+describe('matchesOwner — documented over-confirmation', () => {
+  it('id-echo fires on a low-entropy id incidentally present in the attacker body', () => {
+    // INTENDED over-confirmation: the owner id `1` appears in the attacker's own
+    // response as an unrelated `page`/`total`, not as the owner's object. The
+    // heuristic still matches (errs toward a dismissible false "vuln"); a human
+    // adjudicates via the surfaced drawer evidence.
+    expect(matchesOwner({ status: 200, body: { id: 7, page: 1, total: 1 } }, { status: 200, body: { id: 1 } }, 1)).toBe(true);
   });
 });
 

@@ -14,6 +14,9 @@ export function applyIdLocation(req, idLocation, value) {
   const v = String(value);
   if (!idLocation) { out._idApplied = false; return out; }
   if (idLocation.kind === 'path') {
+    // Expects the RELATIVE built-request URL (as produced by buildReq, which
+    // strips the query and does not prepend baseUrl); an absolute
+    // `https://host/...` URL would treat the scheme as a path segment.
     const [pathPart, queryPart] = String(out.url || '').split('?');
     const segs = pathPart.split('/');
     let seen = -1, applied = false;
@@ -33,6 +36,8 @@ export function applyIdLocation(req, idLocation, value) {
     out._idApplied = false;
     try {
       const obj = JSON.parse(out.body || 'null');
+      // Writes the ORIGINAL `value` (preserving JSON number/bool type) rather
+      // than the stringified `v` used for path/query segments (URLs are text).
       if (obj && typeof obj === 'object' && setAtPath(obj, idLocation.path, value)) {
         out.body = JSON.stringify(obj);
         out._idApplied = true;
@@ -72,6 +77,14 @@ function scalarLeaves(body) {
 // True when the attacker's response actually reflects the owner's object:
 // (a) the owner id value is echoed in the body, or
 // (b) scalar-leaf Jaccard overlap with the owner reference >= MATCH_THRESHOLD.
+// Tradeoff: this is a heuristic that errs toward OVER-confirmation, which is the
+// safe direction for a scanner (a false "vuln" a human dismisses beats a missed
+// one). Specifically: (i) id-echo can fire when a low-entropy id value (e.g. `1`)
+// incidentally appears in the attacker's own response as a page/count/unrelated
+// id, and (ii) Jaccard over a SET of distinct scalar leaves can over-confirm for
+// tiny or repetitive bodies. The UI surfaces which rule matched (drawer evidence)
+// so a human adjudicates, and an unmatched 2xx stays at the lower `unconfirmed`
+// tier rather than being promoted to `vuln`.
 export function matchesOwner(attackResp, ownerRef, ownerIdValue) {
   const aBody = attackResp && attackResp.body;
   const idv = String(ownerIdValue);
