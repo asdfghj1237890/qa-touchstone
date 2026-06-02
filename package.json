@@ -2,7 +2,7 @@
   "name": "qa-companion",
   "version": "0.13.1",
   "private": true,
-  "description": "A desktop API client and embedded QA utility for local test workflows.",
+  "description": "A desktop API client for local test workflows.",
   "scripts": {
     "dev": "vite",
     "tauri": "tauri",

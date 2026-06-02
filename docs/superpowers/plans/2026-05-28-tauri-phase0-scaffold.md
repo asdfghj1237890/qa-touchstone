@@ -136,13 +136,13 @@ src-tauri/gen
 
 ```toml
 [package]
-name = "sidewalk-qa-friends"
+name = "qa-companion"
 version = "0.13.1"
-description = "Sidewalk QA Friends"
+description = "QA Companion"
 edition = "2021"
 
 [lib]
-name = "sidewalk_qa_friends_lib"
+name = "qa_companion_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -174,9 +174,9 @@ fn main() {
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Sidewalk QA Friends",
+  "productName": "QA Companion",
   "version": "0.13.1",
-  "identifier": "com.amazon.sidewalk-qa-friends",
+  "identifier": "com.qacompanion.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
@@ -187,7 +187,7 @@ fn main() {
     "windows": [
       {
         "label": "main",
-        "title": "Sidewalk QA Friends",
+        "title": "QA Companion",
         "width": 1200,
         "height": 800,
         "minWidth": 800,
@@ -303,9 +303,6 @@ pub type AppResult<T> = Result<T, AppError>;
 pub const COMMAND_OUTPUT: &str = "command-output";
 pub const CONFIG_UPDATED: &str = "config-updated";
 pub const POSTMAN_COLLECTIONS_UPDATED: &str = "postman-collections-updated";
-pub const XMODEM_PROGRESS: &str = "xmodem-progress";
-pub const SERIAL_DATA_RECEIVED: &str = "serial-data-received";
-pub const SERIAL_ERROR: &str = "serial-error";
 ```
 
 - [ ] **Step 3: 建立 `src-tauri/src/state.rs`（骨架，欄位隨後續階段填入）**
@@ -313,7 +310,7 @@ pub const SERIAL_ERROR: &str = "serial-error";
 ```rust
 use parking_lot::Mutex;
 
-/// 全域共享狀態。階段 0 先放空骨架，子程序 / 序列埠 / 快取在後續階段補上。
+/// 全域共享狀態。階段 0 先放空骨架，子程序 / 快取在後續階段補上。
 #[derive(Default)]
 pub struct AppState {
     /// 階段 2 用：目前執行中的子程序 PID（佔位）。

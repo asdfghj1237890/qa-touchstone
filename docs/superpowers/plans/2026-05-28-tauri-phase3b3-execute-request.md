@@ -279,7 +279,7 @@ pub async fn execute_postman_request(
         if let Some(env) = env {
             if let Some(role_arn) = str_field(env, "roleArn") {
                 if !role_arn.is_empty() && creds.session_token.is_none() {
-                    match aws::assume_role(&creds, role_arn, "SidewalkQAFriends").await {
+                    match aws::assume_role(&creds, role_arn, "QACompanion").await {
                         Ok(c) => final_creds = c,
                         Err(e) => return err(format!("Failed to assume role {role_arn}: {e}")),
                     }

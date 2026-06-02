@@ -47,14 +47,11 @@
 use regex::Regex;
 use serde_json::{Map, Value};
 
-/// 已知的 Sidewalk 環境 base path（鏡像前端 ApiTestPage.jsx 的 ENVIRONMENTS；
-/// 用於 rebase_url 只剝除「已知」base path——修正 bug #8 的「剝任意第一段」）。
+/// 已知的環境 base path（由環境設定提供；用於 rebase_url 只剝除「已知」
+/// base path——修正 bug #8 的「剝任意第一段」）。
 pub const KNOWN_ENV_BASE_PATHS: &[&str] = &[
-    "/hyperion-gamma",
-    "/hyperion-prod",
-    "/ffs-gamma",
-    "/ffs-prod",
-    "/operations-gamma",
+    "/staging",
+    "/production",
 ];
 
 /// 把 serde_json 值轉成「裸字串」（字串去引號；其他用其 JSON 文字）。

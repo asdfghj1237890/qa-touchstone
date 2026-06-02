@@ -241,7 +241,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: `commands/mod.rs` 加模組**（字母序：…, flash, fsops, postman, process, store, …）
+- [ ] **Step 2: `commands/mod.rs` 加模組**（字母序：…, fsops, postman, process, store, …）
 
 ```rust
 pub mod postman;
