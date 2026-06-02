@@ -17,16 +17,15 @@ exportable API documentation in one Tauri app.
 
 ## Screenshots
 
-**Security matrix — identity × endpoint RBAC testing.** Run the same endpoints
-under multiple identities (anonymous, bearer, basic, …); every cell is scored
-allow/deny against the real response, and broken access control (a request that
-should be denied but succeeds) is flagged as a vulnerability.
+**A local-first, Postman-compatible desktop workspace for API QA** — API client,
+collection runner, security matrix, monitors, performance testing, and exportable
+docs in one app.
 
-![Security matrix](docs/screenshots/02-security-matrix.png)
+![QA Touchstone](docs/screenshots/01-home.png)
 
-| Home | AI test generation | API client |
+| Security matrix (RBAC) | AI test generation | API client |
 | --- | --- | --- |
-| ![Home](docs/screenshots/01-home.png) | ![AI test generation](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
+| ![Security matrix](docs/screenshots/02-security-matrix.png) | ![AI test generation](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
 | **Generated API docs** | **Performance / load testing** | **Realtime (WebSocket / SSE)** |
 | ![Generated API docs](docs/screenshots/05-api-docs.png) | ![Performance testing](docs/screenshots/06-performance.png) | ![Realtime testing](docs/screenshots/07-realtime.png) |
 

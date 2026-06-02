@@ -17,15 +17,14 @@ Tauri app 裡。
 
 ## 畫面截圖
 
-**安全矩陣 — 身分 × 端點的 RBAC 授權測試。** 用多個身分（匿名、bearer、basic…）
-對同一批端點各跑一次，每一格依真實回應判定 allow/deny；當「應該被拒卻成功」時
-標示為漏洞（broken access control）。
+**本機優先、相容 Postman 的桌面 API QA 工作台** — API client、collection runner、
+安全矩陣、monitors、效能測試與可匯出文件，全部整合在一個 app。
 
-![安全矩陣](docs/screenshots/02-security-matrix.png)
+![QA Touchstone](docs/screenshots/01-home.png)
 
-| 首頁 | AI 測試產生 | API client |
+| 安全矩陣（RBAC） | AI 測試產生 | API client |
 | --- | --- | --- |
-| ![首頁](docs/screenshots/01-home.png) | ![AI 測試產生](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
+| ![安全矩陣](docs/screenshots/02-security-matrix.png) | ![AI 測試產生](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
 | **產生的 API 文件** | **效能 / 負載測試** | **Realtime（WebSocket / SSE）** |
 | ![API 文件](docs/screenshots/05-api-docs.png) | ![效能測試](docs/screenshots/06-performance.png) | ![Realtime](docs/screenshots/07-realtime.png) |
 
