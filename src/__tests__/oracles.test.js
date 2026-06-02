@@ -85,3 +85,36 @@ describe('scanSensitive — config', () => {
     expect(f.find(x => x.title === 'Email address').severity).toBe('low');
   });
 });
+
+import { inferContract, checkSchema } from '../qa/oracles.js';
+
+describe('inferContract', () => {
+  it('records normalized field paths and types, array indices collapsed', () => {
+    const c = inferContract({ id: 1, name: 's', items: [{ x: 1 }, { x: 2 }] });
+    expect(c['id'].type).toBe('number');
+    expect(c['name'].type).toBe('string');
+    expect(c['items[].x'].type).toBe('number');   // [] not [0]/[1]
+  });
+});
+
+describe('checkSchema', () => {
+  const base = inferContract({ id: 1, name: 's' });
+  it('flags an undeclared field as low', () => {
+    const f = checkSchema({ id: 1, name: 's', extra: true }, base);
+    expect(f).toContainEqual(expect.objectContaining({ oracle: 'schema', title: 'Undeclared field', path: 'extra', severity: 'low' }));
+  });
+  it('flags a missing baseline field as medium', () => {
+    const f = checkSchema({ id: 1 }, base);
+    expect(f).toContainEqual(expect.objectContaining({ title: 'Missing field', path: 'name', severity: 'medium' }));
+  });
+  it('flags a type mismatch as medium', () => {
+    const f = checkSchema({ id: '1', name: 's' }, base);
+    expect(f).toContainEqual(expect.objectContaining({ title: 'Type mismatch', path: 'id', severity: 'medium' }));
+  });
+  it('returns nothing when body matches the contract', () => {
+    expect(checkSchema({ id: 2, name: 't' }, base)).toEqual([]);
+  });
+  it('returns nothing when the schema oracle is disabled', () => {
+    expect(checkSchema({ id: 1, name: 's', extra: 1 }, base, { ...DEFAULT_ORACLE_CONFIG, schema: false })).toEqual([]);
+  });
+});
