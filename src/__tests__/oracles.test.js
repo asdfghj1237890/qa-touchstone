@@ -25,3 +25,63 @@ describe('worstSeverity', () => {
     expect(worstSeverity([])).toBe(null);
   });
 });
+
+import { scanSensitive, DEFAULT_ORACLE_CONFIG } from '../qa/oracles.js';
+
+const resp = (body, headers = {}) => ({ status: 200, body, headers });
+
+describe('scanSensitive — secrets', () => {
+  it('flags a JWT in a body value', () => {
+    const f = scanSensitive(resp({ tok: 'eyJhbGciOi.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4' }));
+    expect(f.some(x => x.title === 'JWT in response' && x.severity === 'high')).toBe(true);
+    expect(f[0].evidence).toContain('<redacted>');   // never the raw token
+  });
+  it('flags a private key block as critical', () => {
+    const f = scanSensitive(resp({ k: '-----BEGIN RSA PRIVATE KEY-----\nMIIE' }));
+    expect(f.some(x => x.title === 'Private key' && x.severity === 'critical')).toBe(true);
+  });
+  it('flags secret-named fields by key, even when the value is an object', () => {
+    const f = scanSensitive(resp({ password: 'hunter2', nested: { client_secret: { rotated: true } } }));
+    const titles = f.map(x => x.title);
+    expect(titles.filter(t => t === 'Secret-named field present').length).toBe(2);
+  });
+  it('flags an AWS access key id', () => {
+    const f = scanSensitive(resp({ a: 'AKIAIOSFODNN7EXAMPLE' }));
+    expect(f.some(x => x.title === 'AWS access key id')).toBe(true);
+  });
+});
+
+describe('scanSensitive — PII', () => {
+  it('flags an email', () => {
+    const f = scanSensitive(resp({ user: { email: 'a.b@example.com' } }));
+    const hit = f.find(x => x.title === 'Email address');
+    expect(hit).toBeTruthy();
+    expect(hit.path).toBe('user.email');
+  });
+  it('flags only Luhn-valid card numbers', () => {
+    expect(scanSensitive(resp({ c: '4242424242424242' })).some(x => x.title === 'Credit-card-like number')).toBe(true);
+    expect(scanSensitive(resp({ c: '4242424242424241' })).some(x => x.title === 'Credit-card-like number')).toBe(false);
+  });
+});
+
+describe('scanSensitive — internal/debug', () => {
+  it('flags internal/debug field names', () => {
+    const f = scanSensitive(resp({ stacktrace: 'at Foo.bar (x.js:1)' }));
+    expect(f.some(x => x.title === 'Internal/debug field')).toBe(true);
+  });
+  it('flags leaky response headers', () => {
+    const f = scanSensitive(resp({ ok: true }, { Server: 'nginx/1.2.3', 'X-Powered-By': 'Express' }));
+    expect(f.filter(x => x.title === 'Server/version header').length).toBe(2);
+    expect(f.find(x => x.title === 'Server/version header').path).toMatch(/^header:/);
+  });
+});
+
+describe('scanSensitive — config', () => {
+  it('returns nothing when the sensitive oracle is disabled', () => {
+    expect(scanSensitive(resp({ email: 'a@b.co' }), { ...DEFAULT_ORACLE_CONFIG, sensitive: false })).toEqual([]);
+  });
+  it('applies a per-group severity override', () => {
+    const f = scanSensitive(resp({ email: 'a@b.co' }), { ...DEFAULT_ORACLE_CONFIG, severityOverrides: { pii: 'low' } });
+    expect(f.find(x => x.title === 'Email address').severity).toBe('low');
+  });
+});

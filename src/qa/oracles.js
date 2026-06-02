@@ -39,3 +39,74 @@ export function walkJson(node, visit, path = '') {
     if (v && typeof v === 'object') walkJson(v, visit, p);
   }
 }
+
+export const DEFAULT_ORACLE_CONFIG = { sensitive: true, schema: true, llm: false, severityOverrides: {} };
+
+// Each rule matches by key-name (`key`) and/or value-regex (`value`). `luhn`
+// requires the matched value to pass a Luhn check (cuts card false positives).
+const RULES = [
+  { id: 'jwt',         group: 'secrets',  severity: 'high',     title: 'JWT in response',          value: /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}\b/ },
+  { id: 'aws-key',     group: 'secrets',  severity: 'high',     title: 'AWS access key id',        value: /\bAKIA[0-9A-Z]{16}\b/ },
+  { id: 'private-key', group: 'secrets',  severity: 'critical', title: 'Private key',              value: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
+  { id: 'secret-name', group: 'secrets',  severity: 'critical', title: 'Secret-named field present', key: /^(password|passwd|pwd|secret|client_secret|access_token|refresh_token|api_?key|token)$/i },
+  { id: 'email',       group: 'pii',      severity: 'medium',   title: 'Email address',            value: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
+  { id: 'card',        group: 'pii',      severity: 'high',     title: 'Credit-card-like number',  value: /\b(?:\d[ -]?){13,19}\b/, luhn: true },
+  { id: 'internal',    group: 'internal', severity: 'medium',   title: 'Internal/debug field',     key: /^(stack_?trace|exception|sql|query|internal.*|debug)$/i },
+];
+
+function luhnValid(s) {
+  const d = String(s).replace(/[ -]/g, '');
+  if (!/^\d{13,19}$/.test(d)) return false;
+  let sum = 0, alt = false;
+  for (let i = d.length - 1; i >= 0; i--) {
+    let n = +d[i];
+    if (alt) { n *= 2; if (n > 9) n -= 9; }
+    sum += n; alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+
+export function scanSensitive(response, config = DEFAULT_ORACLE_CONFIG) {
+  if (!config || config.sensitive === false) return [];
+  const findings = [];
+  const seen = new Set();
+  const overrides = config.severityOverrides || {};
+  const push = (rule, path, value) => {
+    const k = rule.id + '@' + path;
+    if (seen.has(k)) return;
+    seen.add(k);
+    findings.push({
+      oracle: 'sensitive-data',
+      severity: overrides[rule.group] || rule.severity,
+      title: rule.title, path, evidence: redact(value), source: 'rule',
+    });
+  };
+
+  const headers = (response && response.headers) || {};
+  for (const hk of Object.keys(headers)) {
+    if (/^(server|x-powered-by)$/i.test(hk)) {
+      push({ id: 'leaky-header', group: 'internal', severity: 'medium', title: 'Server/version header' }, 'header:' + hk, headers[hk]);
+    }
+  }
+
+  const visit = (path, key, value) => {
+    for (const rule of RULES) {
+      if (rule.key && key && rule.key.test(key)) {
+        push(rule, path, typeof value === 'object' ? '[object]' : value);
+        continue;
+      }
+      if (rule.value && (typeof value === 'string' || typeof value === 'number')) {
+        const m = String(value).match(rule.value);
+        if (m) {
+          if (rule.luhn && !luhnValid(m[0])) continue;
+          push(rule, path, value);
+        }
+      }
+    }
+  };
+
+  const body = response && response.body;
+  if (body != null && typeof body === 'object') walkJson(body, visit);
+  else if (typeof body === 'string') visit('$', '', body);   // non-JSON raw body
+  return findings;
+}
