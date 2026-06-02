@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { classifyOutcome, verdictFor, DEFAULT_DENY_SET } from '../qa/authz.js';
 import { anonIdentity, defaultExpectation, withDefaults, setColumn, setRow } from '../qa/authz.js';
 import { runMatrix, summarize } from '../qa/authz.js';
+import { loadMatrixConfig, saveMatrixConfig, SECURITY_STORAGE_KEY } from '../qa/authz.js';
 
 describe('classifyOutcome', () => {
   it('2xx is allowed', () => {
@@ -144,5 +145,40 @@ describe('summarize', () => {
       r2: { anon: { verdict: 'fail' }, admin: { verdict: 'inconclusive' } },
     };
     expect(summarize(results)).toEqual({ total: 4, pass: 1, fail: 1, vuln: 1, inconclusive: 1 });
+  });
+});
+
+function installLocalStorage(seed = {}) {
+  let store = { ...seed };
+  const storage = {
+    getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v); },
+    removeItem: (k) => { delete store[k]; },
+    clear: () => { store = {}; },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
+  Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
+}
+
+describe('persistence', () => {
+  it('round-trips config only (no results)', () => {
+    installLocalStorage();
+    const state = {
+      identities: [anonIdentity()], endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
+      expect: { r1: { anon: 'deny' } }, denySet: [401, 403],
+      results: { r1: { anon: { verdict: 'pass' } } },  // must NOT be persisted
+    };
+    saveMatrixConfig(state);
+    const raw = JSON.parse(localStorage.getItem(SECURITY_STORAGE_KEY));
+    expect(raw.results).toBeUndefined();
+    const loaded = loadMatrixConfig();
+    expect(loaded.expect.r1.anon).toBe('deny');
+    expect(loaded.identities[0].id).toBe('anon');
+  });
+  it('returns null when nothing is stored or JSON is corrupt', () => {
+    installLocalStorage();
+    expect(loadMatrixConfig()).toBe(null);
+    localStorage.setItem(SECURITY_STORAGE_KEY, '{not json');
+    expect(loadMatrixConfig()).toBe(null);
   });
 });

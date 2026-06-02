@@ -108,3 +108,21 @@ export function summarize(results) {
   }
   return s;
 }
+
+// Load persisted matrix CONFIG (identities/endpoints/expect/denySet). Results
+// are transient and never persisted. Returns null on miss or corrupt data.
+export function loadMatrixConfig() {
+  try {
+    const raw = localStorage.getItem(SECURITY_STORAGE_KEY);
+    if (!raw) return null;
+    const cfg = JSON.parse(raw);
+    return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : null;
+  } catch { return null; }
+}
+
+export function saveMatrixConfig(state) {
+  try {
+    const { identities = [], endpoints = [], expect = {}, denySet = DEFAULT_DENY_SET } = state || {};
+    localStorage.setItem(SECURITY_STORAGE_KEY, JSON.stringify({ identities, endpoints, expect, denySet }));
+  } catch { /* storage unavailable — non-fatal */ }
+}
