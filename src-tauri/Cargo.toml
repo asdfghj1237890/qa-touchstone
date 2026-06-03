@@ -1,6 +1,6 @@
 [package]
 name = "qa-touchstone"
-version = "0.13.1"
+version = "0.15.0"
 description = "QA Touchstone"
 edition = "2021"
 
