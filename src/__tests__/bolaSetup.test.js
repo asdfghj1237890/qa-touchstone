@@ -31,4 +31,11 @@ describe('detectIdLocation', () => {
   it('returns [] when nothing looks like an id', () => {
     expect(detectIdLocation(req({ url: '/health', params: [], body: '' }))).toEqual([]);
   });
+  it('does not treat substring-only matches like "organic" as an id key', () => {
+    const out = detectIdLocation({ method: 'GET', url: '/x', params: [
+      { key: 'organic', value: 'true', on: true },
+      { key: 'tenant', value: 'acme', on: true }] });
+    expect(out.some(c => c.idLocation.kind === 'query' && c.idLocation.key === 'organic')).toBe(false);
+    expect(out.some(c => c.idLocation.kind === 'query' && c.idLocation.key === 'tenant')).toBe(true);
+  });
 });
