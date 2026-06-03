@@ -5,6 +5,7 @@ import api from '../api/index.js';
 import { buildScript } from './k6gen.js';
 import { makeState, feed, snapshot } from './k6parse.js';
 import { useI18n } from './useI18n.js';
+import { downloadFile } from './download.js';
 
 // ── QA Touchstone — Performance / Load / Stress (SLO · stages · history) ────
 const { useState: usePF, useRef: useRefPF, useEffect: useEffPF } = React;
@@ -85,14 +86,6 @@ function pfCollectionOf(reqId) {
     }
   }
   return null;
-}
-
-function downloadFile(name, content, mime) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function sparkPath(series, w, h, pad = 4) {
