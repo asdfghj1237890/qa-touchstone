@@ -98,3 +98,18 @@ export function diffRuns(currentItems, baselineItems) {
   for (const it of (baselineItems || [])) if (!curFps.has(it.fp)) out.set(it.fp, 'resolved');
   return out;
 }
+
+// The seed for the (deferred) CI gate: count of NEW findings whose EFFECTIVE
+// severity is high/critical and which are not suppressed. `items` are snapshot
+// items (already carry effectiveSeverity); `diff` is from diffRuns.
+export function gateCount(items, lifecycle, diff) {
+  const records = (lifecycle && lifecycle.records) || {};
+  let n = 0;
+  for (const it of (items || [])) {
+    if ((diff ? diff.get(it.fp) : 'new') !== 'new') continue;
+    const rec = records[it.fp];
+    if (rec && rec.suppressed) continue;
+    if (it.effectiveSeverity === 'high' || it.effectiveSeverity === 'critical') n++;
+  }
+  return n;
+}
