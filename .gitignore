@@ -27,3 +27,7 @@ src-tauri/resources/k6
 src-tauri/resources/.k6.provenance.json
 # Local editor / tooling config (Claude Code preview launch.json, etc.)
 .claude/
+# Local Claude instructions (not shared)
+CLAUDE.local.md
+# AI-workflow planning artifacts (superpowers specs/plans) — keep out of the repo
+docs/superpowers/
