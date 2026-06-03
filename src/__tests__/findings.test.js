@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   FP_VERSION, ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
+  snapshotOf, scopeHashOf,
 } from '../qa/findings.js';
 
 const matrixF = (over = {}) => ({
@@ -96,5 +97,41 @@ describe('effectiveSeverity', () => {
   });
   it('ignores an invalid override value', () => {
     expect(effectiveSeverity({ severity: 'high' }, { severityOverride: 'bogus' })).toBe('high');
+  });
+});
+
+const lc = (records = {}) => ({ fpVersion: FP_VERSION, records });
+
+describe('snapshotOf', () => {
+  it('keys items by fingerprint and counts collapsed occurrences', () => {
+    const union = [matrixF({ path: 'items[0].token' }), matrixF({ path: 'items[1].token' })];
+    const snap = snapshotOf(union, lc(), { runId: 'run1', createdAt: 'T', scopeHash: 'sh' });
+    expect(snap.items).toHaveLength(1);
+    expect(snap.items[0].count).toBe(2);
+    expect(snap.runId).toBe('run1');
+    expect(snap.scopeHash).toBe('sh');
+  });
+  it('records effective severity using lifecycle overrides', () => {
+    const fp = fingerprint(matrixF()).fp;
+    const snap = snapshotOf([matrixF()], lc({ [fp]: { severityOverride: 'low' } }), {});
+    expect(snap.items[0].effectiveSeverity).toBe('low');
+  });
+  it('never stores evidence, body, or title in snapshot items', () => {
+    const snap = snapshotOf([matrixF()], lc(), {});
+    const item = snap.items[0];
+    expect(item).not.toHaveProperty('evidence');
+    expect(item).not.toHaveProperty('title');
+    expect(Object.keys(item).sort()).toEqual(
+      ['count', 'effectiveSeverity', 'engine', 'fp', 'locationLabel', 'path', 'ruleId'].sort());
+  });
+});
+
+describe('scopeHashOf', () => {
+  it('is stable for the same descriptor and changes when it changes', () => {
+    const a = scopeHashOf({ endpoints: ['r1', 'r2'], identities: ['admin'] });
+    const b = scopeHashOf({ endpoints: ['r1', 'r2'], identities: ['admin'] });
+    const c = scopeHashOf({ endpoints: ['r1'], identities: ['admin'] });
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
   });
 });

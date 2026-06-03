@@ -55,3 +55,34 @@ export function effectiveSeverity(finding, record) {
   const ov = record && record.severityOverride;
   return (ov && SEVERITY_ORDER.includes(ov)) ? ov : (finding && finding.severity);
 }
+
+// Aggregate a finding union into compact snapshot items (identities, NOT
+// findings). `path` is the normalized JSON field path (a key name, never a
+// value) — safe to store and useful for explaining resolved rows. `meta`
+// carries { runId, createdAt, scopeHash }.
+export function snapshotOf(union, lifecycle, meta = {}) {
+  const records = (lifecycle && lifecycle.records) || {};
+  const byFp = new Map();
+  for (const f of (union || [])) {
+    const { fp } = fingerprint(f);
+    const existing = byFp.get(fp);
+    if (existing) { existing.count += 1; continue; }
+    byFp.set(fp, {
+      fp,
+      effectiveSeverity: effectiveSeverity(f, records[fp]),
+      engine: f.engine,
+      ruleId: ruleIdOf(f),
+      path: normalizePath((f && f.path) || ''),
+      locationLabel: locationLabel(f),
+      count: 1,
+    });
+  }
+  return {
+    runId: meta.runId || '', createdAt: meta.createdAt || '', scopeHash: meta.scopeHash || '',
+    items: [...byFp.values()],
+  };
+}
+
+// Stable hash of the scanned surface (NOT the findings), so a diff across a
+// changed test surface can be flagged instead of misread as fixes/regressions.
+export function scopeHashOf(descriptor) { return fnv1a(JSON.stringify(descriptor || {})); }
