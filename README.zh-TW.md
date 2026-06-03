@@ -59,11 +59,17 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
   並以 response oracles 標示敏感資料外洩與 schema 偏移。物件層級授權（BOLA/IDOR）
   測試在不同身分間替換物件 id，支援自動偵測 id 位置、可重用的跨租戶 presets，以及
   避免誤判的 negative control。速率限制 / 濫用測試在確認關卡後送出有上限的 request bursts。
+  單一 **執行完整安全掃描（Run full security suite）** 會把三個引擎當成一次已記錄的
+  執行依序跑完——速率限制放最後，避免其 bursts 影響矩陣與 BOLA 的結果。
 - **AI 安全分流（AI security triage）**：把整批掃描（矩陣 + 物件授權 + 速率限制）
   濃縮成一份簡短、依優先序分類的清單——先看哪幾個、哪些像真的問題、哪些可能是誤判
   ——僅供參考，不會更動底層 findings。
 - **發現生命週期（Findings lifecycle）**：抑制誤判、覆寫嚴重度、指派負責人/狀態/備註，
   並將每次掃描與釘選的基準（baseline）比對——新增/延續/已消失標記，加上新增高/嚴重計數。
+- **安全報告 / CI 產物（Security reports / CI artifacts）**：將一次完整的 suite 執行
+  匯出為 JSON 產物、HTML 主管報告、JUnit XML（CI 測試檢查）或 SARIF（GitHub code
+  scanning）——以「新增的高/嚴重發現」作為 gate，並提供遮蔽政策（遮蔽或省略佐證）
+  以保護離開本機的產物。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
@@ -89,7 +95,7 @@ flowchart LR
 
   UI --> Client["API Client (REST / GraphQL)"]
   UI --> Runner["Collection Runner"]
-  UI --> Security["Security (RBAC / BOLA / rate-limit)"]
+  UI --> Security["Security suite (RBAC / BOLA / rate-limit)"]
   UI --> Monitors["Background Monitors"]
   UI --> Perf["Performance Page"]
   UI --> AI["Test Gen + AI Review"]
@@ -100,6 +106,9 @@ flowchart LR
   Runner --> Executor
   Monitors --> Executor
   Security --> Executor
+
+  Security --> Findings["Findings lifecycle + baseline diff (RunRecord)"]
+  Findings --> Reports["Security reports: JSON / HTML / JUnit / SARIF"]
 
   Executor --> Vars["Variables + Environments"]
   Executor --> Cookies["Local Cookie Jar"]
@@ -112,7 +121,8 @@ flowchart LR
 
   AI --> LLM["Built-in / OpenAI-compatible LLM"]
   Security --> LLM
-  UI --> Storage["localStorage + local config files"]
+  Findings --> Storage["localStorage + local config files"]
+  UI --> Storage
 ```
 
 - **Frontend**：React 18 + Vite

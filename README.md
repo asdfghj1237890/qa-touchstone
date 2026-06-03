@@ -64,6 +64,8 @@ The current public-facing scope is API testing only:
   object ids across identities with auto-detected id locations, reusable
   cross-tenant presets, and a negative control that suppresses false positives.
   Rate-limit / abuse testing fires bounded request bursts behind a confirm gate.
+  A single **Run full security suite** executes all three engines as one recorded
+  run — rate-limit last, so its bursts don't skew the matrix and BOLA results.
 - **AI security triage**: condense a whole scan (matrix + object-authz + rate-limit)
   into a short, prioritized, categorized shortlist — what to look at first, what
   looks like a real issue, and what's likely a false positive — advisory only,
@@ -71,6 +73,10 @@ The current public-facing scope is API testing only:
 - **Findings lifecycle**: suppress false positives, override severity, and assign
   owner/status/note, then diff each run against a pinned baseline — new/carried/resolved
   badges plus a new-high/critical counter.
+- **Security reports / CI artifacts**: export a completed suite run as a JSON
+  artifact, an HTML executive report, JUnit XML (CI test checks), or SARIF
+  (GitHub code scanning) — gated on new high/critical findings, with a redaction
+  policy (mask or omit evidence) for artifacts that leave the machine.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress
@@ -99,7 +105,7 @@ flowchart LR
 
   UI --> Client["API Client (REST / GraphQL)"]
   UI --> Runner["Collection Runner"]
-  UI --> Security["Security (RBAC / BOLA / rate-limit)"]
+  UI --> Security["Security suite (RBAC / BOLA / rate-limit)"]
   UI --> Monitors["Background Monitors"]
   UI --> Perf["Performance Page"]
   UI --> AI["Test Gen + AI Review"]
@@ -110,6 +116,9 @@ flowchart LR
   Runner --> Executor
   Monitors --> Executor
   Security --> Executor
+
+  Security --> Findings["Findings lifecycle + baseline diff (RunRecord)"]
+  Findings --> Reports["Security reports: JSON / HTML / JUnit / SARIF"]
 
   Executor --> Vars["Variables + Environments"]
   Executor --> Cookies["Local Cookie Jar"]
@@ -122,7 +131,8 @@ flowchart LR
 
   AI --> LLM["Built-in / OpenAI-compatible LLM"]
   Security --> LLM
-  UI --> Storage["localStorage + local config files"]
+  Findings --> Storage["localStorage + local config files"]
+  UI --> Storage
 ```
 
 - **Frontend**: React 18 + Vite
