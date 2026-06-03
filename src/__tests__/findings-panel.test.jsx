@@ -1,9 +1,10 @@
 // src/__tests__/findings-panel.test.jsx
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { I18nProvider } from '../qa/i18n.jsx';
 import { FindingsPanel } from '../qa/FindingsPanel.jsx';
+import { loadLifecycle, fingerprint } from '../qa/findings.js';
 
 const union = [
   { engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
@@ -31,5 +32,27 @@ describe('FindingsPanel (read-only)', () => {
   it('shows the new high/critical counter', () => {
     wrap(<FindingsPanel union={union} />);
     expect(screen.getByText('1 new high/critical')).toBeTruthy();
+  });
+});
+
+describe('FindingsPanel (annotations)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('suppressing a finding persists to the lifecycle store and hides it by default', () => {
+    wrap(<FindingsPanel union={union} />);
+    fireEvent.click(screen.getByText('JWT in response'));          // expand the row
+    fireEvent.click(screen.getByLabelText('Suppress (false positive)')); // toggle suppress
+    const fp = fingerprint(union[0]).fp;
+    expect(loadLifecycle().records[fp].suppressed).toBe(true);
+    // hidden by default (filter off)
+    expect(screen.queryByText('JWT in response')).toBeNull();
+  });
+
+  it('editing the owner persists', () => {
+    wrap(<FindingsPanel union={union} />);
+    fireEvent.click(screen.getByText('JWT in response'));
+    fireEvent.change(screen.getByLabelText('Owner'), { target: { value: 'alice' } });
+    const fp = fingerprint(union[0]).fp;
+    expect(loadLifecycle().records[fp].owner).toBe('alice');
   });
 });
