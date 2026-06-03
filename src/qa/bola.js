@@ -5,6 +5,7 @@ import './setup.js';
 import { walkJson } from './oracles.js';
 // Single source of truth lives in the matrix engine; re-exported for callers.
 import { MUTATING_METHODS } from './authz.js';
+import { syntheticIdFor } from './bolaSetup.js';
 
 export const MATCH_THRESHOLD = 0.6;
 export { MUTATING_METHODS };
@@ -115,6 +116,17 @@ export function classifyBola(method, status, matched, denySet) {
   return 'inconclusive';
 }
 
+// The negative control fails — i.e. the endpoint is NOT object-scoped — when a
+// synthetic (nonexistent) id is NOT denied but answered 2xx. A denied status
+// (in denySet) means proper scoping; an error / other status is inconclusive
+// and must NOT demote (never invent a gate).
+export function negativeControlFailed(status, denySet) {
+  const deny = denySet || [401, 403, 404];
+  if (typeof status !== 'number' || !Number.isFinite(status)) return false;
+  if (deny.includes(status)) return false;
+  return status >= 200 && status <= 299;
+}
+
 export function bolaSeverity(method, verdict) {
   if (verdict === 'vuln') return MUTATING_METHODS.includes(String(method).toUpperCase()) ? 'critical' : 'high';
   if (verdict === 'unconfirmed') return 'medium';
@@ -154,6 +166,26 @@ export async function runBola(state, runner, opts = {}) {
       if (onCell) onCell(test.id, null, O.id, cell);
     }
 
+    // Negative control (opt-in): one synthetic-id probe per test. If a fake id
+    // is answered 2xx, the endpoint isn't object-scoped, so every attack verdict
+    // for this test is unreliable and gets demoted to inconclusive below.
+    let controlFailed = false;
+    if (opts.negativeControl && owners.length) {
+      const sampleVal = idVals[owners[0].id];
+      const synthetic = syntheticIdFor(test.idLocation, sampleVal);
+      let control;
+      try {
+        const resp = await runner(test, owners[0], synthetic);
+        control = { status: respStatus(resp), response: resp || null, syntheticId: synthetic, error: null };
+      } catch (e) {
+        control = { status: null, response: null, syntheticId: synthetic, error: errStr(e) };
+      }
+      controlFailed = negativeControlFailed(control.status, denySet);
+      control.failed = controlFailed;
+      results[test.id].control = control;
+      if (opts.onControl) opts.onControl(test.id, control);
+    }
+
     for (const A of owners) {
       results[test.id].attacks[A.id] = {};
       for (const O of owners) {
@@ -166,17 +198,18 @@ export async function runBola(state, runner, opts = {}) {
           const ref = reference[O.id];
           const refOk = ref && typeof ref.status === 'number' && ref.status >= 200 && ref.status <= 299;
           const matched = refOk ? matchesOwner(resp, ref.response, idVals[O.id]) : false;
-          const verdict = classifyBola(test.method, status, matched, denySet);
-          const severity = bolaSeverity(test.method, verdict);
-          const finding = severity ? {
+          let verdict = classifyBola(test.method, status, matched, denySet);
+          let severity = bolaSeverity(test.method, verdict);
+          let finding = severity ? {
             oracle: 'object-authz', severity,
             title: verdict === 'vuln' ? 'Cross-object access confirmed' : 'Cross-object access (unconfirmed)',
             path: `${test.method} ${test.path}`,
             evidence: `as ${A.name || A.id} → ${O.name || O.id}'s id`, source: 'rule',
           } : null;
-          cell = { phase: 'attack', status, matched, verdict, severity, finding, response: resp || null, request: reqMeta(test, A, idVals[O.id]), error: null };
+          if (controlFailed) { verdict = 'inconclusive'; severity = null; finding = null; }
+          cell = { phase: 'attack', status, matched, verdict, severity, finding, controlFailed, response: resp || null, request: reqMeta(test, A, idVals[O.id]), error: null };
         } catch (e) {
-          cell = { phase: 'attack', status: null, matched: false, verdict: 'inconclusive', severity: null, finding: null, response: null, request: null, error: errStr(e) };
+          cell = { phase: 'attack', status: null, matched: false, verdict: 'inconclusive', severity: null, finding: null, controlFailed: false, response: null, request: null, error: errStr(e) };
         }
         results[test.id].attacks[A.id][O.id] = cell;
         if (onCell) onCell(test.id, A.id, O.id, cell);
