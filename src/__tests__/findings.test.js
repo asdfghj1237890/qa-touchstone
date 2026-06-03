@@ -83,3 +83,18 @@ describe('fnv1a', () => {
     expect(fnv1a('foobar')).toBe('bf9cf968');
   });
 });
+
+import { effectiveSeverity } from '../qa/findings.js';
+
+describe('effectiveSeverity', () => {
+  it('returns the finding severity when no override', () => {
+    expect(effectiveSeverity({ severity: 'medium' }, undefined)).toBe('medium');
+    expect(effectiveSeverity({ severity: 'medium' }, { severityOverride: null })).toBe('medium');
+  });
+  it('applies a valid override', () => {
+    expect(effectiveSeverity({ severity: 'high' }, { severityOverride: 'low' })).toBe('low');
+  });
+  it('ignores an invalid override value', () => {
+    expect(effectiveSeverity({ severity: 'high' }, { severityOverride: 'bogus' })).toBe('high');
+  });
+});
