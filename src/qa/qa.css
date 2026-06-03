@@ -1285,3 +1285,23 @@
   .qa-sec-corner { position: sticky; left: 0; z-index: 3; background: var(--bg-1); }
   .qa-sec-rowhead { position: sticky; left: 0; z-index: 1; }
   .qa-sec-toolbar select.qa-inp { min-width: 220px; }
+
+  /* ── AI Triage card ─────────────────────────────────────────────── */
+  .qa-sec-triage { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; background: var(--bg-1); }
+  .qa-sec-triage-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+  .qa-sec-triage-head h3 { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .qa-sec-triage-head .qa-link { margin-left: auto; }
+  .qa-sec-triage-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .qa-sec-triage-headline { font-weight: 600; }
+  .qa-sec-triage-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .qa-sec-triage-item-head { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .qa-sec-triage-title { font-weight: 600; }
+  .qa-sec-triage-prio { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+  .qa-sec-triage-prio.qa-prio--p1 { background: #fde2e1; color: #b42318; }
+  .qa-sec-triage-prio.qa-prio--p2 { background: #fef0c7; color: #b54708; }
+  .qa-sec-triage-prio.qa-prio--p3 { background: #eaecf0; color: #475467; }
+  .qa-sec-triage-cat { font-size: 11px; color: var(--text-dim); }
+  .qa-sec-triage-fp { font-size: 11px; color: #b54708; background: #fef0c7; padding: 1px 6px; border-radius: 4px; }
+  .qa-sec-triage-rationale { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .qa-sec-triage-goto { margin-left: auto; }
+  .qa-rot-90 { transform: rotate(-90deg); }
