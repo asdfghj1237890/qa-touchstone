@@ -198,4 +198,24 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     await waitFor(() => expect(loadSnapshots().lastRun).not.toBeNull(), { timeout: 4000 });
     expect(loadSnapshots().lastRun.status).toBe('complete');
   });
+
+  it('matrix-only "Run all" does not record a snapshot (suite is the only boundary)', async () => {
+    // Render with one endpoint (reuse the file's setup helper) + the canned 200 response.
+    renderPage();
+
+    // Add the endpoint via the picker (same flow as the matrix-run test).
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+
+    // Click the matrix "Run all" button (NOT the suite bar) and await its completion.
+    const runAllBtn = screen.getByRole('button', { name: /Run all/i });
+    fireEvent.click(runAllBtn);
+    await waitFor(() => expect(screen.getByText(/200.*VULN/)).toBeInTheDocument(), { timeout: 4000 });
+
+    // The matrix is no longer a snapshot boundary — only a completed suite run records.
+    const { loadSnapshots } = await import('../qa/findings.js');
+    expect(loadSnapshots().lastRun).toBeNull();
+  });
 });

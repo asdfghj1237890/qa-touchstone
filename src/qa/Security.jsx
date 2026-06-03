@@ -123,7 +123,6 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
   const [rlResults, setRlResults] = useS({});
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
-  const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
   const [suite, setSuite] = useS({ running: false, engine: null, done: 0, total: 0, lastRecord: null });
   const suiteAbortRef = useRef(null);
 
@@ -244,20 +243,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       });
     } finally {
       setRunning(false);
-      // Completed full scan (not a single-row run, not aborted) = a snapshot boundary.
-      if (!rowReqId && !controller.signal.aborted) setRunStamp(s => s + 1);
     }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(false); };
-
-  // Record the run snapshot from the live union once a full scan completes.
-  // Reads loadLifecycle() from storage so it includes the panel's latest annotations.
-  useE(() => {
-    if (!runStamp) return;
-    const snap = snapshotOf(triageUnion, loadLifecycle(),
-      { runId: String(runStamp), createdAt: new Date().toISOString(), scopeHash });
-    setSnapshots(prev => { const next = recordRun(prev, snap); saveSnapshots(next); return next; });
-  }, [runStamp]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const editing = identities.find(i => i.id === editId);
   const drawerCell = drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId];
@@ -397,11 +385,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           union={triageUnion}
           snapshots={snapshots}
           scopeMismatch={scopeMismatch}
-          onPinBaseline={() => {
-            const snap = snapshotOf(triageUnion, loadLifecycle(),
-              { runId: 'baseline', createdAt: new Date().toISOString(), scopeHash });
-            setSnapshots(prev => { const next = pinBaseline(prev, snap); saveSnapshots(next); return next; });
-          }}
+          onPinBaseline={snapshots.lastRun ? () => {
+            setSnapshots(prev => { const next = pinBaseline(prev, prev.lastRun); saveSnapshots(next); return next; });
+          } : undefined}
         />
       ) : mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
