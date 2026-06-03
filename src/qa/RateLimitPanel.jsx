@@ -9,7 +9,7 @@ import { Icon, MethodBadge } from './components.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import {
-  runBurst, detectThrottleSignal, classifyRateLimit, rateLimitSeverity,
+  runBurst, detectThrottleSignal, classifyRateLimit,
   rlFindingFor, summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
 } from './ratelimit.js';
 
@@ -23,10 +23,14 @@ function allRequests() {
 
 let rlSeq = 1;
 
-function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
+function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, results: resultsProp, setResults: setResultsProp, onRunTest,
+                          env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
   const { t } = useI18n();
   const tests = rateLimit.tests || [];
-  const [results, setResults] = useS({});
+  const [localResults, setLocalResults] = useS({});
+  const controlled = !!setResultsProp;
+  const results = controlled ? (resultsProp || {}) : localResults;
+  const setResults = controlled ? setResultsProp : setLocalResults;
   const [running, setRunning] = useS(null);   // testId currently bursting
   const [confirming, setConfirming] = useS(null);   // test pending confirmation
   const abortRef = useRef(null);
@@ -48,6 +52,7 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(test.id);
+    if (onRunTest) { try { await onRunTest(test, { runner, signal: controller.signal }); } finally { setRunning(null); } return; }
     setResults(r => ({ ...r, [test.id]: { progress: { done: 0, n: test.n }, stats: null, verdict: null } }));
     try {
       const { responses, stats } = await runBurst(test, runner, {
@@ -55,12 +60,9 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
         onProgress: (done, n) => setResults(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
       });
       const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
-      const severity = finding ? finding.severity : null;
       const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
-      setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity, finding } }));
-    } finally {
-      setRunning(null);
-    }
+      setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
+    } finally { setRunning(null); }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(null); };
 

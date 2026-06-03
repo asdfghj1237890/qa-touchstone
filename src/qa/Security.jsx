@@ -17,6 +17,7 @@ import {
 import { BolaPanel } from './BolaPanel.jsx';
 import { runBola, applyIdLocation } from './bola.js';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
+import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit.js';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
 import {
@@ -118,6 +119,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
   const [bolaResults, setBolaResults] = useS({});
   const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
+  const [rlResults, setRlResults] = useS({});
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
   const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
 
@@ -282,6 +284,17 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     mutate: (req) => applyIdLocation(req, test.idLocation, idValue),
   });
 
+  // Run one rate-limit test into the given results setter. `tr` is the i18n t().
+  const runRlTest = async (test, runner, signal, setRes, tr) => {
+    setRes(r => ({ ...r, [test.id]: { progress: { done: 0, n: test.n }, stats: null, verdict: null } }));
+    const { responses, stats } = await runBurst(test, runner, {
+      signal, onProgress: (done, n) => setRes(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
+    });
+    const finding = rlFindingFor(test, responses, stats, tr('rl.findingTitle'));
+    const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+    setRes(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
+  };
+
   return (
     <div className="qa-sec">
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
@@ -318,6 +331,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
       ) : mode === 'ratelimit' ? (
         <RateLimitPanel identities={identities} rateLimit={rateLimit} setRateLimit={setRateLimit}
+                        results={rlResults} setResults={setRlResults}
+                        onRunTest={(test, { runner, signal }) => runRlTest(test, runner, signal, setRlResults, t)}
                         env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onRlFindings} />
       ) : (
       <>
