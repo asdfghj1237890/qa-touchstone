@@ -14,6 +14,7 @@ import {
   runOracles, inferContract, summarizeFindings, scanSensitiveLLM, worstSeverity,
   SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
 } from './oracles.js';
+import { BolaPanel } from './BolaPanel.jsx';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -100,9 +101,11 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const baselinesRef = useRef({});   // { [reqId]: contract } — transient, per run
   const [oracleConfig] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.oracleConfig) || DEFAULT_ORACLE_CONFIG; });
   const [aiScan, setAiScan] = useS({ busy: false, error: null });
+  const [mode, setMode] = useS('matrix');
+  const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
-  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig }), [identities, endpoints, expect, denySet, oracleConfig]);
+  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola }), [identities, endpoints, expect, denySet, oracleConfig, bola]);
 
   // Persist config (not results) whenever it changes.
   useE(() => { saveMatrixConfig(state); }, [state]);
@@ -212,13 +215,22 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     <div className="qa-sec">
       <div className="qa-sec-head">
         <div><h2>{t('security.title')}</h2><p>{t('security.subtitle')}</p></div>
+        <div className="qa-sec-modetoggle">
+          <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
+          <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
+        </div>
         <div className="qa-sec-actions">
-          {running
+          {mode === 'matrix' && (running
             ? <button className="qa-btn qa-btn--danger" onClick={stop}><Icon name="stop" size={14} /> {t('security.stop')}</button>
-            : <button className="qa-btn qa-btn--primary" onClick={() => run()} disabled={!endpoints.length}><Icon name="play" size={14} /> {t('security.runAll')}</button>}
+            : <button className="qa-btn qa-btn--primary" onClick={() => run()} disabled={!endpoints.length}><Icon name="play" size={14} /> {t('security.runAll')}</button>)}
         </div>
       </div>
 
+      {mode === 'bola' ? (
+        <BolaPanel identities={identities} bola={bola} setBola={setBola}
+                   env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
+      ) : (
+      <>
       <div className="qa-sec-summary">
         {['total', 'pass', 'fail', 'vuln', 'inconclusive'].map(k => (
           <span key={k} className={`qa-sec-chip qa-sec-chip--${k}`}>{summary[k] || 0} {t('security.summary.' + k)}</span>
@@ -378,6 +390,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           <span className="qa-sec-drawer-label">{t('security.cell.response')}</span>
           <pre className="qa-sec-drawer-body">{JSON.stringify(drawerCell.response && drawerCell.response.body, null, 2)}</pre>
         </div>
+      )}
+      </>
       )}
     </div>
   );
