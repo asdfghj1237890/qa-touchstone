@@ -11,7 +11,7 @@ import { buildReq } from './buildReq.js';
 import { applyIdLocation, runBola, summarizeBola } from './bola.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
-const { useState: useS, useMemo, useRef } = React;
+const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 // Summary chip labels: the four attack verdicts reuse `bola.verdict.*`; `total`
 // has its own key. No reliance on t() returning a missing key.
 const SUMMARY_LABEL = {
@@ -30,7 +30,7 @@ function allRequests() {
 
 let testSeq = 1;
 
-function BolaPanel({ identities, bola, setBola, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
+function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
   const { t } = useI18n();
   const tests = bola.tests || [];
   const [results, setResults] = useS({});
@@ -82,6 +82,21 @@ function BolaPanel({ identities, bola, setBola, env = { label: 'None', baseUrl: 
     }
     return out.sort((x, y) => SEVERITY_ORDER.indexOf(y.severity) - SEVERITY_ORDER.indexOf(x.severity));
   }, [results, tests]);
+
+  // Report normalized findings upward for cross-engine AI triage (advisory).
+  useE(() => {
+    if (!onFindings) return;
+    const out = [];
+    for (const test of tests) {
+      const atk = (results[test.id] && results[test.id].attacks) || {};
+      for (const a in atk) for (const o in atk[a]) {
+        const f = atk[a][o] && atk[a][o].finding;
+        if (f) out.push({ engine: 'bola', severity: f.severity, oracle: f.oracle, title: f.title,
+                          path: f.path, evidence: f.evidence || '', ref: { testId: test.id, attackerId: a, ownerId: o } });
+      }
+    }
+    onFindings(out);
+  }, [results, tests, onFindings]);
 
   const reqs = allRequests();
   const drawerCell = drawer && results[drawer.testId]
