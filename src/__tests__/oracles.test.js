@@ -191,6 +191,19 @@ describe('summarizeFindings', () => {
 
 import { scanSensitiveLLM } from '../qa/oracles.js';
 
+describe('ruleId on findings', () => {
+  it('sensitive findings carry the rule id', () => {
+    const out = scanSensitive({ body: { tok: 'eyJhbGciOi.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4' } });
+    expect(out.find(f => f.title === 'JWT in response').ruleId).toBe('jwt');
+  });
+  it('schema findings carry stable schema:* codes', () => {
+    const contract = { 'a': { type: 'string', required: true } };
+    const out = checkSchema({ a: 1, b: 2 }, contract);
+    expect(out.find(f => f.title === 'Type mismatch').ruleId).toBe('schema:type-mismatch');
+    expect(out.find(f => f.title === 'Undeclared field').ruleId).toBe('schema:undeclared');
+  });
+});
+
 describe('scanSensitiveLLM', () => {
   it('parses a JSON array out of the LLM reply into llm-sourced findings', async () => {
     const fakeLLM = async () => 'Here you go:\n[{"path":"note","title":"SSN in free text","severity":"high"}]';
