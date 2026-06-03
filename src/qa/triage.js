@@ -81,3 +81,15 @@ export function parseTriage(raw, kept) {
   }
   return { headline: String(obj.headline || ''), items };
 }
+
+// Orchestration. `callLLM` is injectable for tests; defaults to qaCallLLM.
+// Returns { headline, items, dropped, total }. Empty union -> no LLM call.
+export async function runTriage(union, callLLM = qaCallLLM, opts = {}) {
+  const cap = opts.cap || TRIAGE_CAP;
+  const { input, kept, dropped } = buildTriageInput(union, cap);
+  const total = (union || []).length;
+  if (!input.length) return { headline: '', items: [], dropped: 0, total: 0 };
+  const raw = await callLLM(buildTriagePrompt(input));
+  const parsed = parseTriage(raw, kept);
+  return { ...parsed, dropped, total };
+}

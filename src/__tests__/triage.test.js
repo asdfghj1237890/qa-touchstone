@@ -1,6 +1,6 @@
 // src/__tests__/triage.test.js
 import { describe, it, expect } from 'vitest';
-import { normalizeFindings, buildTriageInput, TRIAGE_CAP, buildTriagePrompt, parseTriage } from '../qa/triage.js';
+import { normalizeFindings, buildTriageInput, TRIAGE_CAP, buildTriagePrompt, parseTriage, runTriage } from '../qa/triage.js';
 
 const f = (severity, over = {}) => ({ severity, oracle: 'schema', title: 'T', path: 'a.b', evidence: 'e', ...over });
 
@@ -81,5 +81,33 @@ describe('parseTriage', () => {
     const out = parseTriage(raw, kept);
     expect(out.items).toHaveLength(1);
     expect(out.items[0].findings).toHaveLength(1);
+  });
+});
+
+describe('runTriage', () => {
+  const union = [
+    { engine: 'bola', severity: 'critical', oracle: 'object-authz', title: 'X', path: 'GET /o', evidence: '', ref: { testId: 't' } },
+    { engine: 'matrix', severity: 'low', oracle: 'schema', title: 'Y', path: 'a', evidence: '', ref: { reqId: 'r', idId: 'i' } },
+  ];
+  it('passes the prompt to the injected callLLM and returns parsed + meta', async () => {
+    let seenPrompt = '';
+    const stub = async (p) => { seenPrompt = p; return JSON.stringify({ headline: 'h', items: [{ title: 't', category: 'object-authz', priority: 'p1', rationale: 'r', findingIndexes: [0] }] }); };
+    const out = await runTriage(union, stub);
+    expect(seenPrompt).toContain('Never invent findings');
+    expect(out.headline).toBe('h');
+    expect(out.total).toBe(2);
+    expect(out.dropped).toBe(0);
+    expect(out.items[0].findings[0].engine).toBe('bola');
+  });
+  it('short-circuits an empty union without calling the LLM', async () => {
+    let called = false;
+    const out = await runTriage([], async () => { called = true; return '{}'; });
+    expect(called).toBe(false);
+    expect(out).toEqual({ headline: '', items: [], dropped: 0, total: 0 });
+  });
+  it('reports dropped when over the cap', async () => {
+    const out = await runTriage(union, async () => '{"headline":"h","items":[]}', { cap: 1 });
+    expect(out.dropped).toBe(1);
+    expect(out.total).toBe(2);
   });
 });
