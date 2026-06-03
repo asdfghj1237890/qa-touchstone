@@ -1,6 +1,7 @@
 // src/__tests__/ratelimit.test.js
 import { describe, it, expect } from 'vitest';
 import { THROTTLE_HEADERS, MAX_N, MAX_CONCURRENCY, detectThrottleSignal } from '../qa/ratelimit.js';
+import { classifyRateLimit, rateLimitSeverity } from '../qa/ratelimit.js';
 
 describe('constants', () => {
   it('caps and the throttle-header set are exposed', () => {
@@ -26,5 +27,28 @@ describe('detectThrottleSignal', () => {
   it('tolerates null/empty entries', () => {
     expect(detectThrottleSignal([null, undefined, r(200)]).throttled).toBe(false);
     expect(detectThrottleSignal([]).throttled).toBe(false);
+  });
+});
+
+describe('classifyRateLimit', () => {
+  it('throttled is pass', () => {
+    expect(classifyRateLimit({ throttled: true }, 30)).toBe('pass');
+  });
+  it('completed with no signal is vuln', () => {
+    expect(classifyRateLimit({ throttled: false }, 30)).toBe('vuln');
+  });
+  it('nothing completed is inconclusive', () => {
+    expect(classifyRateLimit({ throttled: false }, 0)).toBe('inconclusive');
+  });
+});
+
+describe('rateLimitSeverity', () => {
+  it('vuln severity follows the sensitivity flag', () => {
+    expect(rateLimitSeverity('sensitive', 'vuln')).toBe('high');
+    expect(rateLimitSeverity('normal', 'vuln')).toBe('low');
+  });
+  it('non-vuln verdicts have no finding', () => {
+    expect(rateLimitSeverity('sensitive', 'pass')).toBe(null);
+    expect(rateLimitSeverity('normal', 'inconclusive')).toBe(null);
   });
 });
