@@ -85,16 +85,19 @@ flowchart LR
   User["QA 工程師"] --> Shell["Tauri desktop shell"]
   Shell --> UI["React + Vite UI"]
 
-  UI --> Client["API Client"]
+  UI --> Client["API Client (REST / GraphQL)"]
   UI --> Runner["Collection Runner"]
+  UI --> Security["Security (RBAC / BOLA / rate-limit)"]
   UI --> Monitors["Background Monitors"]
   UI --> Perf["Performance Page"]
   UI --> AI["Test Gen + AI Review"]
+  UI --> Realtime["Realtime (WS / SSE)"]
   UI --> Docs["Docs / Codegen / Reports"]
 
   Client --> Executor["Shared Request Executor"]
   Runner --> Executor
   Monitors --> Executor
+  Security --> Executor
 
   Executor --> Vars["Variables + Environments"]
   Executor --> Cookies["Local Cookie Jar"]
@@ -103,8 +106,10 @@ flowchart LR
 
   Perf --> K6["Bundled k6"]
   K6 --> APIs
+  Realtime --> APIs
 
   AI --> LLM["Built-in / OpenAI-compatible LLM"]
+  Security --> LLM
   UI --> Storage["localStorage + local config files"]
 ```
 
