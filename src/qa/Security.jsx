@@ -15,6 +15,7 @@ import {
   SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
 } from './oracles.js';
 import { BolaPanel } from './BolaPanel.jsx';
+import { RateLimitPanel } from './RateLimitPanel.jsx';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -103,9 +104,10 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [aiScan, setAiScan] = useS({ busy: false, error: null });
   const [mode, setMode] = useS('matrix');
   const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
+  const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
-  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola }), [identities, endpoints, expect, denySet, oracleConfig, bola]);
+  const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola, rateLimit }), [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]);
 
   // Persist config (not results) whenever it changes.
   useE(() => { saveMatrixConfig(state); }, [state]);
@@ -218,6 +220,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         <div className="qa-sec-modetoggle">
           <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
           <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
+          <button className={`qa-seg ${mode === 'ratelimit' ? 'qa-seg--on' : ''}`} onClick={() => setMode('ratelimit')}>{t('security.mode.ratelimit')}</button>
         </div>
         <div className="qa-sec-actions">
           {mode === 'matrix' && (running
@@ -229,6 +232,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       {mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
+      ) : mode === 'ratelimit' ? (
+        <RateLimitPanel identities={identities} rateLimit={rateLimit} setRateLimit={setRateLimit}
+                        env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
       ) : (
       <>
       <div className="qa-sec-summary">
