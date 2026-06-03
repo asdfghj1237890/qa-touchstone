@@ -1,6 +1,6 @@
 // src/__tests__/security-report.test.js
 import { describe, it, expect } from 'vitest';
-import { buildReport } from '../qa/securityReport.js';
+import { buildReport, reportToJson, reportToHtml, htmlEscape } from '../qa/securityReport.js';
 
 const item = (over = {}) => ({
   fp: 'fp1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt',
@@ -48,5 +48,33 @@ describe('buildReport', () => {
     expect(rep.findings[0].presence).toBe('new');
     expect(rep.meta.baseline).toBeNull();
     expect(rep.meta.scopeMismatch).toBe(false);
+  });
+});
+
+describe('reportToJson', () => {
+  it('round-trips the model', () => {
+    const rep = buildReport(run([item()]), null, lc(), {});
+    expect(JSON.parse(reportToJson(rep))).toEqual(rep);
+  });
+});
+
+describe('reportToHtml', () => {
+  it('contains the gate number and a findings row', () => {
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), {}));
+    expect(html).toContain('new high/critical');
+    expect(html).toContain('JWT in response');
+    expect(html.startsWith('<!doctype html>')).toBe(true);
+  });
+  it('escapes HTML in dynamic strings (no raw script tag)', () => {
+    const evil = item({ title: '<script>alert(1)</script>' });
+    const html = reportToHtml(buildReport(run([evil]), null, lc(), {}));
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+});
+
+describe('htmlEscape', () => {
+  it('escapes the five entities', () => {
+    expect(htmlEscape(`<a href="x">&'`)).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;');
   });
 });

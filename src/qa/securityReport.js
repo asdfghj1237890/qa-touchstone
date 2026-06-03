@@ -77,3 +77,31 @@ export function buildReport(runRecord, baselineRecord, lifecycle, opts = {}) {
     findings,
   };
 }
+
+export function reportToJson(model) { return JSON.stringify(model, null, 2); }
+
+export function htmlEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+export function reportToHtml(model) {
+  const m = model.meta, s = model.summary, h = htmlEscape;
+  const sevChips = SEVERITY_ORDER.slice().reverse()
+    .filter(sev => s.bySeverity[sev]).map(sev => `<span class="chip sev-${sev}">${s.bySeverity[sev]} ${sev}</span>`).join('');
+  const engRows = model.engines.map(e =>
+    `<tr><td>${h(e.engine)}</td><td>${e.ran ? e.findingCount : h(e.skipped || 'skipped')}</td><td>${Math.round((e.durationMs || 0) / 1000)}s</td><td>${h(e.error || '')}</td></tr>`).join('');
+  const findRows = model.findings.map(f =>
+    `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${f.evidence ? '<code>' + h(f.evidence) + '</code>' : ''}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>QA Touchstone — Security report</title>
+<style>body{font-family:system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}.gate{font-size:20px;font-weight:700}.chip{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}.sev-critical,.sev-high{color:#b91c1c}.sev-medium{color:#b45309}.suppressed,.p-resolved{opacity:.55}</style>
+</head><body>
+<h1>QA Touchstone — Security report</h1>
+<p>Run ${h(m.runId)} · ${h(m.status)} · ${Math.round((m.durationMs || 0) / 1000)}s · ${h(m.finishedAt)}${m.scopeMismatch ? ' · <strong>baseline scope differs</strong>' : ''}</p>
+<p class="gate">${s.newHighCritical} new high/critical</p>
+<p>${s.total} findings — ${s.new} new · ${s.carried} carried · ${s.resolved} resolved</p>
+<div>${sevChips}</div>
+<h2>Engines</h2><table><thead><tr><th>Engine</th><th>Findings</th><th>Duration</th><th>Error</th></tr></thead><tbody>${engRows}</tbody></table>
+<h2>Findings</h2><table><thead><tr><th>State</th><th>Severity</th><th>Engine</th><th>Rule</th><th>Location</th><th>Owner</th><th>Status</th><th>Evidence</th></tr></thead><tbody>${findRows}</tbody></table>
+</body></html>`;
+}
