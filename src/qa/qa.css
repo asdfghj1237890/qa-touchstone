@@ -1093,7 +1093,7 @@
   .qa-btn--danger:hover:not(:disabled) { filter: brightness(1.08); }
 
   /* Summary chips strip */
-  .qa-sec-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .qa-sec-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
   .qa-sec-chip { font-family: var(--font-mono); font-size: 11px; font-weight: 700; border: 1px solid; border-radius: 6px;
     padding: 3px 10px; white-space: nowrap; }
   .qa-sec-chip--total { color: var(--text-dim); border-color: var(--border-2); background: var(--bg-2); }
