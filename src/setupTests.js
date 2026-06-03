@@ -277,7 +277,12 @@ global.window.removeEventListener = (event, handler, options) => {
 beforeEach(() => {
   // Reset window.electronAPI for each test
   global.window.electronAPI = createMockElectronAPI();
-  
+
+  // Reset the shared in-memory localStorage so no state bleeds between tests
+  // (the shim above is a single instance for the worker). No-op for files that
+  // reinstall their own storage in beforeEach.
+  try { localStorage.clear(); } catch (e) { /* storage unavailable — ignore */ }
+
   // Clear all timers and event listeners
   timeouts.clear();
   intervals.clear();
