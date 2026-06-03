@@ -75,4 +75,11 @@ describe('parseTriage', () => {
   it('returns empty triage on junk', () => {
     expect(parseTriage('not json at all', kept)).toEqual({ headline: '', items: [] });
   });
+  it('de-duplicates repeated findingIndexes so the count is not inflated', () => {
+    const raw = JSON.stringify({ headline: 'h', items: [
+      { title: 'dup', category: 'other', priority: 'p2', rationale: '', findingIndexes: [0, 0, 0] }] });
+    const out = parseTriage(raw, kept);
+    expect(out.items).toHaveLength(1);
+    expect(out.items[0].findings).toHaveLength(1);
+  });
 });
