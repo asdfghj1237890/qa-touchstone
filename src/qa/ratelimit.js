@@ -65,7 +65,11 @@ export async function runBurst(test, runner, opts = {}) {
       try {
         const resp = await runner(test, i);
         cell = {
-          status: resp && typeof resp.status === 'number' ? resp.status : null,
+          // A 0/non-positive status is the executor's resolved transport-error
+          // sentinel (executeRequest returns { status: 0 } instead of throwing on a
+          // network failure); normalize it to null so it buckets as `net` and is
+          // excluded from completedCount, rather than counting as a completed request.
+          status: resp && typeof resp.status === 'number' && resp.status > 0 ? resp.status : null,
           headers: (resp && resp.headers) || {},
           timeMs: (resp && resp.time) || 0,
           error: null,

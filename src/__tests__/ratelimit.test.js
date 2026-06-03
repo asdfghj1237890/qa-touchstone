@@ -112,6 +112,39 @@ describe('runBurst', () => {
     expect(stats.c429).toBe(3);
     expect(stats.throttled).toBe(true);
   });
+
+  it('treats a resolved status:0 as a net error, not a completed request', async () => {
+    // 0 is the executor's resolved transport-error sentinel (executeRequest returns
+    // { status: 0, ... } on transport/network failure rather than throwing).
+    const n = 6;
+    const runner = () => Promise.resolve({ status: 0, headers: {}, time: 1 });
+    const { responses, stats } = await runBurst({ n, concurrency: 3 }, runner, {});
+    expect(stats.net).toBe(n);
+    expect(stats.sent).toBe(n);
+    // completedCount = responses with a numeric status → 0 here → inconclusive.
+    expect(responses.filter(x => x.status != null).length).toBe(0);
+  });
+
+  it('buckets a rotating mix of statuses into the right stats counts', async () => {
+    // 8 requests, deterministic rotation by call index: 200, 404, 500, 429 ×2.
+    const n = 8;
+    const cycle = [
+      { status: 200, time: 10 },
+      { status: 404, time: 20 },
+      { status: 500, time: 30 },
+      { status: 429, time: 40 },
+    ];
+    let i = 0;
+    const runner = () => { const c = cycle[i++ % cycle.length]; return Promise.resolve({ status: c.status, headers: {}, time: c.time }); };
+    const { stats } = await runBurst({ n, concurrency: 1 }, runner, {});
+    expect(stats.sent).toBe(n);
+    expect(stats.ok2xx).toBe(2);
+    expect(stats.c4xx).toBe(2);
+    expect(stats.c5xx).toBe(2);
+    expect(stats.c429).toBe(2);
+    expect(stats.maxMs).toBe(40);
+    expect(stats.avgMs).toBe(25); // (10+20+30+40)*2 / 8 = 25
+  });
 });
 
 describe('summarizeRateLimit', () => {
