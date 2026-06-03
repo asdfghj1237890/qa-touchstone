@@ -15,13 +15,9 @@ release-executables/.icon-icns/*.icns
 release-executables/mac
 .cursorrules
 flash_path_data.json
-release-executables/QA Touchstone.exe
-release-executables/QA Touchstone-arm64.dmg
-release-executables/QA Touchstone.dmg
 src/__tests__/test-report
 logs/app.log
 .vscode/settings.json
-qa-touchstone-swagger-postman.json
 src-tauri/target
 src-tauri/gen
 # Bundled k6 binaries (tens of MB) — provided by setup, packaged per platform
