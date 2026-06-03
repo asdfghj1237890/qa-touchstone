@@ -166,6 +166,7 @@ export async function runBola(state, runner, opts = {}) {
       if (onCell) onCell(test.id, null, O.id, cell);
     }
 
+    if (signal && signal.aborted) return results;
     // Negative control (opt-in): one synthetic-id probe per test. If a fake id
     // is answered 2xx, the endpoint isn't object-scoped, so every attack verdict
     // for this test is unreliable and gets demoted to inconclusive below.
