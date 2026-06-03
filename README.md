@@ -11,7 +11,8 @@
 [繁體中文](README.zh-TW.md)
 
 QA Companion is a local-first desktop workspace for API QA. It combines a
-Postman-compatible API client, live collection execution, background monitors,
+Postman-compatible API client (REST and GraphQL), live collection execution,
+background monitors,
 k6 performance testing, security testing (RBAC, object-authz, and rate-limit)
 with AI triage, AI-assisted test generation, AI response review, and
 exportable API documentation in one Tauri app.
@@ -44,14 +45,16 @@ The current public-facing scope is API testing only:
 
 ## Capabilities
 
-- **API client**: build HTTP requests, switch environments, inspect responses,
-  view history, and export response reports.
+- **API client**: build HTTP and GraphQL requests (with a schema explorer),
+  switch environments, inspect responses, view call history, and export
+  responses and history as HTML, JSON, or CSV reports.
 - **Import/export**: import Postman v2.1 collections and OpenAPI/Swagger JSON;
   export collections back to Postman JSON.
-- **Authentication**: No Auth, Bearer Token, OAuth 2.0, API Key, Basic Auth,
-  and AWS SigV4.
+- **Authentication**: No Auth, Bearer Token, OAuth 2.0 (authorization-code,
+  client-credentials, and password grants), API Key, Basic Auth, and AWS SigV4.
 - **Variables and cookies**: resolve global, collection, environment, and local
-  variables; replay matching cookies through the local cookie jar.
+  variables plus dynamic values ({{$timestamp}}, {{$guid}}, {{$randomInt}});
+  replay matching cookies through the local cookie jar.
 - **Collection Runner**: run selected requests, iterate over CSV/JSON data, and
   score assertions on live responses.
 - **Security testing**: run an identity × endpoint RBAC matrix — the same saved
@@ -78,8 +81,11 @@ The current public-facing scope is API testing only:
   choose — built-in Claude with no API key, OpenAI, or any OpenAI-compatible
   endpoint — with credentials kept on the local machine.
 - **Docs and codegen**: generate API docs, standalone HTML exports, and request
-  code snippets.
+  code snippets (cURL, Python, JavaScript, HTTPie).
 - **Realtime testing**: test WebSocket and Server-Sent Events streams.
+- **Bilingual, themeable UI**: complete English and Traditional Chinese (繁體中文)
+  interface, switchable in Settings, with a themeable dark UI (multiple accent
+  palettes and density options).
 
 ## Architecture
 

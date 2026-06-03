@@ -11,7 +11,7 @@
 [English](README.md)
 
 QA Companion 是一個本機優先的桌面 API QA 工作台。它把
-Postman 相容 API client、collection 真實執行、背景 monitors、k6 效能測試、
+Postman 相容 API client（REST 與 GraphQL）、collection 真實執行、背景 monitors、k6 效能測試、
 安全測試（RBAC、物件授權、速率限制）與 AI 分流、AI 測試案例產生、
 AI response review，以及可匯出的 API 文件整合在同一個 Tauri app 裡。
 
@@ -42,14 +42,16 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
 
 ## 功能
 
-- **API client**：建立 HTTP requests、切換 environments、檢視 responses、
-  查看 history，並匯出 response reports。
+- **API client**：建立 HTTP 與 GraphQL requests（內含 schema explorer）、切換
+  environments、檢視 responses、查看 call history，並把 responses 與 history
+  匯出成 HTML、JSON 或 CSV 報告。
 - **Import/export**：匯入 Postman v2.1 collections 與 OpenAPI/Swagger JSON；
   也可匯出為 Postman JSON。
-- **Authentication**：No Auth、Bearer Token、OAuth 2.0、API Key、
-  Basic Auth、AWS SigV4。
+- **Authentication**：No Auth、Bearer Token、OAuth 2.0（authorization-code、
+  client-credentials、password grants）、API Key、Basic Auth、AWS SigV4。
 - **Variables and cookies**：解析 global、collection、environment、local
-  variables；透過本機 cookie jar replay 符合 domain/path 的 cookies。
+  variables，以及動態值（{{$timestamp}}、{{$guid}}、{{$randomInt}}）；
+  透過本機 cookie jar replay 符合 domain/path 的 cookies。
 - **Collection Runner**：批次執行選定 requests，支援 CSV/JSON data
   iteration，並用 live responses 計算 assertions。
 - **安全測試（Security testing）**：執行身分 × 端點的 RBAC 矩陣——同一批已存
@@ -71,8 +73,10 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
   response review、敏感資料掃描、安全分流）都跑在你選的供應商上——內建 Claude
   （免 API key）、OpenAI，或任何 OpenAI 相容的 endpoint——憑證只留在本機。
 - **Docs and codegen**：產生 API docs、獨立 HTML 匯出，以及 request code
-  snippets。
+  snippets（cURL、Python、JavaScript、HTTPie）。
 - **Realtime testing**：測試 WebSocket 與 Server-Sent Events streams。
+- **雙語、可換主題的介面（Bilingual, themeable UI）**：完整的英文與繁體中文
+  介面，可在設定切換；深色 UI 提供多組 accent 配色與密度選項。
 
 ## 架構
 
