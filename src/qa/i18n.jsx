@@ -1024,6 +1024,24 @@ Object.assign(dict['en-US'], {
   'security.triage.cat.auth-matrix': 'Auth matrix',
   'security.triage.cat.false-positive': 'False positive',
   'security.triage.cat.other': 'Other',
+
+  'security.bola.setup.detected': 'Detected id in {where} — confidence {confidence}.',
+  'security.bola.setup.use': 'Use',
+  'security.bola.setup.edit': 'Edit',
+  'security.bola.setup.dismiss': 'Dismiss',
+  'security.bola.setup.detect': 'Detect id location',
+  'security.bola.setup.foundInReq': 'Found in request: {value}',
+  'security.bola.setup.fillFirst': 'Fill first empty',
+  'security.bola.setup.confidence.high': 'high',
+  'security.bola.setup.confidence.medium': 'medium',
+  'security.bola.setup.confidence.low': 'low',
+  'security.bola.setup.preset': 'Preset',
+  'security.bola.setup.applyPreset': 'Apply preset',
+  'security.bola.setup.savePreset': 'Save as preset',
+  'security.bola.setup.presetName': 'Preset name',
+  'security.bola.setup.negControl': 'Negative control',
+  'security.bola.setup.negControlHint': 'Probe a fake id; if it returns 2xx the endpoint is not object-scoped.',
+  'security.bola.setup.controlFailed': '⚠ Negative control failed — endpoint not object-scoped; verdicts demoted.',
 });
 
 Object.assign(dict['zh-TW'], {
@@ -1371,6 +1389,24 @@ Object.assign(dict['zh-TW'], {
   'security.triage.cat.auth-matrix': '權限矩陣',
   'security.triage.cat.false-positive': '誤判',
   'security.triage.cat.other': '其他',
+
+  'security.bola.setup.detected': '在 {where} 偵測到 id — 信心 {confidence}。',
+  'security.bola.setup.use': '採用',
+  'security.bola.setup.edit': '編輯',
+  'security.bola.setup.dismiss': '關閉',
+  'security.bola.setup.detect': '偵測 id 位置',
+  'security.bola.setup.foundInReq': '請求中找到：{value}',
+  'security.bola.setup.fillFirst': '填入第一個空欄',
+  'security.bola.setup.confidence.high': '高',
+  'security.bola.setup.confidence.medium': '中',
+  'security.bola.setup.confidence.low': '低',
+  'security.bola.setup.preset': '預設組',
+  'security.bola.setup.applyPreset': '套用預設組',
+  'security.bola.setup.savePreset': '存成預設組',
+  'security.bola.setup.presetName': '預設組名稱',
+  'security.bola.setup.negControl': '負向對照',
+  'security.bola.setup.negControlHint': '探測一個假的 id；若回 2xx，表示端點未依物件授權。',
+  'security.bola.setup.controlFailed': '⚠ 負向對照失敗 — 端點未依物件授權；判定已降級。',
 });
 
 function normalizeLocale(value) {
