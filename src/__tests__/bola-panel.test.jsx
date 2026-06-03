@@ -110,6 +110,63 @@ describe('BolaPanel — runs on the canned path', () => {
   });
 });
 
+describe('BolaPanel — controlled-mode delegation', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    installLocalStorage({ qa_locale: 'en-US' });
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'user', path: 'https://api.test/users/42' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    // Canned response: same body for every call → local runBola would produce a vuln cell if it ran.
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 1, size: 9, body: { secret: 'shared' }, headers: {} } };
+  });
+
+  it('delegates to onRun and does NOT run the local fallback (no double-run)', async () => {
+    // A no-op onRun spy: called by the panel but streams no results.
+    const onRunSpy = vi.fn(async () => { /* intentionally does nothing */ });
+
+    function ControlledBolaNoRun(props) {
+      const [results, setResults] = React.useState({});
+      return <BolaPanel {...props} results={results} setResults={setResults} onRun={props.onRun} />;
+    }
+
+    let cur = bola;
+    const setBola = (next) => { cur = typeof next === 'function' ? next(cur) : next; };
+    render(
+      <I18nProvider>
+        <ControlledBolaNoRun identities={identities} bola={bola} setBola={setBola}
+                             env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true}
+                             onRun={onRunSpy} />
+      </I18nProvider>
+    );
+
+    // Uncheck negative control (mirrors existing run tests) so that if the local fallback
+    // did fire erroneously, verdicts are computed normally and vuln cells would appear.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Negative control/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Run BOLA/i }));
+
+    // Wait for the run cycle to complete (the Stop button appears then disappears).
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Stop/i })).toBeNull(), { timeout: 4000 });
+
+    // onRun must have been called exactly once — the panel delegated control.
+    expect(onRunSpy).toHaveBeenCalledTimes(1);
+
+    // Because onRun is a no-op (streams nothing) and the local runBola must NOT fire,
+    // the grid must stay empty — no verdict cells.  If the local fallback erroneously also
+    // ran, the canned responses above would produce a vuln cell and this assertion fails.
+    expect(document.querySelector('.qa-bola-cell--vuln')).toBeNull();
+    // Reference cells rendered with actual result data show the status text (e.g. "200 reference").
+    // When no run happened they stay as plain "·" dots. Confirm the ref cell has no result text.
+    const refCell = document.querySelector('.qa-bola-cell--ref');
+    // The cell may exist (grid always renders for 2+ owned identities) but must not contain
+    // a status code — a populated reference cell would read "200 reference".
+    if (refCell) {
+      expect(refCell.textContent).toBe('·');
+    }
+  });
+});
+
 describe('BolaPanel — setup automation', () => {
   afterEach(() => cleanup());
   beforeEach(() => {
