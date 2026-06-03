@@ -56,3 +56,20 @@ describe('FindingsPanel (annotations)', () => {
     expect(loadLifecycle().records[fp].owner).toBe('alice');
   });
 });
+
+describe('FindingsPanel (baseline)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('calls onPinBaseline when the pin button is clicked', () => {
+    let pinned = 0;
+    wrap(<FindingsPanel union={union} onPinBaseline={() => { pinned += 1; }} />);
+    fireEvent.click(screen.getByText('Pin current as baseline'));
+    expect(pinned).toBe(1);
+  });
+
+  it('shows the scope-differs badge when scopeMismatch is true', () => {
+    const snapshots = { fpVersion: 1, baseline: { items: [{ fp: 'zzz', effectiveSeverity: 'low' }], scopeHash: 'old' }, lastRun: null };
+    wrap(<FindingsPanel union={union} snapshots={snapshots} scopeMismatch={true} />);
+    expect(screen.getByText('Baseline scope differs')).toBeTruthy();
+  });
+});

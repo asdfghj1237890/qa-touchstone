@@ -34,7 +34,7 @@ function buildRows(union, lifecycle, diff) {
     (SEVERITY_ORDER.indexOf(b.effectiveSeverity) - SEVERITY_ORDER.indexOf(a.effectiveSeverity)));
 }
 
-function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecycleProp, onPinBaseline }) {
+function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecycleProp, onPinBaseline, scopeMismatch = false }) {
   const { t } = useI18n();
   // Props win (Security.jsx owns the live state); otherwise own local state.
   const [localLc, setLocalLc] = useS(() => lifecycleProp || loadLifecycle());
@@ -71,6 +71,7 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
             ? t('findings.baseline.set', { count: baselineItems.length })
             : t('findings.baseline.none')}
         </span>
+        {scopeMismatch && <span className="qa-find-scopewarn">{t('findings.baseline.scopeDiffers')}</span>}
         <label className="qa-find-filter">
           <input type="checkbox" checked={showSuppressed} onChange={e => setShowSuppressed(e.target.checked)} />
           {t('findings.filter.suppressed')}
