@@ -266,6 +266,7 @@ const dict = {
     'security.findings.aiUnavailable': 'Configure AI in Settings to scan',
     'security.oracle.sensitive-data': 'data leak',
     'security.oracle.schema': 'schema',
+    'security.oracle.object-authz': 'object authz',
     'security.severity.info': 'info',
     'security.severity.low': 'low',
     'security.severity.medium': 'medium',
@@ -293,6 +294,7 @@ const dict = {
     'bola.verdict.unconfirmed': 'open?',
     'bola.verdict.pass': 'pass',
     'bola.verdict.inconclusive': 'check',
+    'bola.summary.total': 'Total',
     'bola.matched': 'content matched owner',
     'bola.notApplied': 'id location not applied to this request',
 
@@ -564,6 +566,7 @@ const dict = {
     'security.findings.aiUnavailable': '請先在設定配置 AI 才能掃描',
     'security.oracle.sensitive-data': '資料外洩',
     'security.oracle.schema': '結構',
+    'security.oracle.object-authz': '物件授權',
     'security.severity.info': '資訊',
     'security.severity.low': '低',
     'security.severity.medium': '中',
@@ -591,6 +594,7 @@ const dict = {
     'bola.verdict.unconfirmed': '可疑',
     'bola.verdict.pass': '通過',
     'bola.verdict.inconclusive': '待查',
+    'bola.summary.total': '總計',
     'bola.matched': '內容符合擁有者',
     'bola.notApplied': 'id 位置未套用到此請求',
 
