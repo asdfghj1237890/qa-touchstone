@@ -77,8 +77,8 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
     if (!onFindings) return;
     const out = tests.map(t0 => {
       const f = results[t0.id] && results[t0.id].finding;
-      return f ? { engine: 'ratelimit', severity: f.severity, oracle: f.oracle, title: f.title,
-                   path: f.path, evidence: f.evidence || '', ref: { testId: t0.id } } : null;
+      return f ? { engine: 'ratelimit', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
+                   title: f.title, path: f.path, evidence: f.evidence || '', ref: { testId: t0.id } } : null;
     }).filter(Boolean);
     onFindings(out);
   }, [results, tests, onFindings]);

@@ -148,8 +148,11 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       for (const id of identities) {
         const cell = results[ep.reqId] && results[ep.reqId][id.id];
         for (const f of (cell && cell.findings) || []) {
-          out.push({ engine: 'matrix', severity: f.severity, oracle: f.oracle, title: f.title,
-                     path: f.path, evidence: f.evidence || '', ref: { reqId: ep.reqId, idId: id.id } });
+          out.push({ engine: 'matrix', ruleId: f.ruleId, severity: f.severity, oracle: f.oracle,
+                     title: f.title, path: f.path, evidence: f.evidence || '',
+                     method: ep.method, endpoint: ep.path,
+                     identityLabel: id.id === 'anon' ? 'anon' : (id.name || id.id),
+                     ref: { reqId: ep.reqId, idId: id.id } });
         }
       }
     }
