@@ -117,4 +117,17 @@ describe('runSuite', () => {
     expect(rec.durationMs).toBeGreaterThan(0);
     expect(rec.union).not.toHaveProperty('items');     // runSuite returns union, not snapshot items
   });
+
+  it('passes each engine its own config slice (ratelimit uses the rateLimit key)', async () => {
+    const received = {};
+    const runners = {
+      matrix: async (cfg) => { received.matrix = cfg; return {}; },
+      bola: async (cfg) => { received.bola = cfg; return {}; },
+      ratelimit: async (cfg) => { received.ratelimit = cfg; return {}; },
+    };
+    await runSuite(baseConfig, runners, { now: fakeNow() });
+    expect(received.matrix).toBe(baseConfig.matrix);
+    expect(received.bola).toBe(baseConfig.bola);
+    expect(received.ratelimit).toBe(baseConfig.rateLimit);   // must NOT be undefined
+  });
 });

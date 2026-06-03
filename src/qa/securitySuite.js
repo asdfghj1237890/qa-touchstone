@@ -71,6 +71,9 @@ const NORMALIZERS = {
   ratelimit: (results, config) => normalizeRateLimit(results, config.rateLimit.tests),
 };
 
+// engine id -> config key (rate-limit's config lives under `rateLimit`).
+const CONFIG_KEY = { matrix: 'matrix', bola: 'bola', ratelimit: 'rateLimit' };
+
 // Orchestrate the three engines sequentially into one RunRecord.
 // `runners` = { matrix, bola, ratelimit }: async run adapters that execute a whole
 // engine and resolve to its results (signature: runner(config[engine], {signal, onProgress})).
@@ -95,7 +98,7 @@ export async function runSuite(config, runners, opts = {}) {
     const eStart = now();
     let results = null, error = null;
     try {
-      results = await runners[engine](config[engine], {
+      results = await runners[engine](config[CONFIG_KEY[engine]], {
         signal,
         onProgress: (done, total) => { if (opts.onProgress) opts.onProgress(engine, done, total); },
       });
