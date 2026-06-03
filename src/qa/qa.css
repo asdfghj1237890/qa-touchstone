@@ -1268,3 +1268,13 @@
   .qa-rl-confirm h3 { margin: 0 0 8px; font-size: 14px; }
   .qa-rl-confirm p { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
   .qa-rl-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* ── BFLA privileged-endpoint ergonomics ────────────────────────────────── */
+  .qa-sec-priv { margin-left: 8px; padding: 1px 7px; border-radius: 9px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em; border: 1px solid transparent; cursor: pointer; }
+  .qa-sec-priv--on { background: rgba(234,88,12,.14); color: #ea580c; border-color: rgba(234,88,12,.3); }
+  .qa-sec-priv--off { background: transparent; color: var(--text-dim); border-color: var(--border); opacity: .55; font-weight: 600; }
+  .qa-sec-priv--off:hover { opacity: 1; }
+  .qa-sec-privcount { font-size: 11px; color: #ea580c; font-weight: 600; }
+  .qa-sec-privchk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); margin-top: 4px; }
+  .qa-sec-privchk input { margin: 0; }
