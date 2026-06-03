@@ -29,7 +29,7 @@ function HomePage({ setRoute, history, onOpenRequest, env }) {
             <h1>QA Touchstone</h1>
             <p>{t('home.subtitle')}</p>
           </div>
-          <span className="qa-chip">v0.14.0</span>
+          <span className="qa-chip">v0.15.0</span>
         </header>
 
         <div className="qa-home-grid">
