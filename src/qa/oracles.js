@@ -87,6 +87,7 @@ export function scanSensitive(response, config = DEFAULT_ORACLE_CONFIG) {
     if (seen.has(k)) return;
     seen.add(k);
     findings.push({
+      ruleId: rule.id,
       oracle: 'sensitive-data',
       severity: overrides[rule.group] || rule.severity,
       title: rule.title, path, evidence: redact(value), source: 'rule',
@@ -146,17 +147,17 @@ export function checkSchema(body, contract, config = DEFAULT_ORACLE_CONFIG) {
   }
   for (const p of Object.keys(present)) {
     if (!(p in contract)) {
-      findings.push({ oracle: 'schema', severity: 'low', title: 'Undeclared field', path: p, evidence: '', source: 'rule' });
+      findings.push({ ruleId: 'schema:undeclared', oracle: 'schema', severity: 'low', title: 'Undeclared field', path: p, evidence: '', source: 'rule' });
       // Nullable tolerance (deliberate): skip the type-mismatch check whenever
       // either side is 'null'. A field that was null in the baseline, or that
       // becomes null now, should not report a spurious type mismatch.
     } else if (present[p] !== contract[p].type && contract[p].type !== 'null' && present[p] !== 'null') {
-      findings.push({ oracle: 'schema', severity: 'medium', title: 'Type mismatch', path: p, evidence: `${contract[p].type} → ${present[p]}`, source: 'rule' });
+      findings.push({ ruleId: 'schema:type-mismatch', oracle: 'schema', severity: 'medium', title: 'Type mismatch', path: p, evidence: `${contract[p].type} → ${present[p]}`, source: 'rule' });
     }
   }
   for (const p of Object.keys(contract)) {
     if (contract[p].required && !(p in present)) {
-      findings.push({ oracle: 'schema', severity: 'medium', title: 'Missing field', path: p, evidence: '', source: 'rule' });
+      findings.push({ ruleId: 'schema:missing', oracle: 'schema', severity: 'medium', title: 'Missing field', path: p, evidence: '', source: 'rule' });
     }
   }
   return findings;
@@ -221,6 +222,7 @@ export async function scanSensitiveLLM(response, callLLM = qaCallLLM) {
   try { arr = JSON.parse((String(raw).match(/\[[\s\S]*\]/) || ['[]'])[0]); } catch { return []; }
   if (!Array.isArray(arr)) return [];
   return arr.filter(x => x && x.path).map(x => ({
+    ruleId: 'llm-flagged',
     oracle: 'sensitive-data',
     severity: SEVERITY_ORDER.includes(x.severity) ? x.severity : 'medium',
     title: x.title || 'AI-flagged exposure',
