@@ -53,6 +53,11 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:3000',
+      },
+    },
     setupFiles: ['./src/setupTests.js'],
     reporter: ['verbose', 'html'],
     outputFile: {

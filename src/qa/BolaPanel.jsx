@@ -115,8 +115,9 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
       const atk = (results[test.id] && results[test.id].attacks) || {};
       for (const a in atk) for (const o in atk[a]) {
         const f = atk[a][o] && atk[a][o].finding;
-        if (f) out.push({ engine: 'bola', severity: f.severity, oracle: f.oracle, title: f.title,
-                          path: f.path, evidence: f.evidence || '', ref: { testId: test.id, attackerId: a, ownerId: o } });
+        if (f) out.push({ engine: 'bola', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
+                          title: f.title, path: f.path, evidence: f.evidence || '',
+                          ref: { testId: test.id, attackerId: a, ownerId: o } });
       }
     }
     onFindings(out);
