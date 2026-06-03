@@ -1,0 +1,56 @@
+name: release
+
+# Build the Tauri desktop app for Windows + macOS and publish a GitHub Release
+# whenever a version tag (vX.Y.Z) is pushed.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch bundled k6 binary
+        run: npm run setup:k6:release
+
+      # tauri-action runs the config's beforeBuildCommand (npm run build), builds
+      # the platform bundle (NSIS on Windows, DMG on macOS via the per-platform
+      # tauri.<os>.conf.json), and publishes a GitHub Release with the installers.
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: QA Companion ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
