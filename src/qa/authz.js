@@ -10,6 +10,29 @@ export const SECURITY_STORAGE_KEY = 'qa_security_matrix';
 // per matrix (e.g. back to [401, 403]) when a 404 should mean "missing", not "denied".
 export const DEFAULT_DENY_SET = [401, 403, 404];
 
+// Endpoints that are high-value for BFLA testing: a mutating method, or an
+// admin-ish path token. Used to set smarter default expectations.
+export const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+export const ADMIN_PATH_TOKENS = ['admin', 'internal', 'manage', 'management', 'root', 'sudo', 'privileged', 'superuser'];
+
+// Heuristically classify an endpoint as privileged. Pure; tolerant of empties.
+export function classifyEndpoint(method, path) {
+  const reasons = [];
+  if (MUTATING_METHODS.includes(String(method || '').toUpperCase())) reasons.push('write');
+  const tokens = String(path || '').toLowerCase().split(/[/._\-?=&]+/).filter(Boolean);
+  if (tokens.some((tok) => ADMIN_PATH_TOKENS.includes(tok))) reasons.push('admin-path');
+  return { privileged: reasons.length > 0, reasons };
+}
+
+// Effective privileged state for an endpoint: a manual boolean override wins,
+// otherwise fall back to the heuristic. Only `ep.privileged` is persisted.
+export function endpointPrivileged(ep) {
+  if (ep && typeof ep.privileged === 'boolean') {
+    return { privileged: ep.privileged, reasons: ['manual'], source: 'manual' };
+  }
+  return { ...classifyEndpoint(ep && ep.method, ep && ep.path), source: 'auto' };
+}
+
 // Map a real HTTP status to an authorization outcome.
 export function classifyOutcome(status, denySet = DEFAULT_DENY_SET) {
   if (typeof status !== 'number' || !Number.isFinite(status)) return 'other';
@@ -32,9 +55,13 @@ export function anonIdentity() {
   return { id: 'anon', name: 'anon', auth: { type: 'none' } };
 }
 
-// Smart default expectation for an identity: anonymous → deny, otherwise allow.
-export function defaultExpectation(identity) {
-  return identity && identity.auth && identity.auth.type === 'none' ? 'deny' : 'allow';
+// Smart default expectation. anon → deny. A privileged endpoint defaults a
+// non-privileged identity to deny (the BFLA setup). `endpoint` is optional, so
+// one-arg callers keep the legacy anon-only behavior.
+export function defaultExpectation(identity, endpoint) {
+  if (identity && identity.auth && identity.auth.type === 'none') return 'deny';
+  if (endpoint && endpointPrivileged(endpoint).privileged && !(identity && identity.privileged)) return 'deny';
+  return 'allow';
 }
 
 // Return a copy of state whose expect map has an entry for every
@@ -46,7 +73,7 @@ export function withDefaults(state) {
     const prev = (state.expect && state.expect[ep.reqId]) || {};
     const row = {};
     for (const id of state.identities) {
-      row[id.id] = prev[id.id] ?? defaultExpectation(id);
+      row[id.id] = prev[id.id] ?? defaultExpectation(id, ep);
     }
     expect[ep.reqId] = row;
   }
@@ -80,7 +107,7 @@ export async function runMatrix(state, runner, opts = {}) {
     results[ep.reqId] = results[ep.reqId] || {};
     for (const id of state.identities) {
       if (signal && signal.aborted) return results;
-      const expectation = ((state.expect || {})[ep.reqId] || {})[id.id] || defaultExpectation(id);
+      const expectation = ((state.expect || {})[ep.reqId] || {})[id.id] || defaultExpectation(id, ep);
       if (expectation === 'skip') continue;
       let cell;
       try {
@@ -134,7 +161,7 @@ export function saveMatrixConfig(state) {
     // Persist only stable identity config — drop transient `_`-prefixed fields
     // (e.g. a fetched `_oauthToken`) so live access tokens are never written to
     // disk; the user re-fetches them in the identity editor after a reload.
-    const cleanIdentities = identities.map(({ id, name, auth }) => ({ id, name, auth }));
+    const cleanIdentities = identities.map(({ id, name, auth, privileged }) => ({ id, name, auth, privileged }));
     const payload = { identities: cleanIdentities, endpoints, expect, denySet };
     if (oracleConfig) payload.oracleConfig = oracleConfig;
     if (bola) payload.bola = bola;

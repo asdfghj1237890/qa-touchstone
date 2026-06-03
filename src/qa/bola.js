@@ -3,9 +3,11 @@
 // and confirm cross-object access by content. UI lives in BolaPanel.jsx.
 import './setup.js';
 import { walkJson } from './oracles.js';
+// Single source of truth lives in the matrix engine; re-exported for callers.
+import { MUTATING_METHODS } from './authz.js';
 
 export const MATCH_THRESHOLD = 0.6;
-export const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+export { MUTATING_METHODS };
 
 // Return a copy of `req` with the object id at `idLocation` overwritten by
 // `value`. Never mutates `req`. Sets `_idApplied` to whether it took effect.

@@ -49,7 +49,7 @@ describe('verdictFor', () => {
 const idAnon = anonIdentity();
 const idAdmin = { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } };
 const ep1 = { reqId: 'r1', method: 'GET', path: '/a' };
-const ep2 = { reqId: 'r2', method: 'POST', path: '/b' };
+const ep2 = { reqId: 'r2', method: 'GET', path: '/b' };
 const baseState = { identities: [idAnon, idAdmin], endpoints: [ep1, ep2], expect: {}, denySet: [401, 403] };
 
 describe('anonIdentity', () => {
@@ -242,5 +242,96 @@ describe('persistence — rateLimit', () => {
     installLocalStorage();
     saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401] });
     expect(loadMatrixConfig().rateLimit).toBeUndefined();
+  });
+});
+
+import { classifyEndpoint, MUTATING_METHODS, ADMIN_PATH_TOKENS } from '../qa/authz.js';
+
+describe('classifyEndpoint', () => {
+  it('flags mutating methods as write', () => {
+    expect(classifyEndpoint('POST', '/orders').reasons).toContain('write');
+    expect(classifyEndpoint('delete', '/orders/1').reasons).toContain('write'); // case-insensitive
+    expect(classifyEndpoint('GET', '/orders').privileged).toBe(false);
+  });
+  it('flags admin-ish path tokens (discrete tokens only)', () => {
+    expect(classifyEndpoint('GET', '/admin/users').reasons).toContain('admin-path');
+    expect(classifyEndpoint('GET', '/v1.internal.metrics').reasons).toContain('admin-path');
+    expect(classifyEndpoint('GET', '/badminton/list').privileged).toBe(false); // not a substring match
+  });
+  it('can flag both reasons', () => {
+    expect(classifyEndpoint('DELETE', '/admin/users/1')).toEqual({ privileged: true, reasons: ['write', 'admin-path'] });
+  });
+  it('tolerates null/empty input', () => {
+    expect(classifyEndpoint(null, null)).toEqual({ privileged: false, reasons: [] });
+    expect(classifyEndpoint('', '')).toEqual({ privileged: false, reasons: [] });
+  });
+  it('exposes the heuristic constants', () => {
+    expect(MUTATING_METHODS).toEqual(['POST', 'PUT', 'PATCH', 'DELETE']);
+    expect(ADMIN_PATH_TOKENS).toContain('admin');
+  });
+});
+
+import { endpointPrivileged } from '../qa/authz.js';
+
+describe('endpointPrivileged', () => {
+  it('uses the heuristic when there is no manual override', () => {
+    expect(endpointPrivileged({ method: 'POST', path: '/orders' })).toEqual({ privileged: true, reasons: ['write'], source: 'auto' });
+    expect(endpointPrivileged({ method: 'GET', path: '/orders' })).toEqual({ privileged: false, reasons: [], source: 'auto' });
+  });
+  it('honors a manual override either way', () => {
+    expect(endpointPrivileged({ method: 'GET', path: '/orders', privileged: true })).toEqual({ privileged: true, reasons: ['manual'], source: 'manual' });
+    expect(endpointPrivileged({ method: 'POST', path: '/orders', privileged: false })).toEqual({ privileged: false, reasons: ['manual'], source: 'manual' });
+  });
+});
+
+const privEp = { reqId: 'p1', method: 'DELETE', path: '/admin/users/1' };
+const normEp = { reqId: 'n1', method: 'GET', path: '/profile' };
+const userId = { id: 'u', name: 'user', auth: { type: 'bearer' } };          // non-privileged
+const adminPriv = { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true };
+
+describe('defaultExpectation — endpoint-aware', () => {
+  it('one-arg call keeps legacy behavior', () => {
+    expect(defaultExpectation(anonIdentity())).toBe('deny');
+    expect(defaultExpectation(userId)).toBe('allow');
+  });
+  it('anon is deny regardless of endpoint', () => {
+    expect(defaultExpectation(anonIdentity(), privEp)).toBe('deny');
+    expect(defaultExpectation(anonIdentity(), normEp)).toBe('deny');
+  });
+  it('privileged endpoint defaults a non-privileged identity to deny', () => {
+    expect(defaultExpectation(userId, privEp)).toBe('deny');
+  });
+  it('privileged identity stays allow on a privileged endpoint', () => {
+    expect(defaultExpectation(adminPriv, privEp)).toBe('allow');
+  });
+  it('non-privileged endpoint defaults a normal identity to allow', () => {
+    expect(defaultExpectation(userId, normEp)).toBe('allow');
+  });
+});
+
+describe('withDefaults — privileged endpoints', () => {
+  it('defaults a non-privileged identity to deny on a privileged endpoint (new cell), preserving overrides', () => {
+    const state = withDefaults({ identities: [anonIdentity(), userId, adminPriv], endpoints: [privEp], expect: { p1: { u: 'allow' } }, denySet: [401, 403] });
+    expect(state.expect.p1.anon).toBe('deny');   // anon
+    expect(state.expect.p1.u).toBe('allow');     // preserved override
+    expect(state.expect.p1.a).toBe('allow');     // privileged identity
+    const fresh = withDefaults({ identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] });
+    expect(fresh.expect.p1.u).toBe('deny');      // smart default for a new cell
+  });
+
+  it('runMatrix uses the endpoint-aware fallback: a non-priv identity on a privileged endpoint with no explicit expect, returning 200, is a vuln (BFLA caught end-to-end)', async () => {
+    const state = { identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] };
+    const results = await runMatrix(state, () => Promise.resolve({ status: 200, time: 1 }), {});
+    expect(results.p1.u.verdict).toBe('vuln');   // defaulted deny → allowed → BFLA hole
+  });
+});
+
+describe('persistence — identity.privileged', () => {
+  it('round-trips a privileged identity flag and omits it when absent', () => {
+    installLocalStorage();
+    saveMatrixConfig({ identities: [anonIdentity(), { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true }], endpoints: [], expect: {}, denySet: [401] });
+    const loaded = loadMatrixConfig();
+    expect(loaded.identities.find((i) => i.id === 'a').privileged).toBe(true);
+    expect(loaded.identities.find((i) => i.id === 'anon').privileged).toBeUndefined();
   });
 });
