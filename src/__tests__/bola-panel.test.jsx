@@ -46,6 +46,10 @@ describe('BolaPanel — runs on the canned path', () => {
 
   it('runs the configured test and surfaces a confirmed BOLA cell + finding', async () => {
     renderPanel();
+    // Negative control defaults ON; with a canned 200 for the synthetic probe it
+    // would demote every verdict to inconclusive. Uncheck it so the attack verdicts
+    // are computed normally, which is what this test exercises.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Negative control/i }));
     fireEvent.click(screen.getByRole('button', { name: /Run BOLA/i }));
     await waitFor(() => expect(document.querySelector('.qa-bola-cell--vuln')).not.toBeNull(), { timeout: 4000 });
     // A finding badge / panel shows the object-authz finding.
@@ -68,6 +72,8 @@ describe('BolaPanel — runs on the canned path', () => {
                    env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
       </I18nProvider>
     );
+    // Same reason as the first test: uncheck negative control to prevent verdict demotion.
+    fireEvent.click(screen.getByRole('checkbox', { name: /Negative control/i }));
     fireEvent.click(screen.getByRole('button', { name: /Run BOLA/i }));
     await waitFor(() => expect(document.querySelector('.qa-bola-cell--vuln')).not.toBeNull(), { timeout: 4000 });
     expect(spy).toHaveBeenCalled();
@@ -85,5 +91,111 @@ describe('BolaPanel — runs on the canned path', () => {
       </I18nProvider>
     );
     expect(document.querySelector('.qa-bola-warn')).not.toBeNull();
+  });
+});
+
+describe('BolaPanel — setup automation', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    installLocalStorage({ qa_locale: 'en-US' });
+    // Path /orders/123 contains a numeric id after a plural noun — detection fires with high confidence.
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r2', method: 'GET', name: 'order', path: '/orders/123' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r2: { params: [], headers: [], body: null, auth: 'none' } };
+    window.QA.RESPONSES = { r2: { status: 200, statusText: 'OK', time: 1, size: 9, body: { id: '123' }, headers: {} } };
+  });
+
+  it('test 1: adding a test via the select shows the detection suggestion', async () => {
+    // Use a React-state-backed setBola so addTest's internal setSuggestions state
+    // update triggers a re-render AND the new test card is visible.
+    const { useState: useReactState } = React;
+    function Wrapper() {
+      const [cur, setCur] = useReactState({ tests: [], presets: [] });
+      return (
+        <BolaPanel identities={identities} bola={cur} setBola={setCur}
+                   env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      );
+    }
+    render(<I18nProvider><Wrapper /></I18nProvider>);
+    // Add a test by selecting the /orders/123 request — detection fires and suggestion appears.
+    const addSelect = document.querySelector('.qa-sec-toolbar select');
+    fireEvent.change(addSelect, { target: { value: 'r2' } });
+    // The suggestion reads "Detected id in path segment 1 (numeric, after /orders) — confidence high."
+    await waitFor(() => expect(screen.getByText(/Detected id in/i)).not.toBeNull(), { timeout: 3000 });
+  });
+
+  it('test 2: applying a preset fills idValues for the identities', async () => {
+    const initialBola = {
+      tests: [{ id: 'tp1', reqId: 'r2', method: 'GET', path: '/orders/123', idLocation: { kind: 'path', index: 1 }, idValues: {} }],
+      presets: [{ id: 'p1', name: 'prod', values: { alice: '100', bob: '200' } }],
+    };
+    const { useState: useReactState } = React;
+    function Wrapper() {
+      const [cur, setCur] = useReactState(initialBola);
+      return (
+        <BolaPanel identities={identities} bola={cur} setBola={setCur}
+                   env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      );
+    }
+    render(<I18nProvider><Wrapper /></I18nProvider>);
+    // Find the preset select (the one with "p1" as an option value).
+    const allSelects = document.querySelectorAll('select');
+    const ps = Array.from(allSelects).find(s => s.querySelector('option[value="p1"]'));
+    expect(ps).not.toBeNull();
+    fireEvent.change(ps, { target: { value: 'p1' } });
+    // After applying the preset the id-value inputs for alice and bob should show '100' and '200'.
+    await waitFor(() => {
+      const inputs = document.querySelectorAll('.qa-bola-idval input');
+      const vals = Array.from(inputs).map(i => i.value);
+      expect(vals).toContain('100');
+      expect(vals).toContain('200');
+    });
+  });
+
+  it('test 3: unchecking negative control omits the synthetic probe', async () => {
+    // With 2 identities + 1 test: ref=2, attacks=2, control=1 (if ON) = 5 total.
+    // With negControl=OFF: ref=2, attacks=2 = 4 total.
+    const runBolaBola = {
+      tests: [{ id: 'tn1', reqId: 'r2', method: 'GET', path: '/orders/123', idLocation: { kind: 'path', index: 1 }, idValues: { alice: '100', bob: '200' } }],
+    };
+    let callCount = 0;
+    // Count each canned response lookup by patching the response store via a flag
+    // set on each response object access.  We use a simple counter reset here.
+    const origExec = window.QA.RESPONSES['r2'];
+    // Override the response with a getter-counted version to track accesses.
+    let accessedR2 = 0;
+    Object.defineProperty(window.QA.RESPONSES, 'r2', {
+      get() { accessedR2++; return origExec; },
+      configurable: true,
+    });
+    const { useState: useReactState } = React;
+    function Wrapper() {
+      const [cur, setCur] = useReactState(runBolaBola);
+      return (
+        <BolaPanel identities={identities} bola={cur} setBola={setCur}
+                   env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      );
+    }
+    render(<I18nProvider><Wrapper /></I18nProvider>);
+    // Negative control defaults ON; verify it.
+    const checkbox = screen.getByRole('checkbox', { name: /Negative control/i });
+    expect(checkbox.checked).toBe(true);
+    // Uncheck it.
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+    // Reset the counter after any setup-phase accesses.
+    accessedR2 = 0;
+    // Run.
+    fireEvent.click(screen.getByRole('button', { name: /Run BOLA/i }));
+    // Wait for the run to complete (Stop button appears then disappears, or cells appear).
+    await waitFor(() => expect(document.querySelector('.qa-bola-cell--vuln, .qa-bola-cell--unconfirmed, .qa-bola-cell--pass, .qa-bola-cell--inconclusive')).not.toBeNull(), { timeout: 8000 });
+    // Wait for running to finish (no Stop button).
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Stop/i })).toBeNull(), { timeout: 8000 });
+    // With negControl=OFF: 2 ref + 2 attacks = 4 calls. With ON: 5.
+    expect(accessedR2).toBe(4);
+    // Restore.
+    delete (window.QA.RESPONSES).r2;
+    window.QA.RESPONSES.r2 = origExec;
   });
 });

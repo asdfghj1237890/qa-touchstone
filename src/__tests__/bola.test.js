@@ -1,6 +1,6 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
-import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola } from '../qa/bola.js';
+import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola, negativeControlFailed } from '../qa/bola.js';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 
@@ -171,5 +171,81 @@ describe('summarizeBola', () => {
   it('tallies attack verdicts (not reference cells)', () => {
     const results = { t1: { reference: { a: { status: 200 } }, attacks: { a: { b: { verdict: 'vuln' } }, b: { a: { verdict: 'pass' } } } } };
     expect(summarizeBola(results)).toEqual({ total: 2, vuln: 1, unconfirmed: 0, pass: 1, inconclusive: 0 });
+  });
+});
+
+describe('negativeControlFailed', () => {
+  const deny = [401, 403, 404];
+  it('fails only when a fake id returns 2xx AND content matches the owner reference', () => {
+    expect(negativeControlFailed(200, deny, true)).toBe(true);
+    expect(negativeControlFailed(200, deny, false)).toBe(false);   // 2xx but no match -> keep verdicts
+  });
+  it('passes when a fake id is denied', () => {
+    expect(negativeControlFailed(404, deny, true)).toBe(false);
+    expect(negativeControlFailed(403, deny, true)).toBe(false);
+  });
+  it('does not demote on errors / inconclusive statuses', () => {
+    expect(negativeControlFailed(null, deny, true)).toBe(false);
+    expect(negativeControlFailed(500, deny, true)).toBe(false);
+  });
+});
+
+describe('runBola negative control', () => {
+  const identities = [{ id: 'alice', name: 'alice' }, { id: 'bob', name: 'bob' }];
+  const test = { id: 't1', reqId: 'r1', method: 'GET', path: '/orders/{id}',
+                 idLocation: { kind: 'path', index: 1 }, idValues: { alice: '1', bob: '2' } };
+  const SYNTH = '999999999';
+
+  it('demotes all attack cells to inconclusive when a fake id returns the owner object (id ignored)', async () => {
+    // Endpoint ignores the id and always returns the same object -> not object-scoped.
+    const runner = async () => ({ status: 200, body: { id: '1', owner: 'alice', secret: 'x' } });
+    const results = await runBola({ identities, tests: [test] }, runner, { negativeControl: true });
+    const cell = results.t1.attacks.alice.bob;
+    expect(cell.verdict).toBe('inconclusive');
+    expect(cell.severity).toBe(null);
+    expect(cell.finding).toBe(null);
+    expect(cell.controlFailed).toBe(true);
+    expect(results.t1.control.failed).toBe(true);
+    expect(cell.status).toBe(200);   // raw response preserved
+  });
+
+  it('does NOT demote when a fake id returns 2xx but different content (soft-200, still object-scoped)', async () => {
+    const runner = async (_t, _identity, idValue) => String(idValue) === SYNTH
+      ? { status: 200, body: {} }                                  // soft-200 for nonexistent id
+      : { status: 200, body: { id: String(idValue), data: 'real' } };
+    const results = await runBola({ identities, tests: [test] }, runner, { negativeControl: true });
+    const cell = results.t1.attacks.alice.bob;
+    expect(cell.verdict).toBe('vuln');             // genuine finding preserved
+    expect(cell.controlFailed).toBe(false);
+    expect(results.t1.control.failed).toBe(false);
+  });
+
+  it('leaves verdicts intact when the control is properly denied', async () => {
+    const runner = async (_t, _identity, idValue) => String(idValue) === SYNTH
+      ? { status: 404, body: {} }
+      : { status: 200, body: { id: String(idValue) } };
+    const results = await runBola({ identities, tests: [test] }, runner, { negativeControl: true });
+    const cell = results.t1.attacks.alice.bob;
+    expect(cell.verdict).toBe('vuln');
+    expect(cell.controlFailed).toBe(false);
+    expect(results.t1.control.failed).toBe(false);
+  });
+
+  it('does not demote when the synthetic control errors / is inconclusive (500)', async () => {
+    const runner = async (_t, _identity, idValue) => String(idValue) === SYNTH
+      ? { status: 500, body: {} }
+      : { status: 200, body: { id: String(idValue) } };
+    const results = await runBola({ identities, tests: [test] }, runner, { negativeControl: true });
+    const cell = results.t1.attacks.alice.bob;
+    expect(cell.verdict).toBe('vuln');
+    expect(cell.controlFailed).toBe(false);
+    expect(results.t1.control.failed).toBe(false);
+  });
+
+  it('does not run the control when the opt is off (back-compat)', async () => {
+    const seen = [];
+    const runner = async (_t, _id, idValue) => { seen.push(String(idValue)); return { status: 200, body: { id: String(idValue) } }; };
+    await runBola({ identities, tests: [test] }, runner);
+    expect(seen).not.toContain(SYNTH);
   });
 });

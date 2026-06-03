@@ -1305,3 +1305,10 @@
   .qa-sec-triage-rationale { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .qa-sec-triage-goto { margin-left: auto; }
   .qa-rot-90 { transform: rotate(-90deg); }
+
+  /* ── BOLA setup automation ──────────────────────────────────────── */
+  .qa-bola-suggest { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin: 4px 0; }
+  .qa-bola-detect { margin: 4px 0; }
+  .qa-bola-presets { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+  .qa-bola-cand { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .qa-bola-ctrlfail { margin: 6px 0; }
