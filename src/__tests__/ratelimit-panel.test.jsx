@@ -1,7 +1,7 @@
 // src/__tests__/ratelimit-panel.test.jsx
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RateLimitPanel } from '../qa/RateLimitPanel.jsx';
 import { I18nProvider } from '../qa/i18n.jsx';
 
@@ -53,6 +53,23 @@ describe('RateLimitPanel — runs on the canned path', () => {
     expect(document.querySelector('.qa-sec-findpanel, .qa-rl-findpanel')).not.toBeNull();
     // The stats card reflects the burst size (N=5 from the rl() helper).
     expect(document.querySelector('.qa-rl-result').textContent).toContain('5 sent');
+  });
+
+  it('calls onFindings with normalized rate-limit findings after a burst produces a vuln', async () => {
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 2, size: 2, body: { ok: true }, headers: {} } };
+    const spy = vi.fn();
+    render(
+      <I18nProvider>
+        <RateLimitPanel identities={identities} rateLimit={rl()} setRateLimit={() => {}} onFindings={spy}
+                        env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      </I18nProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Run burst/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send burst/i }));
+    await waitFor(() => expect(document.querySelector('.qa-rl-verdict--vuln')).not.toBeNull(), { timeout: 4000 });
+    expect(spy).toHaveBeenCalled();
+    const last = spy.mock.calls.at(-1)[0];
+    expect(last.some(x => x.engine === 'ratelimit' && x.ref && x.ref.testId)).toBe(true);
   });
 
   it('reports pass when a rate-limit header is present', async () => {

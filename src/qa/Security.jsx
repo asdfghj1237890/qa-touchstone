@@ -16,8 +16,9 @@ import {
 } from './oracles.js';
 import { BolaPanel } from './BolaPanel.jsx';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
+import { TriagePanel } from './TriagePanel.jsx';
 
-const { useState: useS, useEffect: useE, useMemo, useRef } = React;
+const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
 const VERDICT_LABEL = { pass: 'security.verdict.pass', fail: 'security.verdict.fail', vuln: 'security.verdict.vuln', inconclusive: 'security.verdict.inconclusive' };
 
@@ -134,6 +135,28 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     return out.sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
   }, [results, endpoints, identities, t]);
 
+  // Cross-engine triage union. Matrix findings are normalized here (with a
+  // {reqId, idId} back-ref); BOLA/rate-limit panels report their own normalized
+  // lists upward via onFindings. Stable callbacks so the child effects don't loop.
+  const [bolaFindings, setBolaFindings] = useS([]);
+  const [rlFindings, setRlFindings] = useS([]);
+  const onBolaFindings = useCallback((list) => setBolaFindings(list), []);
+  const onRlFindings = useCallback((list) => setRlFindings(list), []);
+  const matrixNormalized = useMemo(() => {
+    const out = [];
+    for (const ep of endpoints) {
+      for (const id of identities) {
+        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        for (const f of (cell && cell.findings) || []) {
+          out.push({ engine: 'matrix', severity: f.severity, oracle: f.oracle, title: f.title,
+                     path: f.path, evidence: f.evidence || '', ref: { reqId: ep.reqId, idId: id.id } });
+        }
+      }
+    }
+    return out;
+  }, [results, endpoints, identities]);
+  const triageUnion = useMemo(() => [...matrixNormalized, ...bolaFindings, ...rlFindings], [matrixNormalized, bolaFindings, rlFindings]);
+
   const cycleCell = (reqId, idId) => {
     const cur = state.expect[reqId][idId];
     const next = EXPECTS[(EXPECTS.indexOf(cur) + 1) % EXPECTS.length];
@@ -223,6 +246,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   return (
     <div className="qa-sec">
+      <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
         <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
@@ -231,10 +255,10 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
       {mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
-                   env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
+                   env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
       ) : mode === 'ratelimit' ? (
         <RateLimitPanel identities={identities} rateLimit={rateLimit} setRateLimit={setRateLimit}
-                        env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
+                        env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onRlFindings} />
       ) : (
       <>
       <div className="qa-sec-head">

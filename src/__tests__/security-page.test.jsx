@@ -173,4 +173,9 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     await waitFor(() => expect(document.querySelector('.qa-bola')).not.toBeNull());
     expect(document.querySelectorAll('.qa-sec-head').length).toBe(1);
   });
+
+  it('renders the AI Triage card above the tabs', () => {
+    renderPage();
+    expect(screen.getByText('AI Triage')).toBeInTheDocument();
+  });
 });
