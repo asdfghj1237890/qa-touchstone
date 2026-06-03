@@ -13,7 +13,7 @@ import {
   summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
 } from './ratelimit.js';
 
-const { useState: useS, useMemo, useRef } = React;
+const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const VLABEL = { pass: 'rl.verdict.pass', vuln: 'rl.verdict.vuln', inconclusive: 'rl.verdict.inconclusive' };
 
 function allRequests() {
@@ -23,7 +23,7 @@ function allRequests() {
 
 let rlSeq = 1;
 
-function RateLimitPanel({ identities, rateLimit, setRateLimit, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
+function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
   const { t } = useI18n();
   const tests = rateLimit.tests || [];
   const [results, setResults] = useS({});
@@ -71,6 +71,17 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, env = { label: 'N
 
   const summary = useMemo(() => summarizeRateLimit(results), [results]);
   const allFindings = useMemo(() => tests.map(t0 => results[t0.id] && results[t0.id].finding).filter(Boolean), [results, tests]);
+
+  // Report normalized findings upward for cross-engine AI triage (advisory).
+  useE(() => {
+    if (!onFindings) return;
+    const out = tests.map(t0 => {
+      const f = results[t0.id] && results[t0.id].finding;
+      return f ? { engine: 'ratelimit', severity: f.severity, oracle: f.oracle, title: f.title,
+                   path: f.path, evidence: f.evidence || '', ref: { testId: t0.id } } : null;
+    }).filter(Boolean);
+    onFindings(out);
+  }, [results, tests, onFindings]);
 
   const reqs = allRequests();
 

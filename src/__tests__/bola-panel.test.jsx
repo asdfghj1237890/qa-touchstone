@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BolaPanel } from '../qa/BolaPanel.jsx';
 import { I18nProvider } from '../qa/i18n.jsx';
 
@@ -56,6 +56,23 @@ describe('BolaPanel — runs on the canned path', () => {
     fireEvent.click(document.querySelector('.qa-bola-cell--vuln'));
     await waitFor(() => expect(document.querySelector('.qa-sec-drawer')).not.toBeNull());
     expect(document.querySelector('.qa-sec-drawer-body').textContent).toContain('shared');
+  });
+
+  it('calls onFindings with normalized BOLA findings after a run produces a vuln cell', async () => {
+    const spy = vi.fn();
+    let cur = bola;
+    const setBola = (next) => { cur = typeof next === 'function' ? next(cur) : next; };
+    render(
+      <I18nProvider>
+        <BolaPanel identities={identities} bola={bola} setBola={setBola} onFindings={spy}
+                   env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      </I18nProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Run BOLA/i }));
+    await waitFor(() => expect(document.querySelector('.qa-bola-cell--vuln')).not.toBeNull(), { timeout: 4000 });
+    expect(spy).toHaveBeenCalled();
+    const last = spy.mock.calls.at(-1)[0];
+    expect(last.some(x => x.engine === 'bola' && x.ref && x.ref.testId && x.ref.attackerId && x.ref.ownerId)).toBe(true);
   });
 
   it('warns when the marked id location cannot apply to the request (bad body path)', () => {
