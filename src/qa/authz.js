@@ -24,6 +24,15 @@ export function classifyEndpoint(method, path) {
   return { privileged: reasons.length > 0, reasons };
 }
 
+// Effective privileged state for an endpoint: a manual boolean override wins,
+// otherwise fall back to the heuristic. Only `ep.privileged` is persisted.
+export function endpointPrivileged(ep) {
+  if (ep && typeof ep.privileged === 'boolean') {
+    return { privileged: ep.privileged, reasons: ['manual'], source: 'manual' };
+  }
+  return { ...classifyEndpoint(ep && ep.method, ep && ep.path), source: 'auto' };
+}
+
 // Map a real HTTP status to an authorization outcome.
 export function classifyOutcome(status, denySet = DEFAULT_DENY_SET) {
   if (typeof status !== 'number' || !Number.isFinite(status)) return 'other';
