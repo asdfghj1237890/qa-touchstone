@@ -12,7 +12,8 @@
 
 QA Touchstone is a local-first desktop workspace for API QA. It combines a
 Postman-compatible API client, live collection execution, background monitors,
-k6 performance testing, AI-assisted test generation, AI response review, and
+k6 performance testing, security testing (RBAC, object-authz, and rate-limit)
+with AI triage, AI-assisted test generation, AI response review, and
 exportable API documentation in one Tauri app.
 
 ## Screenshots
@@ -53,9 +54,17 @@ The current public-facing scope is API testing only:
   variables; replay matching cookies through the local cookie jar.
 - **Collection Runner**: run selected requests, iterate over CSV/JSON data, and
   score assertions on live responses.
-- **Security matrix**: run an identity × endpoint RBAC matrix — the same saved
+- **Security testing**: run an identity × endpoint RBAC matrix — the same saved
   requests sent under multiple identities — with per-cell allow/deny expectations,
-  a configurable deny-status set, and broken-access-control (vulnerability) flags.
+  a configurable deny-status set, and response oracles that flag sensitive-data
+  exposure and schema drift. Object-level authorization (BOLA/IDOR) testing swaps
+  object ids across identities with auto-detected id locations, reusable
+  cross-tenant presets, and a negative control that suppresses false positives.
+  Rate-limit / abuse testing fires bounded request bursts behind a confirm gate.
+- **AI security triage**: condense a whole scan (matrix + object-authz + rate-limit)
+  into a short, prioritized, categorized shortlist — what to look at first, what
+  looks like a real issue, and what's likely a false positive — advisory only,
+  never altering the underlying findings.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress

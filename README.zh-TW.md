@@ -12,8 +12,8 @@
 
 QA Touchstone 是一個本機優先的桌面 API QA 工作台。它把
 Postman 相容 API client、collection 真實執行、背景 monitors、k6 效能測試、
-AI 測試案例產生、AI response review，以及可匯出的 API 文件整合在同一個
-Tauri app 裡。
+安全測試（RBAC、物件授權、速率限制）與 AI 分流、AI 測試案例產生、
+AI response review，以及可匯出的 API 文件整合在同一個 Tauri app 裡。
 
 ## 畫面截圖
 
@@ -52,9 +52,14 @@ Tauri app 裡。
   variables；透過本機 cookie jar replay 符合 domain/path 的 cookies。
 - **Collection Runner**：批次執行選定 requests，支援 CSV/JSON data
   iteration，並用 live responses 計算 assertions。
-- **安全矩陣（Security matrix）**：執行身分 × 端點的 RBAC 矩陣——同一批已存
+- **安全測試（Security testing）**：執行身分 × 端點的 RBAC 矩陣——同一批已存
   requests 用多個身分各送一次——可逐格設定 allow/deny 預期、可調的拒絕狀態碼集合，
-  並標示 broken access control（漏洞）。
+  並以 response oracles 標示敏感資料外洩與 schema 偏移。物件層級授權（BOLA/IDOR）
+  測試在不同身分間替換物件 id，支援自動偵測 id 位置、可重用的跨租戶 presets，以及
+  避免誤判的 negative control。速率限制 / 濫用測試在確認關卡後送出有上限的 request bursts。
+- **AI 安全分流（AI security triage）**：把整批掃描（矩陣 + 物件授權 + 速率限制）
+  濃縮成一份簡短、依優先序分類的清單——先看哪幾個、哪些像真的問題、哪些可能是誤判
+  ——僅供參考，不會更動底層 findings。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
