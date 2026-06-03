@@ -9,6 +9,7 @@ import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import { buildReq } from './buildReq.js';
 import { applyIdLocation, runBola, summarizeBola } from './bola.js';
+import { detectIdLocation, extractIdCandidates, applyPreset } from './bolaSetup.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
@@ -36,13 +37,34 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
   const [results, setResults] = useS({});
   const [running, setRunning] = useS(false);
   const [drawer, setDrawer] = useS(null);   // { testId, attackerId, ownerId }
+  const [suggestions, setSuggestions] = useS({});   // testId -> top detection candidate (dismissible)
+  const [negControl, setNegControl] = useS(true);
+  const [presetName, setPresetName] = useS('');
+  const presets = bola.presets || [];
+  const setPresets = (updater) => setBola(b => ({ ...b, presets: typeof updater === 'function' ? updater(b.presets || []) : updater }));
   const abortRef = useRef(null);
 
   const setTests = (updater) => setBola(b => ({ ...b, tests: typeof updater === 'function' ? updater(b.tests || []) : updater }));
 
-  const addTest = (r) => setTests(ts => ts.some(x => x.reqId === r.reqId)
-    ? ts
-    : [...ts, { id: `bt_${Date.now()}_${testSeq++}`, reqId: r.reqId, method: r.method, path: r.path, idLocation: { kind: 'path', index: 0 }, idValues: {} }]);
+  const addTest = (r) => setTests(ts => {
+    if (ts.some(x => x.reqId === r.reqId)) return ts;
+    const id = `bt_${Date.now()}_${testSeq++}`;
+    let idLocation = { kind: 'path', index: 0 };
+    let top = null;
+    try {
+      const cands = detectIdLocation(buildReq(r.reqId));
+      if (cands.length && cands[0].confidence !== 'low') { idLocation = cands[0].idLocation; top = cands[0]; }
+    } catch { /* detection is best-effort */ }
+    if (top) setSuggestions(s => ({ ...s, [id]: top }));
+    return [...ts, { id, reqId: r.reqId, method: r.method, path: r.path, idLocation, idValues: {} }];
+  });
+  const detectFor = (testId, reqId) => {
+    try {
+      const cands = detectIdLocation(buildReq(reqId));
+      if (cands.length) { patchTest(testId, { idLocation: cands[0].idLocation }); setSuggestions(s => ({ ...s, [testId]: cands[0] })); }
+    } catch { /* ignore */ }
+  };
+  const dismissSuggestion = (testId) => setSuggestions(s => { const n = { ...s }; delete n[testId]; return n; });
   const removeTest = (id) => setTests(ts => ts.filter(x => x.id !== id));
   const patchTest = (id, patch) => setTests(ts => ts.map(x => x.id === id ? { ...x, ...patch } : x));
   const setIdValue = (id, identityId, value) => setTests(ts => ts.map(x => x.id === id ? { ...x, idValues: { ...x.idValues, [identityId]: value } } : x));
@@ -60,6 +82,8 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
     try {
       await runBola({ identities, tests }, runner, {
         signal: controller.signal,
+        negativeControl: negControl,
+        onControl: (testId, control) => setResults(r => ({ ...r, [testId]: { ...(r[testId] || { reference: {}, attacks: {} }), control } })),
         onCell: (testId, attackerId, ownerId, cell) => setResults(r => {
           const tr = r[testId] || { reference: {}, attacks: {} };
           if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
@@ -111,6 +135,10 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
       <div className="qa-sec-head">
         <div><h2>{t('security.mode.bola')}</h2><p>{t('bola.subtitle')}</p></div>
         <div className="qa-sec-actions">
+          <label className="qa-sec-privchk" title={t('security.bola.setup.negControlHint')}>
+            <input type="checkbox" checked={negControl} onChange={e => setNegControl(e.target.checked)} />
+            {t('security.bola.setup.negControl')}
+          </label>
           {running
             ? <button className="qa-btn qa-btn--danger" onClick={stop}><Icon name="stop" size={14} /> {t('security.stop')}</button>
             : <button className="qa-btn qa-btn--primary" onClick={run} disabled={!tests.length}><Icon name="play" size={14} /> {t('bola.run')}</button>}
@@ -147,6 +175,19 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
               <button className="qa-sec-x" onClick={() => removeTest(test.id)}><Icon name="x" size={11} /></button>
             </div>
 
+            {suggestions[test.id] && (
+              <div className="qa-bola-suggest">
+                {t('security.bola.setup.detected', { where: suggestions[test.id].why, confidence: t('security.bola.setup.confidence.' + suggestions[test.id].confidence) })}
+                <button className="qa-link" onClick={() => { patchTest(test.id, { idLocation: suggestions[test.id].idLocation }); dismissSuggestion(test.id); }}>{t('security.bola.setup.use')}</button>
+                <button className="qa-link" onClick={() => dismissSuggestion(test.id)}>{t('security.bola.setup.dismiss')}</button>
+              </div>
+            )}
+            {!suggestions[test.id] && (
+              <button className="qa-link qa-bola-detect" onClick={() => detectFor(test.id, test.reqId)}>
+                <Icon name="search" size={12} /> {t('security.bola.setup.detect')}
+              </button>
+            )}
+
             <div className="qa-bola-loc">
               <label>{t('bola.idLocation')}:</label>
               <select className="qa-inp qa-inp--mini" value={test.idLocation.kind}
@@ -171,6 +212,16 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
               {!idApplied && <span className="qa-bola-warn">⚠ {t('bola.notApplied')}</span>}
             </div>
 
+            <div className="qa-bola-presets">
+              <span>{t('security.bola.setup.preset')}:</span>
+              <select className="qa-inp qa-inp--mini" value="" onChange={e => { const p = presets.find(x => x.id === e.target.value); if (p) setTests(ts => ts.map(x => x.id === test.id ? applyPreset(x, p) : x)); }}>
+                <option value="">{t('security.bola.setup.applyPreset')}…</option>
+                {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input className="qa-inp qa-inp--mini" placeholder={t('security.bola.setup.presetName')} value={presetName} onChange={e => setPresetName(e.target.value)} />
+              <button className="qa-link" disabled={!presetName.trim()} onClick={() => { setPresets(ps => [...ps, { id: `pr_${Date.now()}_${testSeq++}`, name: presetName.trim(), values: { ...(test.idValues || {}) } }]); setPresetName(''); }}>{t('security.bola.setup.savePreset')}</button>
+            </div>
+
             <div className="qa-bola-ids">
               <span className="qa-bola-ids-label">{t('bola.idValues')}:</span>
               {identities.map(i => (
@@ -181,6 +232,25 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
                 </label>
               ))}
             </div>
+
+            {(() => {
+              let cands = [];
+              try { cands = extractIdCandidates(buildReq(test.reqId)); } catch { cands = []; }
+              if (!cands.length) return null;
+              const first = cands[0];
+              return (
+                <div className="qa-bola-cand qa-meta">
+                  {t('security.bola.setup.foundInReq', { value: first.value })}
+                  <button className="qa-link" onClick={() => {
+                    const empty = identities.find(i => !((test.idValues || {})[i.id]));
+                    if (empty) setIdValue(test.id, empty.id, first.value);
+                  }}>{t('security.bola.setup.fillFirst')}</button>
+                </div>
+              );
+            })()}
+            {(tr.control && tr.control.failed) && (
+              <div className="qa-bola-warn qa-bola-ctrlfail">{t('security.bola.setup.controlFailed')}</div>
+            )}
 
             {ow.length >= 2 && (
               <table className="qa-bola-grid">
