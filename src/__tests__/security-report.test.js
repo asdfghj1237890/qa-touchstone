@@ -1,6 +1,6 @@
 // src/__tests__/security-report.test.js
 import { describe, it, expect } from 'vitest';
-import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit } from '../qa/securityReport.js';
+import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit, reportToSarif, sevToSarifLevel } from '../qa/securityReport.js';
 
 const item = (over = {}) => ({
   fp: 'fp1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt',
@@ -103,5 +103,37 @@ describe('reportToJUnit', () => {
     const xml = reportToJUnit(buildReport(run([item({ title: 'a & "b" <c>' })]), null, lc(), {}));
     expect(xml).toContain('&amp;');
     expect(xml).not.toContain('"b" <c>');
+  });
+});
+
+describe('sevToSarifLevel', () => {
+  it('maps severity to SARIF level', () => {
+    expect(sevToSarifLevel('critical')).toBe('error');
+    expect(sevToSarifLevel('high')).toBe('error');
+    expect(sevToSarifLevel('medium')).toBe('warning');
+    expect(sevToSarifLevel('low')).toBe('note');
+    expect(sevToSarifLevel('info')).toBe('note');
+  });
+});
+
+describe('reportToSarif', () => {
+  const parse = (model) => JSON.parse(reportToSarif(model));
+  it('emits a valid 2.1.0 skeleton with unique rules and a result per current finding', () => {
+    const sarif = parse(buildReport(run([item({ fp: 'a' }), item({ fp: 'b', ruleId: 'jwt' })]), null, lc(), {}));
+    expect(sarif.version).toBe('2.1.0');
+    const driver = sarif.runs[0].tool.driver;
+    expect(driver.name).toBe('QA Touchstone');
+    expect(driver.rules.map(r => r.id)).toEqual(['jwt']); // both share ruleId jwt -> unique
+    expect(sarif.runs[0].results).toHaveLength(2);
+    expect(sarif.runs[0].results[0].partialFingerprints.qaFingerprint).toBeTruthy();
+  });
+  it('sets baselineState and suppressions', () => {
+    const base = { runId: 'base', scopeHash: 'sh', items: [item({ fp: 'b' })] };
+    const sarif = parse(buildReport(run([item({ fp: 'a' }), item({ fp: 'b' })]), base, lc({ a: { suppressed: true, suppressReason: 'fp' } }), {}));
+    const byFp = Object.fromEntries(sarif.runs[0].results.map(r => [r.partialFingerprints.qaFingerprint, r]));
+    expect(byFp.a.baselineState).toBe('new');
+    expect(byFp.b.baselineState).toBe('unchanged');
+    expect(byFp.a.suppressions[0].justification).toBe('fp');
+    expect(byFp.b.suppressions).toBeUndefined();
   });
 });

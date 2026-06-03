@@ -120,6 +120,35 @@ export function reportToJUnit(model) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="QA Touchstone Security" tests="${current.length}" failures="${failures}" skipped="${skipped}" time="${((model.meta.durationMs || 0) / 1000).toFixed(3)}">\n${suites}\n</testsuites>\n`;
 }
 
+export function sevToSarifLevel(sev) {
+  if (sev === 'critical' || sev === 'high') return 'error';
+  if (sev === 'medium') return 'warning';
+  return 'note';
+}
+export function sarifBaselineState(presence) { return presence === 'carried' ? 'unchanged' : 'new'; }
+
+export function reportToSarif(model) {
+  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const rules = [...new Set(current.map(f => f.ruleId))].map(id => ({ id }));
+  const results = current.map(f => {
+    const r = {
+      ruleId: f.ruleId, level: sevToSarifLevel(f.severity),
+      message: { text: `${f.title}${f.evidence ? ' — ' + f.evidence : ''} at ${f.location}` },
+      locations: [{ logicalLocations: [{ fullyQualifiedName: f.location, kind: 'member' }] }],
+      partialFingerprints: { qaFingerprint: f.fp },
+      baselineState: sarifBaselineState(f.presence),
+      properties: { engine: f.engine, severity: f.severity, owner: f.owner, status: f.status, count: f.count },
+    };
+    if (f.suppressed) r.suppressions = [{ kind: 'external', justification: f.suppressReason || '' }];
+    return r;
+  });
+  return JSON.stringify({
+    version: '2.1.0',
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    runs: [{ tool: { driver: { name: 'QA Touchstone', informationUri: 'https://github.com/asdfghj1237890/qa-touchstone', rules } }, results }],
+  }, null, 2);
+}
+
 export function reportToHtml(model) {
   const m = model.meta, s = model.summary, h = htmlEscape;
   const sevChips = SEVERITY_ORDER.slice().reverse()
