@@ -113,3 +113,64 @@ export function gateCount(items, lifecycle, diff) {
   }
   return n;
 }
+
+function readJSON(key) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function writeJSON(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* storage unavailable — non-fatal */ }
+}
+
+const BLANK_RECORD = () => ({
+  suppressed: false, suppressReason: '', status: 'open', owner: '', note: '',
+  severityOverride: null, createdAt: '', updatedAt: '', lastSeenAt: '', seenCount: 0,
+});
+
+// Load the lifecycle store. Corrupt/missing -> empty versioned store (scanning
+// must never break). Older fpVersion -> records quarantined under `legacy`.
+export function loadLifecycle() {
+  const raw = readJSON(LIFECYCLE_KEY);
+  if (!raw || typeof raw !== 'object' || !raw.records || typeof raw.records !== 'object') {
+    return { fpVersion: FP_VERSION, records: {}, legacy: null };
+  }
+  if (raw.fpVersion !== FP_VERSION) {
+    return { fpVersion: FP_VERSION, records: {}, legacy: { fpVersion: raw.fpVersion, records: raw.records } };
+  }
+  return { fpVersion: FP_VERSION, records: raw.records, legacy: raw.legacy || null };
+}
+
+export function saveLifecycle(state) {
+  const payload = { fpVersion: FP_VERSION, records: (state && state.records) || {} };
+  if (state && state.legacy) payload.legacy = state.legacy;
+  writeJSON(LIFECYCLE_KEY, payload);
+}
+
+// Merge a patch into a finding's record (created from BLANK_RECORD if absent).
+// `now` is an injected ISO string so this stays pure/testable.
+export function upsertRecord(state, fp, patch, now = '') {
+  const records = { ...((state && state.records) || {}) };
+  const prev = records[fp] || { ...BLANK_RECORD(), createdAt: now };
+  records[fp] = { ...prev, ...patch, updatedAt: now };
+  return { fpVersion: FP_VERSION, records, legacy: (state && state.legacy) || null };
+}
+
+export function loadSnapshots() {
+  const raw = readJSON(SNAPSHOTS_KEY);
+  if (!raw || typeof raw !== 'object' || raw.fpVersion !== FP_VERSION) {
+    return { fpVersion: FP_VERSION, baseline: null, lastRun: null };
+  }
+  return { fpVersion: FP_VERSION, baseline: raw.baseline || null, lastRun: raw.lastRun || null };
+}
+
+export function saveSnapshots(s) {
+  writeJSON(SNAPSHOTS_KEY, { fpVersion: FP_VERSION, baseline: (s && s.baseline) || null, lastRun: (s && s.lastRun) || null });
+}
+
+// Set lastRun (completed-scan boundary); leaves baseline untouched.
+export function recordRun(snapshots, snap) {
+  return { fpVersion: FP_VERSION, baseline: (snapshots && snapshots.baseline) || null, lastRun: snap };
+}
+// Pin the given snapshot as the known-good baseline; leaves lastRun untouched.
+export function pinBaseline(snapshots, snap) {
+  return { fpVersion: FP_VERSION, baseline: snap, lastRun: (snapshots && snapshots.lastRun) || null };
+}
