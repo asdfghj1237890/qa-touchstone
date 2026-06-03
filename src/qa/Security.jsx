@@ -18,6 +18,9 @@ import { BolaPanel } from './BolaPanel.jsx';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
+import {
+  loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
+} from './findings.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -113,6 +116,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [mode, setMode] = useS('matrix');
   const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
   const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
+  const [snapshots, setSnapshots] = useS(() => loadSnapshots());
+  const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola, rateLimit }), [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]);
@@ -160,6 +165,15 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     return out;
   }, [results, endpoints, identities]);
   const triageUnion = useMemo(() => [...matrixNormalized, ...bolaFindings, ...rlFindings], [matrixNormalized, bolaFindings, rlFindings]);
+
+  const scopeDescriptor = useMemo(() => ({
+    endpoints: endpoints.map(e => e.reqId).sort(),
+    identities: identities.map(i => i.id).sort(),
+    bola: (bola.tests || []).map(x => x.id).sort(),
+    rl: (rateLimit.tests || []).map(x => x.id).sort(),
+  }), [endpoints, identities, bola, rateLimit]);
+  const scopeHash = useMemo(() => scopeHashOf(scopeDescriptor), [scopeDescriptor]);
+  const scopeMismatch = !!(snapshots.baseline && snapshots.baseline.scopeHash && snapshots.baseline.scopeHash !== scopeHash);
 
   const cycleCell = (reqId, idId) => {
     const cur = state.expect[reqId][idId];
@@ -215,9 +229,20 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       });
     } finally {
       setRunning(false);
+      // Completed full scan (not a single-row run, not aborted) = a snapshot boundary.
+      if (!rowReqId && !controller.signal.aborted) setRunStamp(s => s + 1);
     }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(false); };
+
+  // Record the run snapshot from the live union once a full scan completes.
+  // Reads loadLifecycle() from storage so it includes the panel's latest annotations.
+  useE(() => {
+    if (!runStamp) return;
+    const snap = snapshotOf(triageUnion, loadLifecycle(),
+      { runId: String(runStamp), createdAt: new Date().toISOString(), scopeHash });
+    setSnapshots(prev => { const next = recordRun(prev, snap); saveSnapshots(next); return next; });
+  }, [runStamp]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const editing = identities.find(i => i.id === editId);
   const drawerCell = drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId];
@@ -259,7 +284,16 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       </div>
 
       {mode === 'findings' ? (
-        <FindingsPanel union={triageUnion} />
+        <FindingsPanel
+          union={triageUnion}
+          snapshots={snapshots}
+          scopeMismatch={scopeMismatch}
+          onPinBaseline={() => {
+            const snap = snapshotOf(triageUnion, loadLifecycle(),
+              { runId: 'baseline', createdAt: new Date().toISOString(), scopeHash });
+            setSnapshots(prev => { const next = pinBaseline(prev, snap); saveSnapshots(next); return next; });
+          }}
+        />
       ) : mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
