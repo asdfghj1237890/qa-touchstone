@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   FP_VERSION, ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
-  snapshotOf, scopeHashOf, diffRuns,
+  snapshotOf, scopeHashOf, diffRuns, gateCount,
 } from '../qa/findings.js';
 
 const matrixF = (over = {}) => ({
@@ -158,5 +158,19 @@ describe('diffRuns', () => {
     const d = diffRuns([item('x')], [item('y')]);
     expect(d.get('x')).toBe('new');      // x is live -> new, never stuck resolved
     expect(d.get('y')).toBe('resolved'); // y absent from current
+  });
+});
+
+describe('gateCount', () => {
+  const cur = [item('a', 'critical'), item('b', 'high'), item('c', 'low'), item('d', 'high')];
+  it('counts only NEW findings with effective severity >= high, not suppressed', () => {
+    const diff = diffRuns(cur, [item('d')]); // d is carried; a,b,c new
+    const lifecycle = lc({ b: { suppressed: true } });
+    // a(critical,new) counts; b(high,new but suppressed) excluded; c(low) excluded; d(carried) excluded.
+    expect(gateCount(cur, lifecycle, diff)).toBe(1);
+  });
+  it('with no baseline (all new), counts every high/critical not suppressed', () => {
+    const diff = diffRuns(cur, []);
+    expect(gateCount(cur, lc(), diff)).toBe(3); // a, b, d
   });
 });
