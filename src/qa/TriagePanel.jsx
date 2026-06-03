@@ -6,13 +6,12 @@ import React from 'react';
 import './setup.js';
 import { Icon } from './components.jsx';
 import { useI18n } from './useI18n.js';
-import { I18nProvider } from './i18n.jsx';
 import { runTriage } from './triage.js';
 
 const { useState: useS } = React;
 const PRIO_LABEL = { p1: 'security.triage.p1', p2: 'security.triage.p2', p3: 'security.triage.p3' };
 
-function TriagePanelInner({ union = [], aiReady, onGoToEngine, runner }) {
+function TriagePanel({ union = [], aiReady, onGoToEngine, runner }) {
   const { t } = useI18n();
   const doTriage = runner || runTriage;
   const [open, setOpen] = useS(true);
@@ -83,14 +82,6 @@ function TriagePanelInner({ union = [], aiReady, onGoToEngine, runner }) {
         </div>
       )}
     </div>
-  );
-}
-
-function TriagePanel(props) {
-  return (
-    <I18nProvider>
-      <TriagePanelInner {...props} />
-    </I18nProvider>
   );
 }
 
