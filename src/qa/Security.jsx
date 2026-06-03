@@ -223,18 +223,10 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   return (
     <div className="qa-sec">
-      <div className="qa-sec-head">
-        <div><h2>{t('security.title')}</h2><p>{t('security.subtitle')}</p></div>
-        <div className="qa-sec-modetoggle">
-          <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
-          <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
-          <button className={`qa-seg ${mode === 'ratelimit' ? 'qa-seg--on' : ''}`} onClick={() => setMode('ratelimit')}>{t('security.mode.ratelimit')}</button>
-        </div>
-        <div className="qa-sec-actions">
-          {mode === 'matrix' && (running
-            ? <button className="qa-btn qa-btn--danger" onClick={stop}><Icon name="stop" size={14} /> {t('security.stop')}</button>
-            : <button className="qa-btn qa-btn--primary" onClick={() => run()} disabled={!endpoints.length}><Icon name="play" size={14} /> {t('security.runAll')}</button>)}
-        </div>
+      <div className="qa-sec-tabs">
+        <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
+        <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
+        <button className={`qa-seg ${mode === 'ratelimit' ? 'qa-seg--on' : ''}`} onClick={() => setMode('ratelimit')}>{t('security.mode.ratelimit')}</button>
       </div>
 
       {mode === 'bola' ? (
@@ -245,6 +237,15 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
                         env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} />
       ) : (
       <>
+      <div className="qa-sec-head">
+        <div><h2>{t('security.title')}</h2><p>{t('security.subtitle')}</p></div>
+        <div className="qa-sec-actions">
+          {running
+            ? <button className="qa-btn qa-btn--danger" onClick={stop}><Icon name="stop" size={14} /> {t('security.stop')}</button>
+            : <button className="qa-btn qa-btn--primary" onClick={() => run()} disabled={!endpoints.length}><Icon name="play" size={14} /> {t('security.runAll')}</button>}
+        </div>
+      </div>
+
       <div className="qa-sec-summary">
         {['total', 'pass', 'fail', 'vuln', 'inconclusive'].map(k => (
           <span key={k} className={`qa-sec-chip qa-sec-chip--${k}`}>{summary[k] || 0} {t('security.summary.' + k)}</span>
