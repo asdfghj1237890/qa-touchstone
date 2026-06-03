@@ -14,7 +14,7 @@ const PRESENCE_ORDER = { new: 0, carried: 1, resolved: 2 };
 
 // Build display rows: one per fingerprint, with effective severity, presence,
 // and the lifecycle record. Same-fp occurrences are grouped (count).
-function buildRows(union, lifecycle, diff) {
+function buildRows(union, lifecycle, diff, baselineItems) {
   const records = (lifecycle && lifecycle.records) || {};
   const byFp = new Map();
   for (const f of (union || [])) {
@@ -27,6 +27,19 @@ function buildRows(union, lifecycle, diff) {
       method: f.method, endpoint: f.endpoint, locationLabel: locationLabel(f),
       severity: f.severity, effectiveSeverity: effectiveSeverity(f, rec),
       presence: diff.get(fp) || 'new', record: rec || null,
+    });
+  }
+  // Resolved findings live only in the pinned baseline snapshot (absent from the
+  // current union). Reconstruct a muted row from the snapshot's stored fields.
+  for (const bi of (baselineItems || [])) {
+    if (diff.get(bi.fp) !== 'resolved' || byFp.has(bi.fp)) continue;
+    byFp.set(bi.fp, {
+      fp: bi.fp, count: bi.count || 1, engine: bi.engine, ruleId: bi.ruleId,
+      title: bi.locationLabel || bi.ruleId,   // snapshots have no title; use the human location label
+      method: undefined, endpoint: undefined,
+      locationLabel: bi.locationLabel || '',
+      severity: bi.effectiveSeverity, effectiveSeverity: bi.effectiveSeverity,
+      presence: 'resolved', record: (lifecycle.records && lifecycle.records[bi.fp]) || null,
     });
   }
   return [...byFp.values()].sort((a, b) =>
@@ -42,6 +55,7 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
   const snapshots = snapshotsProp || loadSnapshots();
   const [showSuppressed, setShowSuppressed] = useS(false);
   const [openFp, setOpenFp] = useS(null);
+  const [legacyDismissed, setLegacyDismissed] = useS(false);
 
   // Patch a finding's record, persist, and reflect locally. `now` is a real ISO
   // timestamp here (UI side); findings.js stays pure by taking it as an arg.
@@ -54,7 +68,7 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
   const current = useMemo(() => snapshotOf(union, lifecycle, {}), [union, lifecycle]);
   const baselineItems = (snapshots.baseline && snapshots.baseline.items) || [];
   const diff = useMemo(() => diffRuns(current.items, baselineItems), [current, baselineItems]);
-  const rows = useMemo(() => buildRows(union, lifecycle, diff), [union, lifecycle, diff]);
+  const rows = useMemo(() => buildRows(union, lifecycle, diff, baselineItems), [union, lifecycle, diff, baselineItems]);
   const gate = useMemo(() => gateCount(current.items, lifecycle, diff), [current, lifecycle, diff]);
 
   const visible = rows.filter(r => showSuppressed || !(r.record && r.record.suppressed));
@@ -78,8 +92,11 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
         </label>
       </div>
 
-      {lifecycle.legacy && (
-        <div className="qa-find-legacy">{t('findings.legacy.notice')}</div>
+      {lifecycle.legacy && !legacyDismissed && (
+        <div className="qa-find-legacy">
+          {t('findings.legacy.notice')}
+          <button className="qa-link" onClick={() => setLegacyDismissed(true)}>{t('findings.legacy.dismiss')}</button>
+        </div>
       )}
 
       {visible.length === 0 ? (

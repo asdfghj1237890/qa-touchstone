@@ -73,3 +73,32 @@ describe('FindingsPanel (baseline)', () => {
     expect(screen.getByText('Baseline scope differs')).toBeTruthy();
   });
 });
+
+describe('FindingsPanel (resolved rows)', () => {
+  // The preceding describe blocks don't all clean up; clear leaked DOM up front
+  // so the single-row assertions below aren't tripped by a stale render.
+  beforeEach(() => { cleanup(); localStorage.clear(); });
+  afterEach(() => cleanup());
+
+  it('renders a muted resolved row for a baseline finding absent from the current union', () => {
+    const snapshots = { fpVersion: 1, lastRun: null, baseline: { scopeHash: 'sh', items: [
+      { fp: 'gone1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt', path: 'data.token', locationLabel: 'GET /old · admin', count: 1 },
+    ] } };
+    wrap(<FindingsPanel union={[]} snapshots={snapshots} />);
+    expect(screen.getByText('Resolved')).toBeTruthy();
+    // title falls back to locationLabel for snapshot rows, so it appears in both
+    // the rule/title column and the location <code> — assert at least one.
+    expect(screen.getAllByText('GET /old · admin').length).toBeGreaterThan(0);
+  });
+
+  it('does not show a resolved row for a baseline finding still present in the union', () => {
+    const fpNow = fingerprint(union[0]).fp;
+    const snapshots = { fpVersion: 1, lastRun: null, baseline: { scopeHash: 'sh', items: [
+      { fp: fpNow, effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt', path: 'data.token', locationLabel: 'GET /me · admin', count: 1 },
+    ] } };
+    wrap(<FindingsPanel union={union} snapshots={snapshots} />);
+    // present in union -> 'carried', not 'resolved'
+    expect(screen.queryByText('Resolved')).toBeNull();
+    expect(screen.getByText('Carried')).toBeTruthy();
+  });
+});
