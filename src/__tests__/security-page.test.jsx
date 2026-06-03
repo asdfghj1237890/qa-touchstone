@@ -148,4 +148,19 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     fireEvent.click(screen.getByRole('button', { name: /Rate limit/i }));
     await waitFor(() => expect(document.querySelector('.qa-rl')).not.toBeNull());
   });
+
+  it('flags a privileged endpoint and defaults a non-privileged identity to deny', () => {
+    // Seed a matrix config: a normal (non-privileged) user identity + a DELETE /admin endpoint, no explicit expectations.
+    const cfg = {
+      identities: [{ id: 'anon', name: 'anon', auth: { type: 'none' } }, { id: 'u', name: 'user', auth: { type: 'bearer' } }],
+      endpoints: [{ reqId: 'e1', method: 'DELETE', path: 'https://api.test/admin/users/1' }],
+      expect: {}, denySet: [401, 403, 404],
+    };
+    installLocalStorage({ qa_locale: 'en-US', qa_security_matrix: JSON.stringify(cfg) });
+    renderPage();
+    // The privileged badge renders (effective-privileged via the heuristic).
+    expect(document.querySelector('.qa-sec-priv--on')).not.toBeNull();
+    // Both anon AND the non-privileged user default to deny on the privileged endpoint → 2 deny cells in the row.
+    expect(document.querySelectorAll('td.qa-sec-cell[data-expect="deny"]').length).toBe(2);
+  });
 });
