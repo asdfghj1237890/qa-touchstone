@@ -267,6 +267,7 @@ const dict = {
     'security.oracle.sensitive-data': 'data leak',
     'security.oracle.schema': 'schema',
     'security.oracle.object-authz': 'object authz',
+    'security.oracle.rate-limit': 'rate limit',
     'security.severity.info': 'info',
     'security.severity.low': 'low',
     'security.severity.medium': 'medium',
@@ -323,6 +324,7 @@ const dict = {
     'rl.stat.err': 'errors',
     'rl.stat.avg': 'avg ms',
     'rl.stat.max': 'max ms',
+    'rl.summary.total': 'Total',
     'rl.findingTitle': 'No rate limiting observed',
 
     'common.pass': 'PASS',
@@ -594,6 +596,7 @@ const dict = {
     'security.oracle.sensitive-data': '資料外洩',
     'security.oracle.schema': '結構',
     'security.oracle.object-authz': '物件授權',
+    'security.oracle.rate-limit': '速率限制',
     'security.severity.info': '資訊',
     'security.severity.low': '低',
     'security.severity.medium': '中',
@@ -650,6 +653,7 @@ const dict = {
     'rl.stat.err': '錯誤',
     'rl.stat.avg': '平均 ms',
     'rl.stat.max': '最大 ms',
+    'rl.summary.total': '總計',
     'rl.findingTitle': '未觀察到速率限制',
 
     'common.pass': 'PASS',
