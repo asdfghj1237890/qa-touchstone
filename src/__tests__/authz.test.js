@@ -270,3 +270,16 @@ describe('classifyEndpoint', () => {
     expect(ADMIN_PATH_TOKENS).toContain('admin');
   });
 });
+
+import { endpointPrivileged } from '../qa/authz.js';
+
+describe('endpointPrivileged', () => {
+  it('uses the heuristic when there is no manual override', () => {
+    expect(endpointPrivileged({ method: 'POST', path: '/orders' })).toEqual({ privileged: true, reasons: ['write'], source: 'auto' });
+    expect(endpointPrivileged({ method: 'GET', path: '/orders' })).toEqual({ privileged: false, reasons: [], source: 'auto' });
+  });
+  it('honors a manual override either way', () => {
+    expect(endpointPrivileged({ method: 'GET', path: '/orders', privileged: true })).toEqual({ privileged: true, reasons: ['manual'], source: 'manual' });
+    expect(endpointPrivileged({ method: 'POST', path: '/orders', privileged: false })).toEqual({ privileged: false, reasons: ['manual'], source: 'manual' });
+  });
+});
