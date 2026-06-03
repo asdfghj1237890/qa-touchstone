@@ -90,7 +90,7 @@ function NavRail({ route, setRoute, busy, flashAt, active }) {
         ))}
       </div>
       <div className="qa-rail-foot">
-        <div className="qa-rail-ver">0.17</div>
+        <div className="qa-rail-ver">0.18</div>
       </div>
     </nav>
   );
