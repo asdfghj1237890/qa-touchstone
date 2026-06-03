@@ -86,3 +86,15 @@ export function snapshotOf(union, lifecycle, meta = {}) {
 // Stable hash of the scanned surface (NOT the findings), so a diff across a
 // changed test surface can be flagged instead of misread as fixes/regressions.
 export function scopeHashOf(descriptor) { return fnv1a(JSON.stringify(descriptor || {})); }
+
+// Presence map fp -> 'new' | 'carried' | 'resolved', comparing current items
+// against a baseline's items. Presence is always derived fresh (never stored),
+// so a previously-resolved fp reappearing is simply new/carried again.
+export function diffRuns(currentItems, baselineItems) {
+  const baseFps = new Set((baselineItems || []).map(i => i.fp));
+  const curFps = new Set((currentItems || []).map(i => i.fp));
+  const out = new Map();
+  for (const it of (currentItems || [])) out.set(it.fp, baseFps.has(it.fp) ? 'carried' : 'new');
+  for (const it of (baselineItems || [])) if (!curFps.has(it.fp)) out.set(it.fp, 'resolved');
+  return out;
+}
