@@ -226,4 +226,15 @@ describe('runBola negative control', () => {
     await runBola({ identities, tests: [test] }, runner);
     expect(seen).not.toContain(SYNTH);
   });
+
+  it('does not demote when the synthetic control errors / is inconclusive (500)', async () => {
+    const runner = async (_t, _identity, idValue) => String(idValue) === SYNTH
+      ? { status: 500, body: {} }
+      : { status: 200, body: { id: String(idValue) } };
+    const results = await runBola({ identities, tests: [test] }, runner, { negativeControl: true });
+    const cell = results.t1.attacks.alice.bob;
+    expect(cell.verdict).toBe('vuln');           // 500 control -> no gate -> verdict stands
+    expect(cell.controlFailed).toBe(false);
+    expect(results.t1.control.failed).toBe(false);
+  });
 });
