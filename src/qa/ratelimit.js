@@ -40,3 +40,76 @@ export function rateLimitSeverity(sensitivity, verdict) {
   if (verdict !== 'vuln') return null;
   return sensitivity === 'sensitive' ? 'high' : 'low';
 }
+
+function clampInt(v, lo, hi) {
+  let n = parseInt(v, 10);
+  if (!Number.isFinite(n)) n = lo;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+// Fire `test.n` requests through the injected `runner(test, index) => Promise<resp>`,
+// keeping at most `test.concurrency` in flight (both clamped to the caps). Records
+// each response, never throws out of the burst, streams opts.onProgress(done, n),
+// and stops launching new requests once opts.signal aborts (in-flight ones finish).
+export async function runBurst(test, runner, opts = {}) {
+  const { signal, onProgress } = opts;
+  const n = clampInt(test && test.n, 1, MAX_N);
+  const c = clampInt(test && test.concurrency, 1, MAX_CONCURRENCY);
+  const responses = [];
+  let launched = 0, done = 0;
+  async function worker() {
+    while (launched < n) {
+      if (signal && signal.aborted) return;
+      const i = launched++;
+      let cell;
+      try {
+        const resp = await runner(test, i);
+        cell = {
+          status: resp && typeof resp.status === 'number' ? resp.status : null,
+          headers: (resp && resp.headers) || {},
+          timeMs: (resp && resp.time) || 0,
+          error: null,
+        };
+      } catch (e) {
+        cell = { status: null, headers: {}, timeMs: 0, error: String((e && e.message) || e) };
+      }
+      responses[i] = cell;
+      done++;
+      if (onProgress) onProgress(done, n);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(c, n) }, () => worker()));
+  const collected = responses.filter(Boolean);
+  return { responses: collected, stats: computeStats(collected) };
+}
+
+function computeStats(responses) {
+  const s = { sent: responses.length, ok2xx: 0, c429: 0, c4xx: 0, c5xx: 0, net: 0, avgMs: 0, maxMs: 0, throttled: false, headerHit: false };
+  let totMs = 0;
+  for (const r of responses) {
+    const st = r.status;
+    if (st == null) s.net++;
+    else if (st === 429) s.c429++;
+    else if (st >= 500) s.c5xx++;
+    else if (st >= 400) s.c4xx++;
+    else if (st >= 200 && st <= 299) s.ok2xx++;
+    totMs += r.timeMs || 0;
+    if ((r.timeMs || 0) > s.maxMs) s.maxMs = r.timeMs || 0;
+  }
+  const sig = detectThrottleSignal(responses);
+  s.throttled = sig.throttled;
+  s.headerHit = sig.headerHit;
+  s.avgMs = responses.length ? Math.round(totMs / responses.length) : 0;
+  return s;
+}
+
+// Tally per-test verdicts across the results map for the summary chips.
+export function summarizeRateLimit(results) {
+  const s = { total: 0, pass: 0, vuln: 0, inconclusive: 0 };
+  for (const tid in results) {
+    const v = results[tid] && results[tid].verdict;
+    if (!v) continue;
+    s.total++; if (s[v] !== undefined) s[v]++;
+  }
+  return s;
+}
