@@ -65,7 +65,11 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
   提供 live metrics、SLO scoring、history 與可匯出的 reports。
 - **AI assistance**：從 BDD、OpenAPI、PRD 或類 PDF 文字產生分類好的測試案例；
-  也能針對單筆 API response 對照既有 assertions 做 review。
+  也能針對單筆 API response 對照既有 assertions 做 review；並可隨時掃描單筆
+  response 找出敏感資料外洩（PII、secrets、內部或 debug 欄位）。
+- **可設定的 AI 供應商（Configurable AI provider）**：所有 AI 功能（測試產生、
+  response review、敏感資料掃描、安全分流）都跑在你選的供應商上——內建 Claude
+  （免 API key）、OpenAI，或任何 OpenAI 相容的 endpoint——憑證只留在本機。
 - **Docs and codegen**：產生 API docs、獨立 HTML 匯出，以及 request code
   snippets。
 - **Realtime testing**：測試 WebSocket 與 Server-Sent Events streams。

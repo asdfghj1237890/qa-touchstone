@@ -70,7 +70,13 @@ The current public-facing scope is API testing only:
 - **Performance testing**: generate and run k6 performance, load, and stress
   tests with live metrics, SLO scoring, history, and exportable reports.
 - **AI assistance**: generate classified test cases from BDD, OpenAPI, PRD, or
-  PDF-like text; review individual API responses against existing assertions.
+  PDF-like text; review individual API responses against existing assertions; and
+  scan a response on demand for sensitive-data exposure (PII, secrets, internal
+  or debug fields).
+- **Configurable AI provider**: every AI feature (test generation, response
+  review, sensitive-data scan, and security triage) runs on a provider you
+  choose — built-in Claude with no API key, OpenAI, or any OpenAI-compatible
+  endpoint — with credentials kept on the local machine.
 - **Docs and codegen**: generate API docs, standalone HTML exports, and request
   code snippets.
 - **Realtime testing**: test WebSocket and Server-Sent Events streams.
