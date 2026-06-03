@@ -119,13 +119,28 @@ describe('snapshotOf', () => {
     const snap = snapshotOf([matrixF()], lc({ [fp]: { severityOverride: 'low' } }), {});
     expect(snap.items[0].effectiveSeverity).toBe('low');
   });
-  it('never stores evidence, body, or title in snapshot items', () => {
+  it('snapshot items have the expected key set', () => {
     const snap = snapshotOf([matrixF()], lc(), {});
     const item = snap.items[0];
-    expect(item).not.toHaveProperty('evidence');
-    expect(item).not.toHaveProperty('title');
     expect(Object.keys(item).sort()).toEqual(
-      ['count', 'effectiveSeverity', 'engine', 'fp', 'locationLabel', 'path', 'ruleId'].sort());
+      ['count','effectiveSeverity','engine','evidence','fp','locationLabel','path','ruleId','title']);
+  });
+});
+
+describe('snapshotOf enrichment (title + evidence)', () => {
+  it('copies title and masked evidence into snapshot items', () => {
+    const union = [{ engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
+      path: 'data.token', evidence: 'eyJ…<redacted>…0', method: 'GET', endpoint: '/me',
+      identityLabel: 'admin', ref: { reqId: 'r1', idId: 'admin' } }];
+    const snap = snapshotOf(union, lc(), {});
+    expect(snap.items[0].title).toBe('JWT in response');
+    expect(snap.items[0].evidence).toBe('eyJ…<redacted>…0');
+  });
+  it('defaults title/evidence to empty string when absent', () => {
+    const union = [{ engine: 'bola', oracle: 'object-authz', severity: 'high', path: 'GET /o', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } }];
+    const snap = snapshotOf(union, lc(), {});
+    expect(snap.items[0].title).toBe('');
+    expect(snap.items[0].evidence).toBe('');
   });
 });
 

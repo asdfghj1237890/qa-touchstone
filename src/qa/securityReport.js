@@ -1,0 +1,171 @@
+// src/qa/securityReport.js
+// ── QA Touchstone — security report / artifact layer (pure, no React/DOM) ───
+// One report model assembled from a recorded RunRecord + baseline + current
+// lifecycle, plus serializers to JSON / HTML / JUnit / SARIF. UI in SuiteRunBar.
+import './setup.js';
+import { SEVERITY_ORDER } from './oracles.js';
+import { diffRuns, gateCount } from './findings.js';
+
+export const REPORT_SCHEMA = 'qa-security-report/1';
+const PRESENCE_ORDER = { new: 0, carried: 1, resolved: 2 };
+
+// Lifecycle annotations for a fp, with safe defaults.
+function annOf(records, fp) {
+  const r = records[fp] || {};
+  return {
+    suppressed: !!r.suppressed, suppressReason: r.suppressReason || '',
+    status: r.status || 'open', owner: r.owner || '', note: r.note || '',
+  };
+}
+
+// Build the normalized report model. `severity` is the recorded effective
+// severity (frozen in the run item); annotations join from the CURRENT lifecycle.
+export function buildReport(runRecord, baselineRecord, lifecycle, opts = {}) {
+  const redaction = opts.redaction === 'strict' ? 'strict' : 'redacted';
+  const records = (lifecycle && lifecycle.records) || {};
+  const curItems = (runRecord && runRecord.items) || [];
+  const baseItems = (baselineRecord && baselineRecord.items) || [];
+  const diff = diffRuns(curItems, baseItems);
+
+  const bySeverity = { info: 0, low: 0, medium: 0, high: 0, critical: 0 };
+  let nNew = 0, nCarried = 0;
+  const findings = [];
+
+  for (const it of curItems) {
+    const presence = diff.get(it.fp) || 'new';
+    if (presence === 'new') nNew++; else if (presence === 'carried') nCarried++;
+    if (bySeverity[it.effectiveSeverity] !== undefined) bySeverity[it.effectiveSeverity]++;
+    const f = {
+      fp: it.fp, presence, severity: it.effectiveSeverity, engine: it.engine,
+      ruleId: it.ruleId, title: it.title || it.ruleId, location: it.locationLabel || '',
+      path: it.path || '', count: it.count || 1, ...annOf(records, it.fp),
+    };
+    if (redaction !== 'strict' && it.evidence) f.evidence = it.evidence;
+    findings.push(f);
+  }
+
+  const curFps = new Set(curItems.map(i => i.fp));
+  let nResolved = 0;
+  for (const it of baseItems) {
+    if (curFps.has(it.fp)) continue;
+    nResolved++;
+    findings.push({
+      fp: it.fp, presence: 'resolved', severity: it.effectiveSeverity, engine: it.engine,
+      ruleId: it.ruleId, title: it.title || it.ruleId, location: it.locationLabel || '',
+      path: it.path || '', count: it.count || 1, ...annOf(records, it.fp),
+    });
+  }
+
+  findings.sort((a, b) =>
+    (PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence]) ||
+    (SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)));
+
+  const meta = {
+    tool: 'QA Touchstone', schema: REPORT_SCHEMA,
+    runId: (runRecord && runRecord.runId) || '', status: (runRecord && runRecord.status) || '',
+    startedAt: (runRecord && runRecord.startedAt) || '', finishedAt: (runRecord && runRecord.finishedAt) || '',
+    durationMs: (runRecord && runRecord.durationMs) || 0, scopeHash: (runRecord && runRecord.scopeHash) || '',
+    baseline: baselineRecord ? { runId: baselineRecord.runId || '', scopeHash: baselineRecord.scopeHash || '' } : null,
+    scopeMismatch: !!(baselineRecord && baselineRecord.scopeHash && runRecord && baselineRecord.scopeHash !== runRecord.scopeHash),
+    redaction,
+  };
+  return {
+    meta,
+    engines: (runRecord && runRecord.engines) || [],
+    summary: { total: curItems.length, bySeverity, new: nNew, carried: nCarried, resolved: nResolved,
+               newHighCritical: gateCount(curItems, lifecycle, diff) },
+    findings,
+  };
+}
+
+export function reportToJson(model) { return JSON.stringify(model, null, 2); }
+
+export function htmlEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+export function xmlEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+
+// A finding fails the gate iff it is NEW, effective severity high/critical, not suppressed.
+function isGateFailure(f) {
+  return f.presence === 'new' && (f.severity === 'high' || f.severity === 'critical') && !f.suppressed;
+}
+
+export function reportToJUnit(model) {
+  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const failures = current.filter(isGateFailure).length;
+  const skipped = current.filter(f => f.suppressed).length;
+  const byEngine = {};
+  for (const f of current) (byEngine[f.engine] = byEngine[f.engine] || []).push(f);
+  const suites = Object.keys(byEngine).map(engine => {
+    const fs = byEngine[engine];
+    const cases = fs.map(f => {
+      const name = xmlEscape(`${f.ruleId} @ ${f.location}`);
+      const cls = xmlEscape(engine);
+      if (isGateFailure(f)) {
+        const body = `${f.location}${f.evidence ? '\n' + f.evidence : ''}${f.note ? '\n' + f.note : ''}`.replace(/]]>/g, ']]]]><![CDATA[>');
+        return `    <testcase name="${name}" classname="${cls}"><failure message="${xmlEscape(f.title + ' (' + f.severity + ')')}"><![CDATA[${body}]]></failure></testcase>`;
+      }
+      if (f.suppressed) return `    <testcase name="${name}" classname="${cls}"><skipped message="${xmlEscape('suppressed: ' + f.suppressReason)}"/></testcase>`;
+      return `    <testcase name="${name}" classname="${cls}"/>`;
+    }).join('\n');
+    const sFail = fs.filter(isGateFailure).length;
+    const sSkip = fs.filter(f => f.suppressed).length;
+    return `  <testsuite name="${xmlEscape(engine)}" tests="${fs.length}" failures="${sFail}" skipped="${sSkip}">\n${cases}\n  </testsuite>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="QA Touchstone Security" tests="${current.length}" failures="${failures}" skipped="${skipped}" time="${((model.meta.durationMs || 0) / 1000).toFixed(3)}">\n${suites}\n</testsuites>\n`;
+}
+
+export function sevToSarifLevel(sev) {
+  if (sev === 'critical' || sev === 'high') return 'error';
+  if (sev === 'medium') return 'warning';
+  return 'note';
+}
+export function sarifBaselineState(presence) { return presence === 'carried' ? 'unchanged' : 'new'; }
+
+export function reportToSarif(model) {
+  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const rules = [...new Set(current.map(f => f.ruleId))].map(id => ({ id }));
+  const results = current.map(f => {
+    const r = {
+      ruleId: f.ruleId, level: sevToSarifLevel(f.severity),
+      message: { text: `${f.title}${f.evidence ? ' — ' + f.evidence : ''} at ${f.location}` },
+      locations: [{ logicalLocations: [{ fullyQualifiedName: f.location, kind: 'member' }] }],
+      partialFingerprints: { qaFingerprint: f.fp },
+      baselineState: sarifBaselineState(f.presence),
+      properties: { engine: f.engine, severity: f.severity, owner: f.owner, status: f.status, count: f.count },
+    };
+    if (f.suppressed) r.suppressions = [{ kind: 'external', justification: f.suppressReason || '' }];
+    return r;
+  });
+  return JSON.stringify({
+    version: '2.1.0',
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    runs: [{ tool: { driver: { name: 'QA Touchstone', informationUri: 'https://github.com/asdfghj1237890/qa-touchstone', rules } }, results }],
+  }, null, 2);
+}
+
+export function reportToHtml(model) {
+  const m = model.meta, s = model.summary, h = htmlEscape;
+  const sevChips = SEVERITY_ORDER.slice().reverse()
+    .filter(sev => s.bySeverity[sev]).map(sev => `<span class="chip sev-${sev}">${s.bySeverity[sev]} ${sev}</span>`).join('');
+  const engRows = model.engines.map(e =>
+    `<tr><td>${h(e.engine)}</td><td>${e.ran ? e.findingCount : h(e.skipped || 'skipped')}</td><td>${Math.round((e.durationMs || 0) / 1000)}s</td><td>${h(e.error || '')}</td></tr>`).join('');
+  const findRows = model.findings.map(f =>
+    `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${f.evidence ? '<code>' + h(f.evidence) + '</code>' : ''}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>QA Touchstone — Security report</title>
+<style>body{font-family:system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}.gate{font-size:20px;font-weight:700}.chip{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}.sev-critical,.sev-high{color:#b91c1c}.sev-medium{color:#b45309}.suppressed,.p-resolved{opacity:.55}</style>
+</head><body>
+<h1>QA Touchstone — Security report</h1>
+<p>Run ${h(m.runId)} · ${h(m.status)} · ${Math.round((m.durationMs || 0) / 1000)}s · ${h(m.finishedAt)}${m.scopeMismatch ? ' · <strong>baseline scope differs</strong>' : ''}</p>
+<p class="gate">${s.newHighCritical} new high/critical</p>
+<p>${s.total} findings — ${s.new} new · ${s.carried} carried · ${s.resolved} resolved</p>
+<div>${sevChips}</div>
+<h2>Engines</h2><table><thead><tr><th>Engine</th><th>Findings</th><th>Duration</th><th>Error</th></tr></thead><tbody>${engRows}</tbody></table>
+<h2>Findings</h2><table><thead><tr><th>State</th><th>Severity</th><th>Engine</th><th>Rule</th><th>Location</th><th>Owner</th><th>Status</th><th>Evidence</th></tr></thead><tbody>${findRows}</tbody></table>
+</body></html>`;
+}

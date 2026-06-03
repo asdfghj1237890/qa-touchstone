@@ -25,6 +25,8 @@ import { runSuite, normalizeMatrix } from './securitySuite.js';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
 } from './findings.js';
+import { buildReport, reportToJson, reportToHtml, reportToJUnit, reportToSarif } from './securityReport.js';
+import { downloadFile } from './download.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -355,9 +357,21 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   };
   const stopSuite = () => { if (suiteAbortRef.current) suiteAbortRef.current.abort(); };
 
+  const onExportReport = (format, redaction) => {
+    const runRec = snapshots.lastRun;
+    if (!runRec) return;
+    const model = buildReport(runRec, snapshots.baseline, loadLifecycle(), { redaction });
+    const base = `qa-security-${String(runRec.runId || 'run').replace(/[^a-z0-9]+/gi, '-')}`;
+    if (format === 'json') downloadFile(`${base}.json`, reportToJson(model), 'application/json');
+    else if (format === 'html') downloadFile(`${base}.html`, reportToHtml(model), 'text/html');
+    else if (format === 'junit') downloadFile(`${base}.junit.xml`, reportToJUnit(model), 'application/xml');
+    else if (format === 'sarif') downloadFile(`${base}.sarif.json`, reportToSarif(model), 'application/json');
+  };
+
   return (
     <div className="qa-sec">
-      <SuiteRunBar suite={suite} onRun={runFullSuite} onStop={stopSuite} />
+      <SuiteRunBar suite={suite} onRun={runFullSuite} onStop={stopSuite}
+                   canExport={!!snapshots.lastRun} onExport={onExportReport} />
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>

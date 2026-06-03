@@ -74,6 +74,8 @@ export function snapshotOf(union, lifecycle, meta = {}) {
       ruleId: ruleIdOf(f),
       path: normalizePath((f && f.path) || ''),
       locationLabel: locationLabel(f),
+      title: (f && f.title) || '',
+      evidence: (f && f.evidence) || '',
       count: 1,
     });
   }
