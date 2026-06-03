@@ -57,4 +57,16 @@ describe('BolaPanel — runs on the canned path', () => {
     await waitFor(() => expect(document.querySelector('.qa-sec-drawer')).not.toBeNull());
     expect(document.querySelector('.qa-sec-drawer-body').textContent).toContain('shared');
   });
+
+  it('warns when the marked id location cannot apply to the request (bad body path)', () => {
+    // r1 is a GET with no body, so a body id-location can never resolve → warn.
+    const bodyBola = { tests: [{ id: 't2', reqId: 'r1', method: 'GET', path: 'https://api.test/users/42', idLocation: { kind: 'body', path: 'order.id' }, idValues: { alice: 'A1' } }] };
+    render(
+      <I18nProvider>
+        <BolaPanel identities={identities} bola={bodyBola} setBola={() => {}}
+                   env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      </I18nProvider>
+    );
+    expect(document.querySelector('.qa-bola-warn')).not.toBeNull();
+  });
 });
