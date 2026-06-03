@@ -23,3 +23,17 @@ describe('SuiteRunBar', () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SuiteRunBar export menu', () => {
+  it('shows the export menu when canExport and calls onExport with format + redaction', () => {
+    const onExport = vi.fn();
+    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}} canExport={true} onExport={onExport} />);
+    fireEvent.click(screen.getByText('Export report ▾'));
+    fireEvent.click(screen.getByText('SARIF'));
+    expect(onExport).toHaveBeenCalledWith('sarif', 'redacted');
+  });
+  it('hides the export control when canExport is false', () => {
+    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}} canExport={false} onExport={() => {}} />);
+    expect(screen.queryByText('Export report ▾')).toBeNull();
+  });
+});

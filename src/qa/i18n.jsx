@@ -1116,6 +1116,16 @@ Object.assign(dict['en-US'], {
   'suite.engine.bola': 'BOLA',
   'suite.engine.ratelimit': 'Rate-limit',
   'suite.skipped': 'skipped',
+
+  'report.export': 'Export report',
+  'report.redaction': 'Redaction',
+  'report.redaction.redacted': 'Redacted',
+  'report.redaction.strict': 'Strict (no evidence)',
+  'report.format.json': 'JSON',
+  'report.format.html': 'HTML report',
+  'report.format.junit': 'JUnit XML',
+  'report.format.sarif': 'SARIF',
+  'report.unavailable': 'Run the suite to enable export',
 });
 
 Object.assign(dict['zh-TW'], {
@@ -1495,6 +1505,16 @@ Object.assign(dict['zh-TW'], {
   'suite.engine.bola': 'BOLA',
   'suite.engine.ratelimit': '速率限制',
   'suite.skipped': '略過',
+
+  'report.export': '匯出報告',
+  'report.redaction': '遮蔽',
+  'report.redaction.redacted': '遮蔽（預設）',
+  'report.redaction.strict': '嚴格（不含佐證）',
+  'report.format.json': 'JSON',
+  'report.format.html': 'HTML 報告',
+  'report.format.junit': 'JUnit XML',
+  'report.format.sarif': 'SARIF',
+  'report.unavailable': '先執行掃描才能匯出',
 });
 
 function normalizeLocale(value) {

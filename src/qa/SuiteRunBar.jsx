@@ -3,6 +3,8 @@ import './setup.js';
 import { Icon } from './components.jsx';
 import { useI18n } from './useI18n.js';
 
+const { useState: useS } = React;
+
 const ORDER = ['matrix', 'bola', 'ratelimit'];
 
 function fmtDuration(ms) {
@@ -16,9 +18,12 @@ function summarize(record, t) {
     `${t('suite.engine.' + e.engine)} ${e.ran ? e.findingCount : t('suite.skipped')}`).join(' · ');
 }
 
-function SuiteRunBar({ suite, onRun, onStop }) {
+function SuiteRunBar({ suite, onRun, onStop, canExport, onExport }) {
   const { t } = useI18n();
   const rec = suite.lastRecord;
+  const [expOpen, setExpOpen] = useS(false);
+  const [redaction, setRedaction] = useS('redacted');
+  const FORMATS = ['json', 'html', 'junit', 'sarif'];
   return (
     <div className="qa-suite">
       {suite.running ? (
@@ -43,6 +48,24 @@ function SuiteRunBar({ suite, onRun, onStop }) {
             : rec
               ? <span className="qa-suite-status">{t('suite.last', { status: t('suite.status.' + rec.status), duration: fmtDuration(rec.durationMs), summary: summarize(rec, t) })}</span>
               : <span className="qa-suite-status">{t('suite.idle')}</span>}
+          {canExport && onExport && (
+            <span className="qa-report-export">
+              <button className="qa-btn qa-btn--sm" onClick={() => setExpOpen(v => !v)}>{t('report.export')} ▾</button>
+              {expOpen && (
+                <span className="qa-report-menu">
+                  <label className="qa-report-redaction">{t('report.redaction')}:
+                    <select value={redaction} onChange={e => setRedaction(e.target.value)}>
+                      <option value="redacted">{t('report.redaction.redacted')}</option>
+                      <option value="strict">{t('report.redaction.strict')}</option>
+                    </select>
+                  </label>
+                  {FORMATS.map(fmt => (
+                    <button key={fmt} className="qa-report-fmt" onClick={() => { onExport(fmt, redaction); setExpOpen(false); }}>{t('report.format.' + fmt)}</button>
+                  ))}
+                </span>
+              )}
+            </span>
+          )}
         </>
       )}
     </div>
