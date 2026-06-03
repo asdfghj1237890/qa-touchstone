@@ -1,6 +1,6 @@
 // src/__tests__/security-report.test.js
 import { describe, it, expect } from 'vitest';
-import { buildReport, reportToJson, reportToHtml, htmlEscape } from '../qa/securityReport.js';
+import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit } from '../qa/securityReport.js';
 
 const item = (over = {}) => ({
   fp: 'fp1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt',
@@ -76,5 +76,32 @@ describe('reportToHtml', () => {
 describe('htmlEscape', () => {
   it('escapes the five entities', () => {
     expect(htmlEscape(`<a href="x">&'`)).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&#39;');
+  });
+});
+
+describe('reportToJUnit', () => {
+  const mk = (records = {}, base = null) => buildReport(
+    run([item({ fp: 'a', effectiveSeverity: 'critical' }), item({ fp: 'b', effectiveSeverity: 'high' }),
+         item({ fp: 'c', effectiveSeverity: 'low' })]),
+    base, lc(records), {});
+  it('failures attribute equals the gate (new high/critical, not suppressed)', () => {
+    const xml = reportToJUnit(mk());
+    expect(xml).toMatch(/<testsuites [^>]*failures="2"/); // a + b are new high/critical
+  });
+  it('a suppressed finding becomes <skipped>, not a failure', () => {
+    const xml = reportToJUnit(mk({ a: { suppressed: true } }));
+    expect(xml).toMatch(/<testsuites [^>]*failures="1"/);  // only b now
+    expect(xml).toMatch(/<testsuites [^>]*skipped="1"/);
+    expect(xml).toContain('<skipped');
+  });
+  it('a carried high is a passing testcase, not a failure', () => {
+    const base = { runId: 'base', scopeHash: 'sh', items: [item({ fp: 'b', effectiveSeverity: 'high' })] };
+    const xml = reportToJUnit(mk({}, base));
+    expect(xml).toMatch(/<testsuites [^>]*failures="1"/); // b carried -> only a fails
+  });
+  it('escapes XML special chars in attributes', () => {
+    const xml = reportToJUnit(buildReport(run([item({ title: 'a & "b" <c>' })]), null, lc(), {}));
+    expect(xml).toContain('&amp;');
+    expect(xml).not.toContain('"b" <c>');
   });
 });

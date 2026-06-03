@@ -85,6 +85,41 @@ export function htmlEscape(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+export function xmlEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
+
+// A finding fails the gate iff it is NEW, effective severity high/critical, not suppressed.
+function isGateFailure(f) {
+  return f.presence === 'new' && (f.severity === 'high' || f.severity === 'critical') && !f.suppressed;
+}
+
+export function reportToJUnit(model) {
+  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const failures = current.filter(isGateFailure).length;
+  const skipped = current.filter(f => f.suppressed && !isGateFailure(f)).length;
+  const byEngine = {};
+  for (const f of current) (byEngine[f.engine] = byEngine[f.engine] || []).push(f);
+  const suites = Object.keys(byEngine).map(engine => {
+    const fs = byEngine[engine];
+    const cases = fs.map(f => {
+      const name = xmlEscape(`${f.ruleId} @ ${f.location}`);
+      const cls = xmlEscape(engine);
+      if (isGateFailure(f)) {
+        const body = `${f.location}${f.evidence ? '\n' + f.evidence : ''}${f.note ? '\n' + f.note : ''}`.replace(/]]>/g, ']]]]><![CDATA[>');
+        return `    <testcase name="${name}" classname="${cls}"><failure message="${xmlEscape(f.title + ' (' + f.severity + ')')}"><![CDATA[${body}]]></failure></testcase>`;
+      }
+      if (f.suppressed) return `    <testcase name="${name}" classname="${cls}"><skipped message="${xmlEscape('suppressed: ' + f.suppressReason)}"/></testcase>`;
+      return `    <testcase name="${name}" classname="${cls}"/>`;
+    }).join('\n');
+    const sFail = fs.filter(isGateFailure).length;
+    const sSkip = fs.filter(f => f.suppressed && !isGateFailure(f)).length;
+    return `  <testsuite name="${xmlEscape(engine)}" tests="${fs.length}" failures="${sFail}" skipped="${sSkip}">\n${cases}\n  </testsuite>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="QA Touchstone Security" tests="${current.length}" failures="${failures}" skipped="${skipped}" time="${((model.meta.durationMs || 0) / 1000).toFixed(3)}">\n${suites}\n</testsuites>\n`;
+}
+
 export function reportToHtml(model) {
   const m = model.meta, s = model.summary, h = htmlEscape;
   const sevChips = SEVERITY_ORDER.slice().reverse()
