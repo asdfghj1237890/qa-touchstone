@@ -9,6 +9,7 @@ import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import { buildReq } from './buildReq.js';
 import { applyIdLocation, runBola, summarizeBola } from './bola.js';
+import { normalizeBola } from './securitySuite.js';
 import { detectIdLocation, extractIdCandidates, applyPreset } from './bolaSetup.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
@@ -117,16 +118,7 @@ function BolaPanel({ identities, bola, setBola, onFindings, results: resultsProp
   // Report normalized findings upward for cross-engine AI triage (advisory).
   useE(() => {
     if (!onFindings) return;
-    const out = [];
-    for (const test of tests) {
-      const atk = (results[test.id] && results[test.id].attacks) || {};
-      for (const a in atk) for (const o in atk[a]) {
-        const f = atk[a][o] && atk[a][o].finding;
-        if (f) out.push({ engine: 'bola', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
-                          title: f.title, path: f.path, evidence: f.evidence || '',
-                          ref: { testId: test.id, attackerId: a, ownerId: o } });
-      }
-    }
+    const out = normalizeBola(results, tests);
     onFindings(out);
   }, [results, tests, onFindings]);
 

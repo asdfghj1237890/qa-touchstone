@@ -21,7 +21,7 @@ import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from 
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
 import { SuiteRunBar } from './SuiteRunBar.jsx';
-import { runSuite } from './securitySuite.js';
+import { runSuite, normalizeMatrix } from './securitySuite.js';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
 } from './findings.js';
@@ -155,22 +155,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [rlFindings, setRlFindings] = useS([]);
   const onBolaFindings = useCallback((list) => setBolaFindings(list), []);
   const onRlFindings = useCallback((list) => setRlFindings(list), []);
-  const matrixNormalized = useMemo(() => {
-    const out = [];
-    for (const ep of endpoints) {
-      for (const id of identities) {
-        const cell = results[ep.reqId] && results[ep.reqId][id.id];
-        for (const f of (cell && cell.findings) || []) {
-          out.push({ engine: 'matrix', ruleId: f.ruleId, severity: f.severity, oracle: f.oracle,
-                     title: f.title, path: f.path, evidence: f.evidence || '',
-                     method: ep.method, endpoint: ep.path,
-                     identityLabel: id.id === 'anon' ? 'anon' : (id.name || id.id),
-                     ref: { reqId: ep.reqId, idId: id.id } });
-        }
-      }
-    }
-    return out;
-  }, [results, endpoints, identities]);
+  const matrixNormalized = useMemo(() => normalizeMatrix(results, endpoints, identities), [results, endpoints, identities]);
   const triageUnion = useMemo(() => [...matrixNormalized, ...bolaFindings, ...rlFindings], [matrixNormalized, bolaFindings, rlFindings]);
 
   const scopeDescriptor = useMemo(() => ({
@@ -318,6 +303,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       const out = {};
       await runBola({ identities: cfg.identities, tests: cfg.tests }, bolaRunner, {
         signal, negativeControl: true,
+        onControl: (testId, control) => { out[testId] = { ...(out[testId] || { reference: {}, attacks: {} }), control }; setBolaResults({ ...out }); },
         onCell: (testId, attackerId, ownerId, cell) => {
           const tr = out[testId] || { reference: {}, attacks: {} };
           if (attackerId == null) out[testId] = { ...tr, reference: { ...tr.reference, [ownerId]: cell } };

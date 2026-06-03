@@ -12,6 +12,7 @@ import {
   runBurst, detectThrottleSignal, classifyRateLimit,
   rlFindingFor, summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
 } from './ratelimit.js';
+import { normalizeRateLimit } from './securitySuite.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const VLABEL = { pass: 'rl.verdict.pass', vuln: 'rl.verdict.vuln', inconclusive: 'rl.verdict.inconclusive' };
@@ -72,11 +73,7 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, resul
   // Report normalized findings upward for cross-engine AI triage (advisory).
   useE(() => {
     if (!onFindings) return;
-    const out = tests.map(t0 => {
-      const f = results[t0.id] && results[t0.id].finding;
-      return f ? { engine: 'ratelimit', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
-                   title: f.title, path: f.path, evidence: f.evidence || '', ref: { testId: t0.id } } : null;
-    }).filter(Boolean);
+    const out = normalizeRateLimit(results, tests);
     onFindings(out);
   }, [results, tests, onFindings]);
 

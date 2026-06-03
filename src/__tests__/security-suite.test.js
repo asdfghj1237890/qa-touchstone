@@ -130,4 +130,26 @@ describe('runSuite', () => {
     expect(received.bola).toBe(baseConfig.bola);
     expect(received.ratelimit).toBe(baseConfig.rateLimit);   // must NOT be undefined
   });
+
+  it('captures a thrown engine as error without failing the run', async () => {
+    const runners = {
+      matrix: async () => ({}),
+      bola: async () => { throw new Error('boom'); },
+      ratelimit: async () => ({}),
+    };
+    const rec = await runSuite(baseConfig, runners, { now: fakeNow() });
+    expect(rec.status).toBe('complete');
+    const bola = rec.engines.find(e => e.engine === 'bola');
+    expect(bola.ran).toBe(true);
+    expect(bola.error).toBe('boom');
+    expect(bola.findingCount).toBe(0);
+  });
+
+  it('runs rate-limit last even when bola config is empty', async () => {
+    const log = [];
+    const cfg = { ...baseConfig, bola: { tests: [], identities: [] } };
+    const rec = await runSuite(cfg, recordingRunners(log), { now: fakeNow() });
+    expect(log).toEqual(['matrix', 'ratelimit']);   // bola skipped, ratelimit still last
+    expect(rec.engines.find(e => e.engine === 'bola')).toMatchObject({ ran: false, skipped: 'no-config' });
+  });
 });

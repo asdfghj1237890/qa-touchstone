@@ -41,7 +41,7 @@ function SuiteRunBar({ suite, onRun, onStop }) {
           {rec && rec.status === 'aborted'
             ? <span className="qa-suite-status qa-suite-status--warn">{t('suite.aborted', { engine: t('suite.engine.' + ((rec.engines || []).filter(e => e.ran).pop() || { engine: 'matrix' }).engine) })}</span>
             : rec
-              ? <span className="qa-suite-status">{t('suite.last', { status: rec.status, duration: fmtDuration(rec.durationMs), summary: summarize(rec, t) })}</span>
+              ? <span className="qa-suite-status">{t('suite.last', { status: t('suite.status.' + rec.status), duration: fmtDuration(rec.durationMs), summary: summarize(rec, t) })}</span>
               : <span className="qa-suite-status">{t('suite.idle')}</span>}
         </>
       )}
