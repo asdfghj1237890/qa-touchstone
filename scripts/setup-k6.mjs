@@ -29,7 +29,7 @@
 // Override the version with K6_VERSION (must have a baked-in checksum below for
 // release mode). Run manually via `npm run setup:k6` / `npm run setup:k6:release`.
 
-import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, writeFileSync, readFileSync, renameSync, createReadStream } from 'node:fs';
+import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, writeFileSync, readFileSync, createReadStream } from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
@@ -143,7 +143,10 @@ async function downloadAndExtract(expectedSha) {
     if (!existsSync(extracted)) throw new Error(`binary not found in archive at ${extracted}`);
     mkdirSync(RES_DIR, { recursive: true });
     rmSync(DEST, { force: true });
-    renameSync(extracted, DEST);
+    // copyFileSync, not renameSync: the temp dir and the project can live on
+    // different drives (e.g. C: temp vs D: workspace on Windows CI), and rename
+    // across devices throws EXDEV. The temp dir is removed in the finally below.
+    copyFileSync(extracted, DEST);
     if (!isWin) chmodSync(DEST, 0o755);
     return got;
   } finally {

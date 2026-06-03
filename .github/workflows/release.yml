@@ -54,3 +54,19 @@ jobs:
           releaseName: QA Companion ${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
+          releaseBody: |
+            桌面版安裝檔（Windows / macOS）。**這些 build 未經程式碼簽章**，第一次開啟需手動略過系統防護提示：
+
+            ### Windows（NSIS 安裝檔）
+            出現「Windows 已保護您的電腦 / Windows protected your PC」時：
+            1. 點 **「其他資訊 / More info」**
+            2. 點 **「仍要執行 / Run anyway」**
+
+            ### macOS（DMG，Apple Silicon / arm64）
+            因未簽章、未公證，Gatekeeper 會擋。任選一種：
+            - **右鍵開啟**：在「應用程式」對 QA Companion 按右鍵（Control+點一下）→「打開」→ 對話框再按一次「打開」。
+            - **系統設定**（macOS 13+，若右鍵沒有「打開」）：系統設定 → 隱私權與安全性 → 找到被阻擋訊息 → 「仍要打開」。
+            - 若提示「App 已損毀，無法打開」（quarantine），終端機執行：
+              `xattr -dr com.apple.quarantine "/Applications/QA Companion.app"`
+
+            ⚠️ macOS 僅提供 Apple Silicon（arm64）；Intel Mac 尚未提供。
