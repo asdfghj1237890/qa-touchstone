@@ -231,3 +231,16 @@ describe('persistence — bola', () => {
     expect(loadMatrixConfig().bola).toBeUndefined();
   });
 });
+
+describe('persistence — rateLimit', () => {
+  it('round-trips a rateLimit blob when present and omits it when absent', () => {
+    installLocalStorage();
+    const rateLimit = { tests: [{ id: 'rl1', reqId: 'r1', method: 'POST', path: '/login', identityId: 'anon', n: 30, concurrency: 5, sensitivity: 'sensitive' }] };
+    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401], rateLimit });
+    expect(loadMatrixConfig().rateLimit).toEqual(rateLimit);
+
+    installLocalStorage();
+    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401] });
+    expect(loadMatrixConfig().rateLimit).toBeUndefined();
+  });
+});

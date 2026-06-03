@@ -1248,3 +1248,23 @@
   .qa-bola-cell--inconclusive { color: var(--text-dim); }
   .qa-sec-chip--unconfirmed { color: #d97706; }
   .qa-bola-warn { font-size: 11px; color: #d97706; }
+
+  /* ── Rate-limit / abuse mode ────────────────────────────────────────────── */
+  .qa-rl-test { margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .qa-rl-test-head { display: flex; align-items: center; gap: 8px; }
+  .qa-rl-test-head code { font-family: var(--font-mono); font-size: 12.5px; }
+  .qa-rl-cfg { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--text-dim); }
+  .qa-rl-cfg label { display: inline-flex; align-items: center; gap: 4px; }
+  .qa-rl-cfg .qa-inp--mini { width: 90px; }
+  .qa-btn--sm { padding: 4px 10px; font-size: 12px; }
+  .qa-rl-progress { margin-top: 10px; height: 6px; border-radius: 3px; background: rgba(127,127,127,.15); overflow: hidden; }
+  .qa-rl-progress-bar { height: 100%; background: var(--accent, #4f8cff); transition: width .15s linear; }
+  .qa-rl-result { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; font-size: 12px; }
+  .qa-rl-stat { color: var(--text-dim); }
+  .qa-rl-verdict { font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; }
+  .qa-rl-verdict--vuln { background: rgba(220,38,38,.14); color: #dc2626; }
+  .qa-rl-verdict--pass { background: rgba(22,163,74,.14); color: #16a34a; }
+  .qa-rl-verdict--inconclusive { background: rgba(127,127,127,.12); color: var(--text-dim); }
+  .qa-rl-confirm h3 { margin: 0 0 8px; font-size: 14px; }
+  .qa-rl-confirm p { margin: 0 0 14px; font-size: 13px; color: var(--text-dim); }
+  .qa-rl-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }

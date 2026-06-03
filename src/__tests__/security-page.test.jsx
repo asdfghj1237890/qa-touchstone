@@ -142,4 +142,10 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     fireEvent.click(bolaToggle);
     await waitFor(() => expect(document.querySelector('.qa-bola')).not.toBeNull());
   });
+
+  it('switches to the Rate-limit mode via the header toggle', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: /Rate limit/i }));
+    await waitFor(() => expect(document.querySelector('.qa-rl')).not.toBeNull());
+  });
 });
