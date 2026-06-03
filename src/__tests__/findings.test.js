@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   FP_VERSION, ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
-  snapshotOf, scopeHashOf,
+  snapshotOf, scopeHashOf, diffRuns,
 } from '../qa/findings.js';
 
 const matrixF = (over = {}) => ({
@@ -133,5 +133,30 @@ describe('scopeHashOf', () => {
     const c = scopeHashOf({ endpoints: ['r1'], identities: ['admin'] });
     expect(a).toBe(b);
     expect(a).not.toBe(c);
+  });
+});
+
+const item = (fp, sev = 'high') => ({ fp, effectiveSeverity: sev });
+
+describe('diffRuns', () => {
+  it('labels new / carried / resolved', () => {
+    const cur = [item('a'), item('b')];
+    const base = [item('b'), item('c')];
+    const d = diffRuns(cur, base);
+    expect(d.get('a')).toBe('new');
+    expect(d.get('b')).toBe('carried');
+    expect(d.get('c')).toBe('resolved');
+  });
+  it('treats everything as new when there is no baseline', () => {
+    const d = diffRuns([item('a'), item('b')], []);
+    expect(d.get('a')).toBe('new');
+    expect(d.get('b')).toBe('new');
+  });
+  it('auto-reopens: a fp present in current is never stuck "resolved"', () => {
+    // Even if this fp was resolved against some older baseline, diffing the
+    // CURRENT run against a baseline that lacks it yields "new" (live again).
+    const d = diffRuns([item('x')], [item('y')]);
+    expect(d.get('x')).toBe('new');      // x is live -> new, never stuck resolved
+    expect(d.get('y')).toBe('resolved'); // y absent from current
   });
 });
