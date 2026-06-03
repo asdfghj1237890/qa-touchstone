@@ -15,9 +15,13 @@ import {
   SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
 } from './oracles.js';
 import { BolaPanel } from './BolaPanel.jsx';
+import { runBola, applyIdLocation } from './bola.js';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
+import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit.js';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
+import { SuiteRunBar } from './SuiteRunBar.jsx';
+import { runSuite, normalizeMatrix } from './securitySuite.js';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
 } from './findings.js';
@@ -115,9 +119,12 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [aiScan, setAiScan] = useS({ busy: false, error: null });
   const [mode, setMode] = useS('matrix');
   const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
+  const [bolaResults, setBolaResults] = useS({});
   const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
+  const [rlResults, setRlResults] = useS({});
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
-  const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
+  const [suite, setSuite] = useS({ running: false, engine: null, done: 0, total: 0, lastRecord: null });
+  const suiteAbortRef = useRef(null);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola, rateLimit }), [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]);
@@ -148,22 +155,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [rlFindings, setRlFindings] = useS([]);
   const onBolaFindings = useCallback((list) => setBolaFindings(list), []);
   const onRlFindings = useCallback((list) => setRlFindings(list), []);
-  const matrixNormalized = useMemo(() => {
-    const out = [];
-    for (const ep of endpoints) {
-      for (const id of identities) {
-        const cell = results[ep.reqId] && results[ep.reqId][id.id];
-        for (const f of (cell && cell.findings) || []) {
-          out.push({ engine: 'matrix', ruleId: f.ruleId, severity: f.severity, oracle: f.oracle,
-                     title: f.title, path: f.path, evidence: f.evidence || '',
-                     method: ep.method, endpoint: ep.path,
-                     identityLabel: id.id === 'anon' ? 'anon' : (id.name || id.id),
-                     ref: { reqId: ep.reqId, idId: id.id } });
-        }
-      }
-    }
-    return out;
-  }, [results, endpoints, identities]);
+  const matrixNormalized = useMemo(() => normalizeMatrix(results, endpoints, identities), [results, endpoints, identities]);
   const triageUnion = useMemo(() => [...matrixNormalized, ...bolaFindings, ...rlFindings], [matrixNormalized, bolaFindings, rlFindings]);
 
   const scopeDescriptor = useMemo(() => ({
@@ -207,6 +199,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     response,
   }));
 
+  // Compute a matrix cell's findings using the streaming-baseline + oracles, into `baselines`.
+  const matrixCellFindings = (reqId, cell, baselines) => {
+    const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+    if (is2xx && cell.response && !baselines[reqId]) baselines[reqId] = inferContract(cell.response.body);
+    return runOracles(cell, { baseline: baselines[reqId], config: oracleConfig });
+  };
+
   const run = async (rowReqId = null) => {
     const target = rowReqId ? { ...state, endpoints: state.endpoints.filter(e => e.reqId === rowReqId) } : state;
     const controller = new AbortController();
@@ -229,20 +228,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
       });
     } finally {
       setRunning(false);
-      // Completed full scan (not a single-row run, not aborted) = a snapshot boundary.
-      if (!rowReqId && !controller.signal.aborted) setRunStamp(s => s + 1);
     }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(false); };
-
-  // Record the run snapshot from the live union once a full scan completes.
-  // Reads loadLifecycle() from storage so it includes the panel's latest annotations.
-  useE(() => {
-    if (!runStamp) return;
-    const snap = snapshotOf(triageUnion, loadLifecycle(),
-      { runId: String(runStamp), createdAt: new Date().toISOString(), scopeHash });
-    setSnapshots(prev => { const next = recordRun(prev, snap); saveSnapshots(next); return next; });
-  }, [runStamp]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const editing = identities.find(i => i.id === editId);
   const drawerCell = drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId];
@@ -273,8 +261,103 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     ? !!(window.claude && window.claude.complete)
     : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl;
 
+  // Shared per-request runner for BOLA. The panel's onRun and the later suite
+  // adapter use this SAME closure so Security owns the runner for reuse.
+  const bolaRunner = (test, identity, idValue) => qaRunSavedRequest({ id: test.reqId }, {
+    env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
+    mutate: (req) => applyIdLocation(req, test.idLocation, idValue),
+  });
+
+  // Run one rate-limit test into the given results setter. `tr` is the i18n t().
+  const runRlTest = async (test, runner, signal, setRes, tr) => {
+    setRes(r => ({ ...r, [test.id]: { progress: { done: 0, n: test.n }, stats: null, verdict: null } }));
+    const { responses, stats } = await runBurst(test, runner, {
+      signal, onProgress: (done, n) => setRes(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
+    });
+    const finding = rlFindingFor(test, responses, stats, tr('rl.findingTitle'));
+    const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+    setRes(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
+  };
+
+  const runFullSuite = async () => {
+    const controller = new AbortController();
+    suiteAbortRef.current = controller;
+    setSuite({ running: true, engine: null, done: 0, total: 0, lastRecord: null });
+    setResults({}); setBolaResults({}); setRlResults({});
+
+    const matrixAdapter = async (cfg, { signal }) => {
+      const baselines = {};
+      const out = {};
+      await runMatrix({ ...state, endpoints: cfg.endpoints, identities: cfg.identities }, runner, {
+        signal,
+        onCell: (reqId, idId, cell) => {
+          const findings = matrixCellFindings(reqId, cell, baselines);
+          const withF = { ...cell, findings };
+          out[reqId] = { ...(out[reqId] || {}), [idId]: withF };
+          setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: withF } }));
+        },
+      });
+      return out;
+    };
+    const bolaAdapter = async (cfg, { signal }) => {
+      const out = {};
+      await runBola({ identities: cfg.identities, tests: cfg.tests }, bolaRunner, {
+        signal, negativeControl: true,
+        onControl: (testId, control) => { out[testId] = { ...(out[testId] || { reference: {}, attacks: {} }), control }; setBolaResults({ ...out }); },
+        onCell: (testId, attackerId, ownerId, cell) => {
+          const tr = out[testId] || { reference: {}, attacks: {} };
+          if (attackerId == null) out[testId] = { ...tr, reference: { ...tr.reference, [ownerId]: cell } };
+          else out[testId] = { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } };
+          setBolaResults({ ...out });
+        },
+      });
+      return out;
+    };
+    const ratelimitAdapter = async (cfg, { signal }) => {
+      const out = {};
+      for (const test of cfg.tests) {
+        if (signal && signal.aborted) break;
+        const identity = identities.find(x => x.id === test.identityId) || identities[0];
+        const reqRunner = () => qaRunSavedRequest({ id: test.reqId }, { env, vars, cookies, sslVerify, authOverride: identity && identity.auth, oauthToken: identity && identity._oauthToken });
+        const { responses, stats } = await runBurst(test, reqRunner, { signal });
+        const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+        const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+        out[test.id] = { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding };
+        setRlResults({ ...out });
+      }
+      return out;
+    };
+
+    const config = {
+      matrix: { endpoints, identities },
+      bola: { tests: bola.tests || [], identities },
+      rateLimit: { tests: rateLimit.tests || [], identities },
+    };
+    const rec = await runSuite(config, { matrix: matrixAdapter, bola: bolaAdapter, ratelimit: ratelimitAdapter }, {
+      signal: controller.signal,
+      onProgress: (engine, done, total) => setSuite(s => ({ ...s, engine, done, total })),
+    });
+
+    if (rec.status === 'complete') {
+      const scopeHash = scopeHashOf({
+        endpoints: endpoints.map(e => e.reqId).sort(), identities: identities.map(i => i.id).sort(),
+        bola: (bola.tests || []).map(x => x.id).sort(), rl: (rateLimit.tests || []).map(x => x.id).sort(),
+      });
+      const items = snapshotOf(rec.union, loadLifecycle(), { runId: rec.finishedAt, createdAt: rec.finishedAt, scopeHash }).items;
+      const record = { runId: rec.finishedAt, scopeHash, createdAt: rec.finishedAt,
+                       startedAt: rec.startedAt, finishedAt: rec.finishedAt, durationMs: rec.durationMs,
+                       status: 'complete', engines: rec.engines, items };
+      setSnapshots(prev => { const next = recordRun(prev, record); saveSnapshots(next); return next; });
+      setSuite({ running: false, engine: null, done: 0, total: 0, lastRecord: record });
+    } else {
+      setSuite(s => ({ ...s, running: false, lastRecord: { status: 'aborted', engines: rec.engines } }));
+    }
+  };
+  const stopSuite = () => { if (suiteAbortRef.current) suiteAbortRef.current.abort(); };
+
   return (
     <div className="qa-sec">
+      <SuiteRunBar suite={suite} onRun={runFullSuite} onStop={stopSuite} />
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
@@ -288,17 +371,27 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           union={triageUnion}
           snapshots={snapshots}
           scopeMismatch={scopeMismatch}
-          onPinBaseline={() => {
-            const snap = snapshotOf(triageUnion, loadLifecycle(),
-              { runId: 'baseline', createdAt: new Date().toISOString(), scopeHash });
-            setSnapshots(prev => { const next = pinBaseline(prev, snap); saveSnapshots(next); return next; });
-          }}
+          onPinBaseline={snapshots.lastRun ? () => {
+            setSnapshots(prev => { const next = pinBaseline(prev, prev.lastRun); saveSnapshots(next); return next; });
+          } : undefined}
         />
       ) : mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
+                   results={bolaResults} setResults={setBolaResults}
+                   onRun={({ negativeControl, signal }) => runBola({ identities, tests: bola.tests }, bolaRunner, {
+                     signal, negativeControl,
+                     onControl: (testId, control) => setBolaResults(r => ({ ...r, [testId]: { ...(r[testId] || { reference: {}, attacks: {} }), control } })),
+                     onCell: (testId, attackerId, ownerId, cell) => setBolaResults(r => {
+                       const tr = r[testId] || { reference: {}, attacks: {} };
+                       if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
+                       return { ...r, [testId]: { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } } };
+                     }),
+                   })}
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
       ) : mode === 'ratelimit' ? (
         <RateLimitPanel identities={identities} rateLimit={rateLimit} setRateLimit={setRateLimit}
+                        results={rlResults} setResults={setRlResults}
+                        onRunTest={(test, { runner, signal }) => runRlTest(test, runner, signal, setRlResults, t)}
                         env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onRlFindings} />
       ) : (
       <>

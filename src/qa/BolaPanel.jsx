@@ -9,6 +9,7 @@ import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import { buildReq } from './buildReq.js';
 import { applyIdLocation, runBola, summarizeBola } from './bola.js';
+import { normalizeBola } from './securitySuite.js';
 import { detectIdLocation, extractIdCandidates, applyPreset } from './bolaSetup.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
@@ -31,10 +32,14 @@ function allRequests() {
 
 let testSeq = 1;
 
-function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
+function BolaPanel({ identities, bola, setBola, onFindings, results: resultsProp, setResults: setResultsProp, onRun,
+                     env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
   const { t } = useI18n();
   const tests = bola.tests || [];
-  const [results, setResults] = useS({});
+  const [localResults, setLocalResults] = useS({});
+  const controlled = !!setResultsProp;
+  const results = controlled ? (resultsProp || {}) : localResults;
+  const setResults = controlled ? setResultsProp : setLocalResults;
   const [running, setRunning] = useS(false);
   const [drawer, setDrawer] = useS(null);   // { testId, attackerId, ownerId }
   const [suggestions, setSuggestions] = useS({});   // testId -> top detection candidate (dismissible)
@@ -80,16 +85,19 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
     setRunning(true);
     setResults({});
     try {
-      await runBola({ identities, tests }, runner, {
-        signal: controller.signal,
-        negativeControl: negControl,
-        onControl: (testId, control) => setResults(r => ({ ...r, [testId]: { ...(r[testId] || { reference: {}, attacks: {} }), control } })),
-        onCell: (testId, attackerId, ownerId, cell) => setResults(r => {
-          const tr = r[testId] || { reference: {}, attacks: {} };
-          if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
-          return { ...r, [testId]: { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } } };
-        }),
-      });
+      if (onRun) {
+        await onRun({ runner, negativeControl: negControl, signal: controller.signal });
+      } else {
+        await runBola({ identities, tests }, runner, {
+          signal: controller.signal, negativeControl: negControl,
+          onControl: (testId, control) => setResults(r => ({ ...r, [testId]: { ...(r[testId] || { reference: {}, attacks: {} }), control } })),
+          onCell: (testId, attackerId, ownerId, cell) => setResults(r => {
+            const tr = r[testId] || { reference: {}, attacks: {} };
+            if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
+            return { ...r, [testId]: { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } } };
+          }),
+        });
+      }
     } finally { setRunning(false); }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(false); };
@@ -110,16 +118,7 @@ function BolaPanel({ identities, bola, setBola, onFindings, env = { label: 'None
   // Report normalized findings upward for cross-engine AI triage (advisory).
   useE(() => {
     if (!onFindings) return;
-    const out = [];
-    for (const test of tests) {
-      const atk = (results[test.id] && results[test.id].attacks) || {};
-      for (const a in atk) for (const o in atk[a]) {
-        const f = atk[a][o] && atk[a][o].finding;
-        if (f) out.push({ engine: 'bola', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
-                          title: f.title, path: f.path, evidence: f.evidence || '',
-                          ref: { testId: test.id, attackerId: a, ownerId: o } });
-      }
-    }
+    const out = normalizeBola(results, tests);
     onFindings(out);
   }, [results, tests, onFindings]);
 

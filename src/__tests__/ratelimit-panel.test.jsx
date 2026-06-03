@@ -4,6 +4,21 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { RateLimitPanel } from '../qa/RateLimitPanel.jsx';
 import { I18nProvider } from '../qa/i18n.jsx';
+import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from '../qa/ratelimit.js';
+
+function ControlledRL(props) {
+  const [results, setResults] = React.useState({});
+  const onRunTest = async (test, { runner }) => {
+    setResults(r => ({ ...r, [test.id]: { progress: { done: 0, n: test.n }, stats: null, verdict: null } }));
+    const { responses, stats } = await runBurst(test, runner, {
+      onProgress: (done, n) => setResults(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
+    });
+    const finding = rlFindingFor(test, responses, stats, 'No rate limiting');
+    const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+    setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
+  };
+  return <RateLimitPanel {...props} results={results} setResults={setResults} onRunTest={onRunTest} />;
+}
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };
@@ -22,8 +37,8 @@ const rl = (n = 5, sensitivity = 'sensitive') => ({ tests: [{ id: 'rl1', reqId: 
 function renderPanel(rlState) {
   return render(
     <I18nProvider>
-      <RateLimitPanel identities={identities} rateLimit={rlState} setRateLimit={() => {}}
-                      env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+      <ControlledRL identities={identities} rateLimit={rlState} setRateLimit={() => {}}
+                    env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
     </I18nProvider>
   );
 }
@@ -60,8 +75,8 @@ describe('RateLimitPanel — runs on the canned path', () => {
     const spy = vi.fn();
     render(
       <I18nProvider>
-        <RateLimitPanel identities={identities} rateLimit={rl()} setRateLimit={() => {}} onFindings={spy}
-                        env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
+        <ControlledRL identities={identities} rateLimit={rl()} setRateLimit={() => {}} onFindings={spy}
+                      env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
       </I18nProvider>
     );
     fireEvent.click(screen.getByRole('button', { name: /Run burst/i }));
@@ -78,5 +93,52 @@ describe('RateLimitPanel — runs on the canned path', () => {
     fireEvent.click(screen.getByRole('button', { name: /Run burst/i }));
     fireEvent.click(screen.getByRole('button', { name: /Send burst/i }));
     await waitFor(() => expect(document.querySelector('.qa-rl-verdict--pass')).not.toBeNull(), { timeout: 4000 });
+  });
+});
+
+describe('RateLimitPanel — controlled-mode delegation', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    installLocalStorage({ qa_locale: 'en-US' });
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'POST', name: 'login', path: 'https://api.test/login' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    // Canned 200 with no throttle headers → the local fallback would produce a vuln cell if it ran.
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 2, size: 2, body: { ok: true }, headers: {} } };
+  });
+
+  it('delegates to onRunTest and does NOT run the local fallback (no double-run)', async () => {
+    // A no-op onRunTest spy: called by the panel but streams no results.
+    const onRunTestSpy = vi.fn(async () => { /* intentionally does nothing */ });
+
+    function ControlledRLNoRun(props) {
+      const [results, setResults] = React.useState({});
+      return <RateLimitPanel {...props} results={results} setResults={setResults} onRunTest={props.onRunTest} />;
+    }
+
+    render(
+      <I18nProvider>
+        <ControlledRLNoRun identities={identities} rateLimit={rl()} setRateLimit={() => {}}
+                           env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true}
+                           onRunTest={onRunTestSpy} />
+      </I18nProvider>
+    );
+
+    // Mirror the confirm-modal flow the existing run test uses.
+    fireEvent.click(screen.getByRole('button', { name: /Run burst/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send burst/i }));
+
+    // Wait for the run cycle to complete (the Stop button appears then disappears).
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Stop/i })).toBeNull(), { timeout: 4000 });
+
+    // (a) onRunTest was called exactly once — the panel delegated control.
+    expect(onRunTestSpy).toHaveBeenCalledTimes(1);
+
+    // (b) Because onRunTest is a no-op (streams nothing) and the local fallback must NOT
+    // fire, no result/verdict cell populates. If the local path erroneously also ran, the
+    // canned response above would produce a vuln verdict + stats card and these would fail.
+    expect(document.querySelector('.qa-rl-verdict--vuln')).toBeNull();
+    expect(document.querySelector('.qa-rl-result')).toBeNull();
   });
 });

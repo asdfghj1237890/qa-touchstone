@@ -1102,6 +1102,20 @@ Object.assign(dict['en-US'], {
   'security.bola.setup.negControl': 'Negative control',
   'security.bola.setup.negControlHint': 'Probe a fake id; if it returns 2xx the endpoint is not object-scoped.',
   'security.bola.setup.controlFailed': '⚠ Negative control failed — endpoint not object-scoped; verdicts demoted.',
+
+  'suite.run': 'Run full security suite',
+  'suite.running': 'Running {engine}… {done}/{total}',
+  'suite.runningNoCount': 'Running {engine}…',
+  'suite.stop': 'Stop',
+  'suite.idle': 'Run all three engines as one recorded run.',
+  'suite.last': 'Last run: {status} · {duration} · {summary}',
+  'suite.status.complete': 'complete',
+  'suite.status.aborted': 'aborted',
+  'suite.aborted': 'Aborted during {engine} — not recorded',
+  'suite.engine.matrix': 'Matrix',
+  'suite.engine.bola': 'BOLA',
+  'suite.engine.ratelimit': 'Rate-limit',
+  'suite.skipped': 'skipped',
 });
 
 Object.assign(dict['zh-TW'], {
@@ -1467,6 +1481,20 @@ Object.assign(dict['zh-TW'], {
   'security.bola.setup.negControl': '負向對照',
   'security.bola.setup.negControlHint': '探測一個假的 id；若回 2xx，表示端點未依物件授權。',
   'security.bola.setup.controlFailed': '⚠ 負向對照失敗 — 端點未依物件授權；判定已降級。',
+
+  'suite.run': '執行完整安全掃描',
+  'suite.running': '執行中 {engine}… {done}/{total}',
+  'suite.runningNoCount': '執行中 {engine}…',
+  'suite.stop': '停止',
+  'suite.idle': '將三個引擎作為一次已記錄的執行。',
+  'suite.last': '上次執行：{status} · {duration} · {summary}',
+  'suite.status.complete': '完成',
+  'suite.status.aborted': '已中斷',
+  'suite.aborted': '在 {engine} 階段中斷 — 未記錄',
+  'suite.engine.matrix': 'Matrix',
+  'suite.engine.bola': 'BOLA',
+  'suite.engine.ratelimit': '速率限制',
+  'suite.skipped': '略過',
 });
 
 function normalizeLocale(value) {

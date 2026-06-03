@@ -9,9 +9,10 @@ import { Icon, MethodBadge } from './components.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import {
-  runBurst, detectThrottleSignal, classifyRateLimit, rateLimitSeverity,
-  summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
+  runBurst, detectThrottleSignal, classifyRateLimit,
+  rlFindingFor, summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
 } from './ratelimit.js';
+import { normalizeRateLimit } from './securitySuite.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const VLABEL = { pass: 'rl.verdict.pass', vuln: 'rl.verdict.vuln', inconclusive: 'rl.verdict.inconclusive' };
@@ -23,10 +24,14 @@ function allRequests() {
 
 let rlSeq = 1;
 
-function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
+function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, results: resultsProp, setResults: setResultsProp, onRunTest,
+                          env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true }) {
   const { t } = useI18n();
   const tests = rateLimit.tests || [];
-  const [results, setResults] = useS({});
+  const [localResults, setLocalResults] = useS({});
+  const controlled = !!setResultsProp;
+  const results = controlled ? (resultsProp || {}) : localResults;
+  const setResults = controlled ? setResultsProp : setLocalResults;
   const [running, setRunning] = useS(null);   // testId currently bursting
   const [confirming, setConfirming] = useS(null);   // test pending confirmation
   const abortRef = useRef(null);
@@ -48,24 +53,17 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(test.id);
+    if (onRunTest) { try { await onRunTest(test, { runner, signal: controller.signal }); } finally { setRunning(null); } return; }
     setResults(r => ({ ...r, [test.id]: { progress: { done: 0, n: test.n }, stats: null, verdict: null } }));
     try {
       const { responses, stats } = await runBurst(test, runner, {
         signal: controller.signal,
         onProgress: (done, n) => setResults(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
       });
-      const signal = detectThrottleSignal(responses);
-      const completed = responses.filter(x => x.status != null).length;
-      const verdict = classifyRateLimit(signal, completed);
-      const severity = rateLimitSeverity(test.sensitivity, verdict);
-      const finding = severity ? {
-        oracle: 'rate-limit', severity, title: t('rl.findingTitle'),
-        path: `${test.method} ${test.path}`, evidence: `${stats.sent} requests, no 429/rate-limit headers`, source: 'rule',
-      } : null;
-      setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity, finding } }));
-    } finally {
-      setRunning(null);
-    }
+      const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+      const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+      setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
+    } finally { setRunning(null); }
   };
   const stop = () => { if (abortRef.current) abortRef.current.abort(); setRunning(null); };
 
@@ -75,11 +73,7 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
   // Report normalized findings upward for cross-engine AI triage (advisory).
   useE(() => {
     if (!onFindings) return;
-    const out = tests.map(t0 => {
-      const f = results[t0.id] && results[t0.id].finding;
-      return f ? { engine: 'ratelimit', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
-                   title: f.title, path: f.path, evidence: f.evidence || '', ref: { testId: t0.id } } : null;
-    }).filter(Boolean);
+    const out = normalizeRateLimit(results, tests);
     onFindings(out);
   }, [results, tests, onFindings]);
 
