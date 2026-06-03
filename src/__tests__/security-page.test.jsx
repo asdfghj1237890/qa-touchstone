@@ -163,4 +163,14 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // Both anon AND the non-privileged user default to deny on the privileged endpoint → 2 deny cells in the row.
     expect(document.querySelectorAll('td.qa-sec-cell[data-expect="deny"]').length).toBe(2);
   });
+
+  it('renders exactly one header per mode (no double header in BOLA mode)', async () => {
+    renderPage();
+    // Matrix mode: one .qa-sec-head.
+    expect(document.querySelectorAll('.qa-sec-head').length).toBe(1);
+    // Switch to BOLA — still exactly one header (the panel's), not the matrix's too.
+    fireEvent.click(screen.getByRole('button', { name: /Object access/i }));
+    await waitFor(() => expect(document.querySelector('.qa-bola')).not.toBeNull());
+    expect(document.querySelectorAll('.qa-sec-head').length).toBe(1);
+  });
 });
