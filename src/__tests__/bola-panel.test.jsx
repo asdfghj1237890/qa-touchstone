@@ -50,5 +50,11 @@ describe('BolaPanel — runs on the canned path', () => {
     await waitFor(() => expect(document.querySelector('.qa-bola-cell--vuln')).not.toBeNull(), { timeout: 4000 });
     // A finding badge / panel shows the object-authz finding.
     await waitFor(() => expect(document.querySelector('.qa-sec-findpanel, .qa-bola-findpanel')).not.toBeNull());
+    // The diagonal renders the reference (own-id) cell.
+    expect(document.querySelector('.qa-bola-cell--ref')).not.toBeNull();
+    // Clicking an attack cell opens the drawer with the response body.
+    fireEvent.click(document.querySelector('.qa-bola-cell--vuln'));
+    await waitFor(() => expect(document.querySelector('.qa-sec-drawer')).not.toBeNull());
+    expect(document.querySelector('.qa-sec-drawer-body').textContent).toContain('shared');
   });
 });
