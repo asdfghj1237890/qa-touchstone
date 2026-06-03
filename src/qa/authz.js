@@ -130,7 +130,7 @@ export function loadMatrixConfig() {
 
 export function saveMatrixConfig(state) {
   try {
-    const { identities = [], endpoints = [], expect = {}, denySet = DEFAULT_DENY_SET, oracleConfig, bola } = state || {};
+    const { identities = [], endpoints = [], expect = {}, denySet = DEFAULT_DENY_SET, oracleConfig, bola, rateLimit } = state || {};
     // Persist only stable identity config — drop transient `_`-prefixed fields
     // (e.g. a fetched `_oauthToken`) so live access tokens are never written to
     // disk; the user re-fetches them in the identity editor after a reload.
@@ -138,6 +138,7 @@ export function saveMatrixConfig(state) {
     const payload = { identities: cleanIdentities, endpoints, expect, denySet };
     if (oracleConfig) payload.oracleConfig = oracleConfig;
     if (bola) payload.bola = bola;
+    if (rateLimit) payload.rateLimit = rateLimit;
     localStorage.setItem(SECURITY_STORAGE_KEY, JSON.stringify(payload));
   } catch { /* storage unavailable — non-fatal */ }
 }
