@@ -319,3 +319,13 @@ describe('withDefaults — privileged endpoints', () => {
     expect(fresh.expect.p1.u).toBe('deny');      // smart default for a new cell
   });
 });
+
+describe('persistence — identity.privileged', () => {
+  it('round-trips a privileged identity flag and omits it when absent', () => {
+    installLocalStorage();
+    saveMatrixConfig({ identities: [anonIdentity(), { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true }], endpoints: [], expect: {}, denySet: [401] });
+    const loaded = loadMatrixConfig();
+    expect(loaded.identities.find((i) => i.id === 'a').privileged).toBe(true);
+    expect(loaded.identities.find((i) => i.id === 'anon').privileged).toBeUndefined();
+  });
+});
