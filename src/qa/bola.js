@@ -117,14 +117,17 @@ export function classifyBola(method, status, matched, denySet) {
 }
 
 // The negative control fails — i.e. the endpoint is NOT object-scoped — when a
-// synthetic (nonexistent) id is NOT denied but answered 2xx. A denied status
-// (in denySet) means proper scoping; an error / other status is inconclusive
-// and must NOT demote (never invent a gate).
-export function negativeControlFailed(status, denySet) {
+// synthetic (nonexistent) id is NOT denied, answered 2xx, AND the response echoes
+// the control owner's own object (so the id was effectively ignored). A 2xx that
+// does NOT match the owner reference (e.g. a soft-200 empty body for a missing id)
+// is left alone — demoting it would hide a genuine finding. Denied / error / other
+// statuses never demote ("never invent a gate").
+export function negativeControlFailed(status, denySet, matched) {
   const deny = denySet || [401, 403, 404];
   if (typeof status !== 'number' || !Number.isFinite(status)) return false;
   if (deny.includes(status)) return false;
-  return status >= 200 && status <= 299;
+  if (!(status >= 200 && status <= 299)) return false;
+  return matched === true;
 }
 
 export function bolaSeverity(method, verdict) {
@@ -172,16 +175,23 @@ export async function runBola(state, runner, opts = {}) {
     // for this test is unreliable and gets demoted to inconclusive below.
     let controlFailed = false;
     if (opts.negativeControl && owners.length) {
-      const sampleVal = idVals[owners[0].id];
+      const controlOwner = owners[0];
+      const sampleVal = idVals[controlOwner.id];
       const synthetic = syntheticIdFor(test.idLocation, sampleVal);
       let control;
       try {
-        const resp = await runner(test, owners[0], synthetic);
-        control = { status: respStatus(resp), response: resp || null, syntheticId: synthetic, error: null };
+        const resp = await runner(test, controlOwner, synthetic);
+        // Does requesting a FAKE id return the owner's OWN object? If so the id is
+        // ignored → endpoint not object-scoped. Compare to the owner's reference
+        // using the same content oracle as the attack pass (real owner id value).
+        const ref = reference[controlOwner.id];
+        const refOk = ref && typeof ref.status === 'number' && ref.status >= 200 && ref.status <= 299;
+        const matched = refOk ? matchesOwner(resp, ref.response, sampleVal) : false;
+        control = { status: respStatus(resp), matched, response: resp || null, syntheticId: synthetic, error: null };
       } catch (e) {
-        control = { status: null, response: null, syntheticId: synthetic, error: errStr(e) };
+        control = { status: null, matched: false, response: null, syntheticId: synthetic, error: errStr(e) };
       }
-      controlFailed = negativeControlFailed(control.status, denySet);
+      controlFailed = negativeControlFailed(control.status, denySet, control.matched);
       control.failed = controlFailed;
       results[test.id].control = control;
       if (opts.onControl) opts.onControl(test.id, control);
