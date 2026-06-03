@@ -56,3 +56,30 @@ describe('fingerprint', () => {
     expect(fingerprint(matrixF()).fpMaterial).toBe('matrix|jwt|GET /me @admin|data.token');
   });
 });
+
+describe('locationLabel', () => {
+  const matrixF = (over = {}) => ({
+    engine: 'matrix', method: 'GET', endpoint: '/me', identityLabel: 'admin',
+    ref: { reqId: 'r1', idId: 'admin' }, ...over,
+  });
+  it('matrix uses method, endpoint, and identity label', () => {
+    expect(locationLabel(matrixF())).toBe('GET /me · admin');
+  });
+  it('matrix omits the identity suffix when identityLabel is absent', () => {
+    expect(locationLabel(matrixF({ identityLabel: '' }))).toBe('GET /me');
+  });
+  it('bola uses a human label with attacker/owner', () => {
+    expect(locationLabel({ engine: 'bola', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } }))
+      .toBe('BOLA t1 (a→o)');
+  });
+  it('ratelimit uses a human label with the test id', () => {
+    expect(locationLabel({ engine: 'ratelimit', ref: { testId: 't9' } })).toBe('Rate-limit t9');
+  });
+});
+
+describe('fnv1a', () => {
+  it('matches known 32-bit FNV-1a vectors (8-char hex)', () => {
+    expect(fnv1a('')).toBe('811c9dc5');
+    expect(fnv1a('foobar')).toBe('bf9cf968');
+  });
+});
