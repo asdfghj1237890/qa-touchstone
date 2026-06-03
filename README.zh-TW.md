@@ -62,6 +62,8 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
 - **AI 安全分流（AI security triage）**：把整批掃描（矩陣 + 物件授權 + 速率限制）
   濃縮成一份簡短、依優先序分類的清單——先看哪幾個、哪些像真的問題、哪些可能是誤判
   ——僅供參考，不會更動底層 findings。
+- **發現生命週期（Findings lifecycle）**：抑制誤判、覆寫嚴重度、指派負責人/狀態/備註，
+  並將每次掃描與釘選的基準（baseline）比對——新增/延續/已消失標記，加上新增高/嚴重計數。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，

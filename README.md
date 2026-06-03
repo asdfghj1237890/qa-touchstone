@@ -68,6 +68,9 @@ The current public-facing scope is API testing only:
   into a short, prioritized, categorized shortlist — what to look at first, what
   looks like a real issue, and what's likely a false positive — advisory only,
   never altering the underlying findings.
+- **Findings lifecycle**: suppress false positives, override severity, and assign
+  owner/status/note, then diff each run against a pinned baseline — new/carried/resolved
+  badges plus a new-high/critical counter.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress
