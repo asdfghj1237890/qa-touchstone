@@ -1312,3 +1312,36 @@
   .qa-bola-presets { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
   .qa-bola-cand { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
   .qa-bola-ctrlfail { margin: 6px 0; }
+
+  /* ── Findings lifecycle ─────────────────────────────────────────── */
+  .qa-find-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+  .qa-find-counter { font-weight: 600; }
+  .qa-find-baseline { font-size: 12px; color: var(--text-dim); }
+  .qa-find-scopewarn, .qa-find-legacy { color: #d97706; }
+  .qa-find-legacy { font-size: 12px; padding: 6px 10px; border-radius: 8px;
+    border-left: 3px solid #d97706; background: rgba(217,119,6,.1); margin-bottom: 10px; }
+  .qa-find-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+
+  .qa-find-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .qa-find-table th, .qa-find-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .qa-find-table th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .qa-find-table code { font-size: 11px; }
+  .qa-find-row { cursor: pointer; }
+  .qa-find-row:hover { background: var(--bg-2); }
+
+  .qa-find-presence { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+    background: rgba(127,127,127,.12); color: var(--text-dim); }
+  .qa-presence--new .qa-find-presence,
+  .qa-find-presence.qa-presence--new { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .qa-presence--resolved { opacity: .55; }
+  .qa-presence--resolved code { text-decoration: line-through; }
+
+  .qa-find-orig { font-size: 11px; color: var(--text-faint); }
+  .qa-find-count { font-size: 11px; color: var(--text-faint); }
+  .qa-find-suppressed { font-size: 11px; color: var(--text-faint); font-style: italic; }
+  .qa-find-row:has(.qa-find-suppressed) { opacity: .6; font-style: italic; }
+
+  .qa-find-detail > td { background: var(--bg-1); padding: 10px 14px; }
+  .qa-find-detail .qa-inp { margin: 6px 0; }
+  .qa-find-ctl { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 12px; color: var(--text-dim); }
