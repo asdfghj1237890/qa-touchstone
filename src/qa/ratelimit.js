@@ -28,3 +28,15 @@ export function detectThrottleSignal(responses) {
   }
   return { throttled: saw429 || headerHit, saw429, headerHit };
 }
+
+// completedCount = responses that returned a real HTTP status (net errors excluded).
+export function classifyRateLimit(signal, completedCount) {
+  if (signal && signal.throttled) return 'pass';
+  if (completedCount > 0) return 'vuln';
+  return 'inconclusive';
+}
+
+export function rateLimitSeverity(sensitivity, verdict) {
+  if (verdict !== 'vuln') return null;
+  return sensitivity === 'sensitive' ? 'high' : 'low';
+}
