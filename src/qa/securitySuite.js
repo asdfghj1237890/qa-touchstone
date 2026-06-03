@@ -57,3 +57,62 @@ export function normalizeRateLimit(results, tests) {
   }
   return out;
 }
+
+// Is an engine's config empty (nothing to run)?
+function engineEmpty(engine, config) {
+  if (engine === 'matrix') return !((config.matrix.endpoints || []).length && (config.matrix.identities || []).length);
+  if (engine === 'bola') return !((config.bola.tests || []).length);
+  return !((config.rateLimit.tests || []).length);   // ratelimit
+}
+
+const NORMALIZERS = {
+  matrix: (results, config) => normalizeMatrix(results, config.matrix.endpoints, config.matrix.identities),
+  bola: (results, config) => normalizeBola(results, config.bola.tests),
+  ratelimit: (results, config) => normalizeRateLimit(results, config.rateLimit.tests),
+};
+
+// Orchestrate the three engines sequentially into one RunRecord.
+// `runners` = { matrix, bola, ratelimit }: async run adapters that execute a whole
+// engine and resolve to its results (signature: runner(config[engine], {signal, onProgress})).
+// `opts` = { signal, onProgress(engine,done,total), onEngineResult(engine,results), now=()=>Date.now() }.
+// Returns { status:'complete'|'aborted', startedAt, finishedAt, durationMs, engines:[], union:[] }.
+// Stays PURE: returns `union` (not snapshot items); the caller derives items via snapshotOf.
+export async function runSuite(config, runners, opts = {}) {
+  const now = opts.now || (() => Date.now());
+  const signal = opts.signal;
+  const t0 = now();
+  const startedAt = new Date(t0).toISOString();
+  const engines = [];
+  const union = [];
+  let aborted = false;
+
+  for (const engine of SUITE_ORDER) {
+    if (signal && signal.aborted) { aborted = true; break; }
+    if (engineEmpty(engine, config)) {
+      engines.push({ engine, ran: false, skipped: 'no-config', durationMs: 0, findingCount: 0, error: null });
+      continue;
+    }
+    const eStart = now();
+    let results = null, error = null;
+    try {
+      results = await runners[engine](config[engine], {
+        signal,
+        onProgress: (done, total) => { if (opts.onProgress) opts.onProgress(engine, done, total); },
+      });
+      if (opts.onEngineResult) opts.onEngineResult(engine, results);
+    } catch (e) {
+      error = String((e && e.message) || e);
+    }
+    const items = error ? [] : NORMALIZERS[engine](results, config);
+    union.push(...items);
+    engines.push({ engine, ran: true, durationMs: now() - eStart, findingCount: items.length, error });
+    if (signal && signal.aborted) { aborted = true; break; }
+  }
+
+  const tEnd = now();
+  return {
+    status: aborted ? 'aborted' : 'complete',
+    startedAt, finishedAt: new Date(tEnd).toISOString(), durationMs: tEnd - t0,
+    engines, union,
+  };
+}
