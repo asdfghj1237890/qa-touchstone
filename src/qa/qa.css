@@ -1246,3 +1246,5 @@
   .qa-bola-cell--unconfirmed { background: rgba(217,119,6,.12); color: #d97706; }
   .qa-bola-cell--pass { background: rgba(127,127,127,.06); }
   .qa-bola-cell--inconclusive { color: var(--text-dim); }
+  .qa-sec-chip--unconfirmed { color: #d97706; }
+  .qa-bola-warn { font-size: 11px; color: #d97706; }

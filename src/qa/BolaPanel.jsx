@@ -7,6 +7,7 @@ import './setup.js';
 import { Icon, MethodBadge } from './components.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
+import { buildReq } from './buildReq.js';
 import { applyIdLocation, runBola, summarizeBola } from './bola.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
@@ -119,6 +120,11 @@ function BolaPanel({ identities, bola, setBola, env = { label: 'None', baseUrl: 
       {tests.map(test => {
         const ow = owned(test);
         const tr = results[test.id] || { reference: {}, attacks: {} };
+        // Probe whether the marked id location actually resolves against the built
+        // request (e.g. a body path whose parent is missing won't apply, so the
+        // request would run unmutated and silently read the attacker's own object).
+        let idApplied = true;
+        try { idApplied = applyIdLocation(buildReq(test.reqId), test.idLocation, '__probe__')._idApplied; } catch { idApplied = true; }
         return (
           <div key={test.id} className="qa-bola-test">
             <div className="qa-bola-test-head">
@@ -147,6 +153,7 @@ function BolaPanel({ identities, bola, setBola, env = { label: 'None', baseUrl: 
                 <input className="qa-inp qa-inp--mini" placeholder={t('bola.bodyPath')} value={test.idLocation.path}
                        onChange={e => patchTest(test.id, { idLocation: { kind: 'body', path: e.target.value } })} />
               )}
+              {!idApplied && <span className="qa-bola-warn">⚠ {t('bola.notApplied')}</span>}
             </div>
 
             <div className="qa-bola-ids">
