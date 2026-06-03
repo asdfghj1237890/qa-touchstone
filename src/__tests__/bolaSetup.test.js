@@ -1,6 +1,6 @@
 // src/__tests__/bolaSetup.test.js
 import { describe, it, expect } from 'vitest';
-import { detectIdLocation } from '../qa/bolaSetup.js';
+import { detectIdLocation, extractIdCandidates, applyPreset, syntheticIdFor } from '../qa/bolaSetup.js';
 
 const req = (over = {}) => ({ method: 'GET', url: '/users/42/orders', params: [], body: '', ...over });
 
@@ -37,5 +37,39 @@ describe('detectIdLocation', () => {
       { key: 'tenant', value: 'acme', on: true }] });
     expect(out.some(c => c.idLocation.kind === 'query' && c.idLocation.key === 'organic')).toBe(false);
     expect(out.some(c => c.idLocation.kind === 'query' && c.idLocation.key === 'tenant')).toBe(true);
+  });
+});
+
+describe('extractIdCandidates', () => {
+  it('returns the literal id values found in the request with a where-label', () => {
+    const out = extractIdCandidates({ method: 'GET', url: '/users/42', params: [], body: '' });
+    expect(out[0]).toMatchObject({ value: '42' });
+    expect(typeof out[0].where).toBe('string');
+  });
+});
+
+describe('applyPreset', () => {
+  it('merges preset values into idValues without mutating the input test', () => {
+    const test = { id: 't', idValues: { a: '1' } };
+    const out = applyPreset(test, { values: { a: '9', b: '2' } });
+    expect(out.idValues).toEqual({ a: '9', b: '2' });
+    expect(test.idValues).toEqual({ a: '1' });
+  });
+  it('is a no-op-safe when preset has no values', () => {
+    expect(applyPreset({ id: 't', idValues: { a: '1' } }, {}).idValues).toEqual({ a: '1' });
+  });
+});
+
+describe('syntheticIdFor', () => {
+  it('shape-matches: numeric sample -> huge integer string', () => {
+    expect(syntheticIdFor({ kind: 'path', index: 1 }, '42')).toMatch(/^\d+$/);
+    expect(syntheticIdFor({ kind: 'path', index: 1 }, '42').length).toBeGreaterThan(6);
+  });
+  it('shape-matches: uuid sample -> a uuid', () => {
+    expect(syntheticIdFor({ kind: 'path', index: 1 }, '3f1a4e2b-1c2d-4e5f-8a9b-0c1d2e3f4a5b'))
+      .toMatch(/^[0-9a-f-]{36}$/i);
+  });
+  it('falls back to a fixed unlikely token for unknown shapes', () => {
+    expect(syntheticIdFor({ kind: 'query', key: 'q' }, 'abc')).toBe('qa-nonexistent-2c1f9a');
   });
 });
