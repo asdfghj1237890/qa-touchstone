@@ -20,6 +20,7 @@ import { RateLimitPanel } from './RateLimitPanel.jsx';
 import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit.js';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
+import { runSuite } from './securitySuite.js';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
 } from './findings.js';
@@ -122,6 +123,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [rlResults, setRlResults] = useS({});
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
   const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
+  const [suite, setSuite] = useS({ running: false, engine: null, done: 0, total: 0, lastRecord: null });
+  const suiteAbortRef = useRef(null);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola, rateLimit }), [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]);
@@ -211,6 +214,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     response,
   }));
 
+  // Compute a matrix cell's findings using the streaming-baseline + oracles, into `baselines`.
+  const matrixCellFindings = (reqId, cell, baselines) => {
+    const is2xx = typeof cell.status === 'number' && cell.status >= 200 && cell.status <= 299;
+    if (is2xx && cell.response && !baselines[reqId]) baselines[reqId] = inferContract(cell.response.body);
+    return runOracles(cell, { baseline: baselines[reqId], config: oracleConfig });
+  };
+
   const run = async (rowReqId = null) => {
     const target = rowReqId ? { ...state, endpoints: state.endpoints.filter(e => e.reqId === rowReqId) } : state;
     const controller = new AbortController();
@@ -295,8 +305,84 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     setRes(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
   };
 
+  const runFullSuite = async () => {
+    const controller = new AbortController();
+    suiteAbortRef.current = controller;
+    setSuite({ running: true, engine: null, done: 0, total: 0, lastRecord: null });
+    setResults({}); setBolaResults({}); setRlResults({});
+
+    const matrixAdapter = async (cfg, { signal }) => {
+      const baselines = {};
+      const out = {};
+      await runMatrix({ ...state, endpoints: cfg.endpoints, identities: cfg.identities }, runner, {
+        signal,
+        onCell: (reqId, idId, cell) => {
+          const findings = matrixCellFindings(reqId, cell, baselines);
+          const withF = { ...cell, findings };
+          out[reqId] = { ...(out[reqId] || {}), [idId]: withF };
+          setResults(r => ({ ...r, [reqId]: { ...(r[reqId] || {}), [idId]: withF } }));
+        },
+      });
+      return out;
+    };
+    const bolaAdapter = async (cfg, { signal }) => {
+      const out = {};
+      await runBola({ identities: cfg.identities, tests: cfg.tests }, bolaRunner, {
+        signal, negativeControl: true,
+        onCell: (testId, attackerId, ownerId, cell) => {
+          const tr = out[testId] || { reference: {}, attacks: {} };
+          if (attackerId == null) out[testId] = { ...tr, reference: { ...tr.reference, [ownerId]: cell } };
+          else out[testId] = { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } };
+          setBolaResults({ ...out });
+        },
+      });
+      return out;
+    };
+    const ratelimitAdapter = async (cfg, { signal }) => {
+      const out = {};
+      for (const test of cfg.tests) {
+        if (signal && signal.aborted) break;
+        const identity = identities.find(x => x.id === test.identityId) || identities[0];
+        const reqRunner = () => qaRunSavedRequest({ id: test.reqId }, { env, vars, cookies, sslVerify, authOverride: identity && identity.auth, oauthToken: identity && identity._oauthToken });
+        const { responses, stats } = await runBurst(test, reqRunner, { signal });
+        const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+        const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
+        out[test.id] = { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding };
+        setRlResults({ ...out });
+      }
+      return out;
+    };
+
+    const config = {
+      matrix: { endpoints, identities },
+      bola: { tests: bola.tests || [], identities },
+      rateLimit: { tests: rateLimit.tests || [], identities },
+    };
+    const rec = await runSuite(config, { matrix: matrixAdapter, bola: bolaAdapter, ratelimit: ratelimitAdapter }, {
+      signal: controller.signal,
+      onProgress: (engine, done, total) => setSuite(s => ({ ...s, engine, done, total })),
+    });
+
+    if (rec.status === 'complete') {
+      const scopeHash = scopeHashOf({
+        endpoints: endpoints.map(e => e.reqId).sort(), identities: identities.map(i => i.id).sort(),
+        bola: (bola.tests || []).map(x => x.id).sort(), rl: (rateLimit.tests || []).map(x => x.id).sort(),
+      });
+      const items = snapshotOf(rec.union, loadLifecycle(), { runId: rec.finishedAt, createdAt: rec.finishedAt, scopeHash }).items;
+      const record = { runId: rec.finishedAt, scopeHash, createdAt: rec.finishedAt,
+                       startedAt: rec.startedAt, finishedAt: rec.finishedAt, durationMs: rec.durationMs,
+                       status: 'complete', engines: rec.engines, items };
+      setSnapshots(prev => { const next = recordRun(prev, record); saveSnapshots(next); return next; });
+      setSuite({ running: false, engine: null, done: 0, total: 0, lastRecord: record });
+    } else {
+      setSuite(s => ({ ...s, running: false, lastRecord: { status: 'aborted', engines: rec.engines } }));
+    }
+  };
+  const stopSuite = () => { if (suiteAbortRef.current) suiteAbortRef.current.abort(); };
+
   return (
     <div className="qa-sec">
+      <button className="qa-btn qa-btn--primary" onClick={runFullSuite} disabled={suite.running}>Run full security suite</button>
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>

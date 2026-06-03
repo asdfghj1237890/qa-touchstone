@@ -178,4 +178,24 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     renderPage();
     expect(screen.getByText('AI Triage')).toBeInTheDocument();
   });
+
+  it('runs the full suite and records one completed run', async () => {
+    // Reuse the file's setup: one endpoint (r1) + default identity (anon),
+    // canned 200 response. BOLA/RL have no tests configured → they skip, but
+    // the suite still completes and records a run snapshot.
+    renderPage();
+
+    // Add the endpoint via the picker (same flow as the matrix-run test).
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+
+    // Trigger the full suite via the temporary page-level button.
+    fireEvent.click(screen.getByText('Run full security suite'));
+
+    const { loadSnapshots } = await import('../qa/findings.js');
+    await waitFor(() => expect(loadSnapshots().lastRun).not.toBeNull(), { timeout: 4000 });
+    expect(loadSnapshots().lastRun.status).toBe('complete');
+  });
 });
