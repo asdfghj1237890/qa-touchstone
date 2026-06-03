@@ -1125,7 +1125,6 @@ Object.assign(dict['en-US'], {
   'report.format.html': 'HTML report',
   'report.format.junit': 'JUnit XML',
   'report.format.sarif': 'SARIF',
-  'report.unavailable': 'Run the suite to enable export',
 });
 
 Object.assign(dict['zh-TW'], {
@@ -1514,7 +1513,6 @@ Object.assign(dict['zh-TW'], {
   'report.format.html': 'HTML 報告',
   'report.format.junit': 'JUnit XML',
   'report.format.sarif': 'SARIF',
-  'report.unavailable': '先執行掃描才能匯出',
 });
 
 function normalizeLocale(value) {

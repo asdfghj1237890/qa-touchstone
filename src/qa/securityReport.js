@@ -98,7 +98,7 @@ function isGateFailure(f) {
 export function reportToJUnit(model) {
   const current = model.findings.filter(f => f.presence !== 'resolved');
   const failures = current.filter(isGateFailure).length;
-  const skipped = current.filter(f => f.suppressed && !isGateFailure(f)).length;
+  const skipped = current.filter(f => f.suppressed).length;
   const byEngine = {};
   for (const f of current) (byEngine[f.engine] = byEngine[f.engine] || []).push(f);
   const suites = Object.keys(byEngine).map(engine => {
@@ -114,7 +114,7 @@ export function reportToJUnit(model) {
       return `    <testcase name="${name}" classname="${cls}"/>`;
     }).join('\n');
     const sFail = fs.filter(isGateFailure).length;
-    const sSkip = fs.filter(f => f.suppressed && !isGateFailure(f)).length;
+    const sSkip = fs.filter(f => f.suppressed).length;
     return `  <testsuite name="${xmlEscape(engine)}" tests="${fs.length}" failures="${sFail}" skipped="${sSkip}">\n${cases}\n  </testsuite>`;
   }).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="QA Touchstone Security" tests="${current.length}" failures="${failures}" skipped="${skipped}" time="${((model.meta.durationMs || 0) / 1000).toFixed(3)}">\n${suites}\n</testsuites>\n`;
