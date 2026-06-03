@@ -49,7 +49,7 @@ describe('verdictFor', () => {
 const idAnon = anonIdentity();
 const idAdmin = { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } };
 const ep1 = { reqId: 'r1', method: 'GET', path: '/a' };
-const ep2 = { reqId: 'r2', method: 'POST', path: '/b' };
+const ep2 = { reqId: 'r2', method: 'GET', path: '/b' };
 const baseState = { identities: [idAnon, idAdmin], endpoints: [ep1, ep2], expect: {}, denySet: [401, 403] };
 
 describe('anonIdentity', () => {
@@ -281,5 +281,41 @@ describe('endpointPrivileged', () => {
   it('honors a manual override either way', () => {
     expect(endpointPrivileged({ method: 'GET', path: '/orders', privileged: true })).toEqual({ privileged: true, reasons: ['manual'], source: 'manual' });
     expect(endpointPrivileged({ method: 'POST', path: '/orders', privileged: false })).toEqual({ privileged: false, reasons: ['manual'], source: 'manual' });
+  });
+});
+
+const privEp = { reqId: 'p1', method: 'DELETE', path: '/admin/users/1' };
+const normEp = { reqId: 'n1', method: 'GET', path: '/profile' };
+const userId = { id: 'u', name: 'user', auth: { type: 'bearer' } };          // non-privileged
+const adminPriv = { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true };
+
+describe('defaultExpectation — endpoint-aware', () => {
+  it('one-arg call keeps legacy behavior', () => {
+    expect(defaultExpectation(anonIdentity())).toBe('deny');
+    expect(defaultExpectation(userId)).toBe('allow');
+  });
+  it('anon is deny regardless of endpoint', () => {
+    expect(defaultExpectation(anonIdentity(), privEp)).toBe('deny');
+    expect(defaultExpectation(anonIdentity(), normEp)).toBe('deny');
+  });
+  it('privileged endpoint defaults a non-privileged identity to deny', () => {
+    expect(defaultExpectation(userId, privEp)).toBe('deny');
+  });
+  it('privileged identity stays allow on a privileged endpoint', () => {
+    expect(defaultExpectation(adminPriv, privEp)).toBe('allow');
+  });
+  it('non-privileged endpoint defaults a normal identity to allow', () => {
+    expect(defaultExpectation(userId, normEp)).toBe('allow');
+  });
+});
+
+describe('withDefaults — privileged endpoints', () => {
+  it('defaults a non-privileged identity to deny on a privileged endpoint (new cell), preserving overrides', () => {
+    const state = withDefaults({ identities: [anonIdentity(), userId, adminPriv], endpoints: [privEp], expect: { p1: { u: 'allow' } }, denySet: [401, 403] });
+    expect(state.expect.p1.anon).toBe('deny');   // anon
+    expect(state.expect.p1.u).toBe('allow');     // preserved override
+    expect(state.expect.p1.a).toBe('allow');     // privileged identity
+    const fresh = withDefaults({ identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] });
+    expect(fresh.expect.p1.u).toBe('deny');      // smart default for a new cell
   });
 });

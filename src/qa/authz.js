@@ -55,9 +55,13 @@ export function anonIdentity() {
   return { id: 'anon', name: 'anon', auth: { type: 'none' } };
 }
 
-// Smart default expectation for an identity: anonymous → deny, otherwise allow.
-export function defaultExpectation(identity) {
-  return identity && identity.auth && identity.auth.type === 'none' ? 'deny' : 'allow';
+// Smart default expectation. anon → deny. A privileged endpoint defaults a
+// non-privileged identity to deny (the BFLA setup). `endpoint` is optional, so
+// one-arg callers keep the legacy anon-only behavior.
+export function defaultExpectation(identity, endpoint) {
+  if (identity && identity.auth && identity.auth.type === 'none') return 'deny';
+  if (endpoint && endpointPrivileged(endpoint).privileged && !(identity && identity.privileged)) return 'deny';
+  return 'allow';
 }
 
 // Return a copy of state whose expect map has an entry for every
@@ -69,7 +73,7 @@ export function withDefaults(state) {
     const prev = (state.expect && state.expect[ep.reqId]) || {};
     const row = {};
     for (const id of state.identities) {
-      row[id.id] = prev[id.id] ?? defaultExpectation(id);
+      row[id.id] = prev[id.id] ?? defaultExpectation(id, ep);
     }
     expect[ep.reqId] = row;
   }
@@ -103,7 +107,7 @@ export async function runMatrix(state, runner, opts = {}) {
     results[ep.reqId] = results[ep.reqId] || {};
     for (const id of state.identities) {
       if (signal && signal.aborted) return results;
-      const expectation = ((state.expect || {})[ep.reqId] || {})[id.id] || defaultExpectation(id);
+      const expectation = ((state.expect || {})[ep.reqId] || {})[id.id] || defaultExpectation(id, ep);
       if (expectation === 'skip') continue;
       let cell;
       try {
