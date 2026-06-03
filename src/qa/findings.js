@@ -3,7 +3,7 @@
 // Stable identity, effective severity, run diff, gate counting, and versioned
 // localStorage persistence for findings management. UI lives in FindingsPanel.
 import './setup.js';
-import { normalizePath } from './oracles.js';
+import { SEVERITY_ORDER, normalizePath } from './oracles.js';
 
 export const FP_VERSION = 1;
 export const LIFECYCLE_KEY = 'qa_security_lifecycle';
@@ -48,4 +48,10 @@ export function fnv1a(str) {
 export function fingerprint(f) {
   const material = [f && f.engine, ruleIdOf(f), locationOf(f), normalizePath((f && f.path) || '')].join('|');
   return { fp: fnv1a(material), fpMaterial: material };
+}
+
+// Override wins only if it's a recognized severity; otherwise the original.
+export function effectiveSeverity(finding, record) {
+  const ov = record && record.severityOverride;
+  return (ov && SEVERITY_ORDER.includes(ov)) ? ov : (finding && finding.severity);
 }
