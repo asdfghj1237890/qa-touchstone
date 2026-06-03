@@ -17,6 +17,7 @@ import {
 import { BolaPanel } from './BolaPanel.jsx';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
 import { TriagePanel } from './TriagePanel.jsx';
+import { FindingsPanel } from './FindingsPanel.jsx';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];
@@ -254,9 +255,12 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
         <button className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`} onClick={() => setMode('bola')}>{t('security.mode.bola')}</button>
         <button className={`qa-seg ${mode === 'ratelimit' ? 'qa-seg--on' : ''}`} onClick={() => setMode('ratelimit')}>{t('security.mode.ratelimit')}</button>
+        <button className={`qa-seg ${mode === 'findings' ? 'qa-seg--on' : ''}`} onClick={() => setMode('findings')}>{t('findings.tab')}</button>
       </div>
 
-      {mode === 'bola' ? (
+      {mode === 'findings' ? (
+        <FindingsPanel union={triageUnion} />
+      ) : mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
       ) : mode === 'ratelimit' ? (
