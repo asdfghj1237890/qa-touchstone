@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { THROTTLE_HEADERS, MAX_N, MAX_CONCURRENCY, detectThrottleSignal } from '../qa/ratelimit.js';
 import { classifyRateLimit, rateLimitSeverity } from '../qa/ratelimit.js';
 import { runBurst, summarizeRateLimit, MAX_N as CAP } from '../qa/ratelimit.js';
+import { rlFindingFor } from '../qa/ratelimit.js';
 
 describe('constants', () => {
   it('caps and the throttle-header set are exposed', () => {
@@ -151,5 +152,21 @@ describe('summarizeRateLimit', () => {
   it('tallies per-test verdicts', () => {
     const results = { t1: { verdict: 'vuln' }, t2: { verdict: 'pass' }, t3: { verdict: 'vuln' } };
     expect(summarizeRateLimit(results)).toEqual({ total: 3, pass: 1, vuln: 2, inconclusive: 0 });
+  });
+});
+
+describe('rlFindingFor', () => {
+  const test = { method: 'GET', path: '/x', sensitivity: 'sensitive' };
+  it('returns a finding when no throttle signal is seen', () => {
+    const responses = Array.from({ length: 30 }, () => ({ status: 200, headers: {} }));
+    const stats = { sent: 30 };
+    const f = rlFindingFor(test, responses, stats, 'No rate limiting');
+    expect(f).toMatchObject({ oracle: 'rate-limit', title: 'No rate limiting', path: 'GET /x', source: 'rule' });
+    expect(['low', 'medium', 'high', 'critical']).toContain(f.severity);
+  });
+  it('returns null when throttling is detected (429 present)', () => {
+    const responses = [{ status: 429, headers: {} }, { status: 200, headers: {} }];
+    const f = rlFindingFor(test, responses, { sent: 2 }, 'No rate limiting');
+    expect(f).toBeNull();
   });
 });

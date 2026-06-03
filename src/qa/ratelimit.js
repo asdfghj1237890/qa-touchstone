@@ -107,6 +107,23 @@ function computeStats(responses) {
   return s;
 }
 
+// Evaluate a burst result into a finding (or null if throttling was observed).
+// `title` is injected so this module stays i18n-free. Shared by the panel and
+// the unified-suite rate-limit adapter so both produce identical findings.
+export function rlFindingFor(test, responses, stats, title) {
+  const signal = detectThrottleSignal(responses);
+  const completed = (responses || []).filter(x => x.status != null).length;
+  const verdict = classifyRateLimit(signal, completed);
+  const severity = rateLimitSeverity(test.sensitivity, verdict);
+  if (!severity) return null;
+  return {
+    oracle: 'rate-limit', severity, title,
+    path: `${test.method} ${test.path}`,
+    evidence: `${stats.sent} requests, no 429/rate-limit headers`,
+    source: 'rule',
+  };
+}
+
 // Tally per-test verdicts across the results map for the summary chips.
 export function summarizeRateLimit(results) {
   const s = { total: 0, pass: 0, vuln: 0, inconclusive: 0 };

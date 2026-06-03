@@ -10,7 +10,7 @@ import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
 import {
   runBurst, detectThrottleSignal, classifyRateLimit, rateLimitSeverity,
-  summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
+  rlFindingFor, summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
 } from './ratelimit.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
@@ -54,14 +54,9 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, env =
         signal: controller.signal,
         onProgress: (done, n) => setResults(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
       });
-      const signal = detectThrottleSignal(responses);
-      const completed = responses.filter(x => x.status != null).length;
-      const verdict = classifyRateLimit(signal, completed);
-      const severity = rateLimitSeverity(test.sensitivity, verdict);
-      const finding = severity ? {
-        oracle: 'rate-limit', severity, title: t('rl.findingTitle'),
-        path: `${test.method} ${test.path}`, evidence: `${stats.sent} requests, no 429/rate-limit headers`, source: 'rule',
-      } : null;
+      const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+      const severity = finding ? finding.severity : null;
+      const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
       setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n }, stats, verdict, severity, finding } }));
     } finally {
       setRunning(null);
