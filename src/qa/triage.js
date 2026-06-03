@@ -50,6 +50,8 @@ export function parseTriage(raw, kept) {
   let obj;
   try {
     const text = String(raw).replace(/```json/gi, '').replace(/```/g, '');
+    // Greedy first-{ to last-} match: after fence stripping this recovers the
+    // JSON object from any surrounding prose. Malformed output safely throws -> empty.
     const m = text.match(/\{[\s\S]*\}/);
     obj = JSON.parse(m ? m[0] : text);
   } catch { return { headline: '', items: [] }; }
@@ -58,7 +60,15 @@ export function parseTriage(raw, kept) {
   for (const it of obj.items) {
     if (!it || typeof it !== 'object') continue;
     const idxs = Array.isArray(it.findingIndexes) ? it.findingIndexes : [];
-    const findings = idxs.filter(n => Number.isInteger(n) && n >= 0 && n < kept.length).map(n => kept[n]);
+    // Valid, de-duplicated indexes -> findings. Dedup so a repeated index
+    // (e.g. [0,0,0]) can't inflate the finding count shown to the user.
+    const seen = new Set();
+    const findings = [];
+    for (const n of idxs) {
+      if (!Number.isInteger(n) || n < 0 || n >= kept.length || seen.has(n)) continue;
+      seen.add(n);
+      findings.push(kept[n]);
+    }
     if (!findings.length) continue;   // drop invented / zero-ref items
     items.push({
       title: String(it.title || findings[0].title || 'Finding cluster'),
