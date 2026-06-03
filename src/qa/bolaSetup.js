@@ -14,7 +14,7 @@ const ID_DENYLIST = new Set(['count', 'page', 'limit', 'size', 'offset', 'total'
 function isIdKey(key) {
   const k = String(key);
   if (ID_DENYLIST.has(k.toLowerCase())) return false;
-  return k.toLowerCase() === 'id' || /_id$/i.test(k) || /[a-z]Id$/.test(k) || /(uuid|tenant|account|org)/i.test(k);
+  return k.toLowerCase() === 'id' || /_id$/i.test(k) || /[a-z]Id$/.test(k) || /(^|_)(uuid|tenant|account|org)(_|$)/i.test(k);
 }
 
 function shapeScore(v) {
