@@ -318,6 +318,12 @@ describe('withDefaults — privileged endpoints', () => {
     const fresh = withDefaults({ identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] });
     expect(fresh.expect.p1.u).toBe('deny');      // smart default for a new cell
   });
+
+  it('runMatrix uses the endpoint-aware fallback: a non-priv identity on a privileged endpoint with no explicit expect, returning 200, is a vuln (BFLA caught end-to-end)', async () => {
+    const state = { identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] };
+    const results = await runMatrix(state, () => Promise.resolve({ status: 200, time: 1 }), {});
+    expect(results.p1.u.verdict).toBe('vuln');   // defaulted deny → allowed → BFLA hole
+  });
 });
 
 describe('persistence — identity.privileged', () => {
