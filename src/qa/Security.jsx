@@ -8,7 +8,7 @@ import { executeRequest } from './executor.js';
 import { requestOAuthToken } from './oauth.js';
 import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
-  loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET,
+  loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET, endpointPrivileged,
 } from './authz.js';
 import {
   runOracles, inferContract, summarizeFindings, scanSensitiveLLM, worstSeverity,
@@ -57,6 +57,12 @@ function IdentityEditor({ identity, onChange, onClose, env, vars, sslVerify }) {
     <div className="qa-sec-idedit">
       <input className="qa-inp" placeholder={t('security.identityName')} value={identity.name}
              onChange={e => onChange({ ...identity, name: e.target.value })} />
+      <label className="qa-sec-privchk">
+        <input type="checkbox" checked={!!identity.privileged}
+               onChange={e => onChange({ ...identity, privileged: e.target.checked })} />
+        {t('security.priv.identity')}
+      </label>
+      <span className="qa-meta">{t('security.priv.identityHint')}</span>
       <AuthEditor req={fakeReq} patch={patch} oauthToken={identity._oauthToken} onFetchOAuth={fetchOAuth} />
       <button className="qa-link" onClick={onClose}><Icon name="check" size={13} /> {t('common.done') || 'Done'}</button>
     </div>
@@ -113,6 +119,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   useE(() => { saveMatrixConfig(state); }, [state]);
 
   const summary = useMemo(() => summarize(results), [results]);
+  const privCount = useMemo(() => endpoints.filter(e => endpointPrivileged(e).privileged).length, [endpoints]);
   const findSummary = useMemo(() => summarizeFindings(results), [results]);
   const allFindings = useMemo(() => {
     const out = [];
@@ -148,6 +155,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     setEndpoints(xs => xs.filter(x => x.reqId !== reqId));
     setResults(r => { const n = { ...r }; delete n[reqId]; return n; });
   };
+  const togglePriv = (reqId, val) => setEndpoints(xs => xs.map(e => e.reqId === reqId ? { ...e, privileged: val } : e));
 
   const runner = (ep, identity) => qaRunSavedRequest({ id: ep.reqId }, {
     env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
@@ -259,6 +267,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           <input className="qa-inp qa-inp--mini" value={denySet.join(', ')}
                  onChange={e => setDenySet(e.target.value.split(',').map(s => parseInt(s.trim(), 10)).filter(Number.isFinite))} />
         </label>
+        {privCount > 0 && <span className="qa-sec-privcount">{t('security.priv.count', { count: privCount })}</span>}
       </div>
 
       {!endpoints.length && <div className="qa-sec-empty">{t('security.noEndpoints')}</div>}
@@ -286,7 +295,20 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
               {endpoints.map(ep => (
                 <tr key={ep.reqId}>
                   <th className="qa-sec-rowhead">
-                    <span><MethodBadge method={ep.method} size="sm" /> <code>{ep.path}</code></span>
+                    <span>
+                      <MethodBadge method={ep.method} size="sm" /> <code>{ep.path}</code>
+                      {(() => {
+                        const pv = endpointPrivileged(ep);
+                        return (
+                          <button type="button"
+                                  className={`qa-sec-priv qa-sec-priv--${pv.privileged ? 'on' : 'off'}`}
+                                  title={t('security.priv.title')}
+                                  onClick={() => togglePriv(ep.reqId, !pv.privileged)}>
+                            {pv.privileged ? pv.reasons.map(r => t('security.priv.reason.' + r)).join('·') : t('security.priv.mark')}
+                          </button>
+                        );
+                      })()}
+                    </span>
                     <span className="qa-sec-rowtools">
                       <button onClick={() => run(ep.reqId)} disabled={running} title={t('security.runRow')}><Icon name="play" size={11} /></button>
                       {EXPECTS.map(v => <button key={v} onClick={() => bulkRow(ep.reqId, v)} title={t('security.row.bulk')}>{t('security.expect.' + v)[0]}</button>)}
