@@ -10,6 +10,20 @@ export const SECURITY_STORAGE_KEY = 'qa_security_matrix';
 // per matrix (e.g. back to [401, 403]) when a 404 should mean "missing", not "denied".
 export const DEFAULT_DENY_SET = [401, 403, 404];
 
+// Endpoints that are high-value for BFLA testing: a mutating method, or an
+// admin-ish path token. Used to set smarter default expectations.
+export const MUTATING_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+export const ADMIN_PATH_TOKENS = ['admin', 'internal', 'manage', 'management', 'root', 'sudo', 'privileged', 'superuser'];
+
+// Heuristically classify an endpoint as privileged. Pure; tolerant of empties.
+export function classifyEndpoint(method, path) {
+  const reasons = [];
+  if (MUTATING_METHODS.includes(String(method || '').toUpperCase())) reasons.push('write');
+  const tokens = String(path || '').toLowerCase().split(/[/._\-?=&]+/).filter(Boolean);
+  if (tokens.some((tok) => ADMIN_PATH_TOKENS.includes(tok))) reasons.push('admin-path');
+  return { privileged: reasons.length > 0, reasons };
+}
+
 // Map a real HTTP status to an authorization outcome.
 export function classifyOutcome(status, denySet = DEFAULT_DENY_SET) {
   if (typeof status !== 'number' || !Number.isFinite(status)) return 'other';

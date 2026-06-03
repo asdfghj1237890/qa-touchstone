@@ -244,3 +244,29 @@ describe('persistence — rateLimit', () => {
     expect(loadMatrixConfig().rateLimit).toBeUndefined();
   });
 });
+
+import { classifyEndpoint, MUTATING_METHODS, ADMIN_PATH_TOKENS } from '../qa/authz.js';
+
+describe('classifyEndpoint', () => {
+  it('flags mutating methods as write', () => {
+    expect(classifyEndpoint('POST', '/orders').reasons).toContain('write');
+    expect(classifyEndpoint('delete', '/orders/1').reasons).toContain('write'); // case-insensitive
+    expect(classifyEndpoint('GET', '/orders').privileged).toBe(false);
+  });
+  it('flags admin-ish path tokens (discrete tokens only)', () => {
+    expect(classifyEndpoint('GET', '/admin/users').reasons).toContain('admin-path');
+    expect(classifyEndpoint('GET', '/v1.internal.metrics').reasons).toContain('admin-path');
+    expect(classifyEndpoint('GET', '/badminton/list').privileged).toBe(false); // not a substring match
+  });
+  it('can flag both reasons', () => {
+    expect(classifyEndpoint('DELETE', '/admin/users/1')).toEqual({ privileged: true, reasons: ['write', 'admin-path'] });
+  });
+  it('tolerates null/empty input', () => {
+    expect(classifyEndpoint(null, null)).toEqual({ privileged: false, reasons: [] });
+    expect(classifyEndpoint('', '')).toEqual({ privileged: false, reasons: [] });
+  });
+  it('exposes the heuristic constants', () => {
+    expect(MUTATING_METHODS).toEqual(['POST', 'PUT', 'PATCH', 'DELETE']);
+    expect(ADMIN_PATH_TOKENS).toContain('admin');
+  });
+});
