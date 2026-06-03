@@ -135,4 +135,11 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     expect(document.querySelector('.qa-sec-findsummary')).not.toBeNull();
     expect(document.querySelector('.qa-sec-findpanel')).not.toBeNull();
   });
+
+  it('switches to the Object-access (BOLA) mode via the header toggle', async () => {
+    renderPage();
+    const bolaToggle = screen.getByRole('button', { name: /Object access/i });
+    fireEvent.click(bolaToggle);
+    await waitFor(() => expect(document.querySelector('.qa-bola')).not.toBeNull());
+  });
 });

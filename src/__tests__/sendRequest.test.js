@@ -98,3 +98,20 @@ describe('qaRunSavedRequest — authOverride', () => {
     expect(req.auth.type).toBe('bearer');
   });
 });
+
+describe('qaRunSavedRequest — mutate hook', () => {
+  beforeEach(() => {
+    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
+      { id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/users/42' },
+    ] }] }];
+    window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} } };
+  });
+  it('applies mutate(req) before execution so the sent URL reflects the change', async () => {
+    let sentUrl = null;
+    const mutate = (req) => { sentUrl = req.url; return { ...req, url: req.url.replace('/42', '/99') }; };
+    const resp = await qaRunSavedRequest({ id: 'r1' }, { env: { label: 'None', baseUrl: '' }, mutate });
+    expect(sentUrl).toBe('https://api.test/users/42');   // mutate saw the original built url
+    expect(resp.status).toBe(200);                        // canned path still returns
+  });
+});
