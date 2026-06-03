@@ -51,6 +51,8 @@ describe('RateLimitPanel — runs on the canned path', () => {
     fireEvent.click(screen.getByRole('button', { name: /Send burst/i }));
     await waitFor(() => expect(document.querySelector('.qa-rl-verdict--vuln')).not.toBeNull(), { timeout: 4000 });
     expect(document.querySelector('.qa-sec-findpanel, .qa-rl-findpanel')).not.toBeNull();
+    // The stats card reflects the burst size (N=5 from the rl() helper).
+    expect(document.querySelector('.qa-rl-result').textContent).toContain('5 sent');
   });
 
   it('reports pass when a rate-limit header is present', async () => {

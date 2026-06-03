@@ -170,7 +170,7 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, env = { label: 'N
         <div className="qa-sec-modal" onClick={() => setConfirming(null)}>
           <div className="qa-sec-modal-body qa-rl-confirm" onClick={e => e.stopPropagation()}>
             <h3>{t('rl.confirmTitle')}</h3>
-            <p>{t('rl.confirmBody', { n: confirming.n, target: `${confirming.method} ${confirming.path}`, identity: idName(confirming.identityId) })}</p>
+            <p>{t('rl.confirmBody', { n: confirming.n, concurrency: confirming.concurrency, target: `${confirming.method} ${confirming.path}`, identity: idName(confirming.identityId) })}</p>
             <div className="qa-rl-confirm-actions">
               <button className="qa-link" onClick={() => setConfirming(null)}>{t('rl.cancel')}</button>
               <button className="qa-btn qa-btn--danger" onClick={() => { const test = confirming; setConfirming(null); doRun(test); }}>{t('rl.confirm')}</button>
