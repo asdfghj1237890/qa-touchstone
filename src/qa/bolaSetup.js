@@ -65,3 +65,26 @@ export function detectIdLocation(req) {
     confidence: c.score >= 75 ? 'high' : c.score >= 50 ? 'medium' : 'low', why: c.why,
   }));
 }
+
+// Literal id values present in the request, for one-click fill suggestions.
+export function extractIdCandidates(req) {
+  return detectIdLocation(req).map(c => ({ value: c.value, where: c.why }));
+}
+
+// Merge a cross-tenant preset's identity->id map into a test's idValues.
+// Returns a NEW test; never mutates the input. Extra keys for removed
+// identities are harmless (the engine only runs identities that still exist).
+export function applyPreset(test, preset) {
+  const values = (preset && preset.values) || {};
+  return { ...test, idValues: { ...(test.idValues || {}), ...values } };
+}
+
+// A shape-matched id that should not reference any real object, for the
+// negative control. Deterministic (no RNG — tests + resumability need it).
+export function syntheticIdFor(idLocation, sampleValue) {
+  const s = String(sampleValue == null ? '' : sampleValue);
+  if (UUID_RE.test(s)) return 'ffffffff-eeee-4ddd-8ccc-bbbbaaaa9999';
+  if (HEX24_RE.test(s)) return 'ffffffffffffffffffffffff';
+  if (NUM_RE.test(s)) return '999999999';
+  return 'qa-nonexistent-2c1f9a';
+}
