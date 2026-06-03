@@ -30,3 +30,44 @@ export function buildTriageInput(union, cap = TRIAGE_CAP) {
   }));
   return { input, kept, dropped: Math.max(0, sorted.length - kept.length) };
 }
+
+export function buildTriagePrompt(input) {
+  return (
+    'You are triaging security findings from an automated API scan. ' +
+    'Group related findings, surface the few that truly need a human, and flag likely false positives. ' +
+    'Categories you may use: ' + TRIAGE_CATEGORIES.join(', ') + '. ' +
+    'Return ONLY a JSON object: {"headline": string, "items": [{"title": string, "category": string, ' +
+    '"priority": "p1"|"p2"|"p3", "rationale": string, "findingIndexes": number[], "likelyFalsePositive": boolean}]}. ' +
+    'Reference findings only by their `i` index. Never invent findings.\n\n' +
+    'Findings:\n' + JSON.stringify(input, null, 2)
+  );
+}
+
+// Defensive parse: strip code fences, extract the first balanced JSON object,
+// validate items, resolve findingIndexes back to `kept`, drop invalid refs and
+// zero-ref items, coerce bad enums. Total failure -> empty triage.
+export function parseTriage(raw, kept) {
+  let obj;
+  try {
+    const text = String(raw).replace(/```json/gi, '').replace(/```/g, '');
+    const m = text.match(/\{[\s\S]*\}/);
+    obj = JSON.parse(m ? m[0] : text);
+  } catch { return { headline: '', items: [] }; }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.items)) return { headline: '', items: [] };
+  const items = [];
+  for (const it of obj.items) {
+    if (!it || typeof it !== 'object') continue;
+    const idxs = Array.isArray(it.findingIndexes) ? it.findingIndexes : [];
+    const findings = idxs.filter(n => Number.isInteger(n) && n >= 0 && n < kept.length).map(n => kept[n]);
+    if (!findings.length) continue;   // drop invented / zero-ref items
+    items.push({
+      title: String(it.title || findings[0].title || 'Finding cluster'),
+      category: TRIAGE_CATEGORIES.includes(it.category) ? it.category : 'other',
+      priority: PRIORITIES.includes(it.priority) ? it.priority : 'p3',
+      rationale: String(it.rationale || ''),
+      likelyFalsePositive: it.likelyFalsePositive === true,
+      findings,
+    });
+  }
+  return { headline: String(obj.headline || ''), items };
+}
