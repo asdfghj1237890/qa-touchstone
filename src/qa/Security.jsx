@@ -15,6 +15,7 @@ import {
   SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
 } from './oracles.js';
 import { BolaPanel } from './BolaPanel.jsx';
+import { runBola, applyIdLocation } from './bola.js';
 import { RateLimitPanel } from './RateLimitPanel.jsx';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
@@ -115,6 +116,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [aiScan, setAiScan] = useS({ busy: false, error: null });
   const [mode, setMode] = useS('matrix');
   const [bola, setBola] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.bola) || { tests: [] }; });
+  const [bolaResults, setBolaResults] = useS({});
   const [rateLimit, setRateLimit] = useS(() => { const cfg = loadMatrixConfig(); return (cfg && cfg.rateLimit) || { tests: [] }; });
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
   const [runStamp, setRunStamp] = useS(0);   // bumped when a full scan completes
@@ -273,6 +275,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     ? !!(window.claude && window.claude.complete)
     : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl;
 
+  // Shared per-request runner for BOLA. The panel's onRun and the later suite
+  // adapter use this SAME closure so Security owns the runner for reuse.
+  const bolaRunner = (test, identity, idValue) => qaRunSavedRequest({ id: test.reqId }, {
+    env, vars, cookies, sslVerify, authOverride: identity.auth, oauthToken: identity._oauthToken,
+    mutate: (req) => applyIdLocation(req, test.idLocation, idValue),
+  });
+
   return (
     <div className="qa-sec">
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
@@ -296,6 +305,16 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         />
       ) : mode === 'bola' ? (
         <BolaPanel identities={identities} bola={bola} setBola={setBola}
+                   results={bolaResults} setResults={setBolaResults}
+                   onRun={({ negativeControl, signal }) => runBola({ identities, tests: bola.tests }, bolaRunner, {
+                     signal, negativeControl,
+                     onControl: (testId, control) => setBolaResults(r => ({ ...r, [testId]: { ...(r[testId] || { reference: {}, attacks: {} }), control } })),
+                     onCell: (testId, attackerId, ownerId, cell) => setBolaResults(r => {
+                       const tr = r[testId] || { reference: {}, attacks: {} };
+                       if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
+                       return { ...r, [testId]: { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } } };
+                     }),
+                   })}
                    env={env} vars={vars} cookies={cookies} sslVerify={sslVerify} onFindings={onBolaFindings} />
       ) : mode === 'ratelimit' ? (
         <RateLimitPanel identities={identities} rateLimit={rateLimit} setRateLimit={setRateLimit}

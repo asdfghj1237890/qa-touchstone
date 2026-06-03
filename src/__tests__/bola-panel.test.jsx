@@ -3,6 +3,22 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BolaPanel } from '../qa/BolaPanel.jsx';
 import { I18nProvider } from '../qa/i18n.jsx';
+import { runBola } from '../qa/bola.js';
+
+function ControlledBola(props) {
+  const [results, setResults] = React.useState({});
+  const onRun = async ({ runner, negativeControl }) => {
+    await runBola({ identities: props.identities, tests: props.bola.tests }, runner, {
+      signal: undefined, negativeControl,
+      onCell: (testId, attackerId, ownerId, cell) => setResults(r => {
+        const tr = r[testId] || { reference: {}, attacks: {} };
+        if (attackerId == null) return { ...r, [testId]: { ...tr, reference: { ...tr.reference, [ownerId]: cell } } };
+        return { ...r, [testId]: { ...tr, attacks: { ...tr.attacks, [attackerId]: { ...(tr.attacks[attackerId] || {}), [ownerId]: cell } } } };
+      }),
+    });
+  };
+  return <BolaPanel {...props} results={results} setResults={setResults} onRun={onRun} />;
+}
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };
@@ -26,7 +42,7 @@ function renderPanel() {
   const setBola = (next) => { cur = typeof next === 'function' ? next(cur) : next; };
   return render(
     <I18nProvider>
-      <BolaPanel identities={identities} bola={bola} setBola={setBola}
+      <ControlledBola identities={identities} bola={bola} setBola={setBola}
                  env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
     </I18nProvider>
   );
@@ -68,7 +84,7 @@ describe('BolaPanel — runs on the canned path', () => {
     const setBola = (next) => { cur = typeof next === 'function' ? next(cur) : next; };
     render(
       <I18nProvider>
-        <BolaPanel identities={identities} bola={bola} setBola={setBola} onFindings={spy}
+        <ControlledBola identities={identities} bola={bola} setBola={setBola} onFindings={spy}
                    env={{ label: 'None', baseUrl: '' }} vars={window.QA.VARIABLES} cookies={[]} sslVerify={true} />
       </I18nProvider>
     );
