@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -55,14 +55,36 @@ jobs:
           releaseDraft: false
           prerelease: false
           releaseBody: |
+            Desktop installers for **Windows** and **macOS**. These builds are **not code-signed**, so the OS warns on first launch — bypass steps below. English first, 中文 在後。
+
+            ## English
+
+            ### Windows (NSIS installer)
+            If you see "Windows protected your PC":
+            1. Click **More info**
+            2. Click **Run anyway**
+
+            ### macOS (DMG · Apple Silicon / arm64)
+            Gatekeeper blocks unsigned, un-notarized apps. Pick one:
+            - **Right-click open**: in Applications, right-click (Control-click) QA Touchstone → **Open** → confirm **Open**.
+            - **System Settings** (macOS 13+, if right-click has no Open): System Settings → Privacy & Security → find the blocked-app notice → **Open Anyway**.
+            - If it reports the app is "damaged" (quarantine), run in Terminal:
+              `xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"`
+
+            ⚠️ macOS is **Apple Silicon (arm64) only**; Intel Macs are not yet supported.
+
+            ---
+
+            ## 中文
+
             桌面版安裝檔（Windows / macOS）。**這些 build 未經程式碼簽章**，第一次開啟需手動略過系統防護提示：
 
             ### Windows（NSIS 安裝檔）
-            出現「Windows 已保護您的電腦 / Windows protected your PC」時：
-            1. 點 **「其他資訊 / More info」**
-            2. 點 **「仍要執行 / Run anyway」**
+            出現「Windows 已保護您的電腦」時：
+            1. 點 **「其他資訊」**
+            2. 點 **「仍要執行」**
 
-            ### macOS（DMG，Apple Silicon / arm64）
+            ### macOS（DMG · Apple Silicon / arm64）
             因未簽章、未公證，Gatekeeper 會擋。任選一種：
             - **右鍵開啟**：在「應用程式」對 QA Touchstone 按右鍵（Control+點一下）→「打開」→ 對話框再按一次「打開」。
             - **系統設定**（macOS 13+，若右鍵沒有「打開」）：系統設定 → 隱私權與安全性 → 找到被阻擋訊息 → 「仍要打開」。
