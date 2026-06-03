@@ -1345,3 +1345,10 @@
   .qa-find-detail > td { background: var(--bg-1); padding: 10px 14px; }
   .qa-find-detail .qa-inp { margin: 6px 0; }
   .qa-find-ctl { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; font-size: 12px; color: var(--text-dim); }
+
+  .qa-suite { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .qa-suite-status { color: var(--text-dim); font-size: 13px; }
+  .qa-suite-status--warn { color: var(--qa-warn, #d97706); }
+  .qa-suite-pipe { display: inline-flex; gap: 6px; }
+  .qa-suite-step { font-size: 12px; color: var(--text-faint); }
+  .qa-suite-step--on { color: var(--accent); font-weight: 600; }

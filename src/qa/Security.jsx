@@ -20,6 +20,7 @@ import { RateLimitPanel } from './RateLimitPanel.jsx';
 import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit.js';
 import { TriagePanel } from './TriagePanel.jsx';
 import { FindingsPanel } from './FindingsPanel.jsx';
+import { SuiteRunBar } from './SuiteRunBar.jsx';
 import { runSuite } from './securitySuite.js';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
@@ -382,7 +383,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
 
   return (
     <div className="qa-sec">
-      <button className="qa-btn qa-btn--primary" onClick={runFullSuite} disabled={suite.running}>Run full security suite</button>
+      <SuiteRunBar suite={suite} onRun={runFullSuite} onStop={stopSuite} />
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
