@@ -1,8 +1,11 @@
 // src/__tests__/findings.test.js
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  FP_VERSION, ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
+  FP_VERSION, LIFECYCLE_KEY, SNAPSHOTS_KEY,
+  ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
   snapshotOf, scopeHashOf, diffRuns, gateCount,
+  loadLifecycle, saveLifecycle, upsertRecord,
+  loadSnapshots, saveSnapshots, recordRun, pinBaseline,
 } from '../qa/findings.js';
 
 const matrixF = (over = {}) => ({
@@ -172,5 +175,56 @@ describe('gateCount', () => {
   it('with no baseline (all new), counts every high/critical not suppressed', () => {
     const diff = diffRuns(cur, []);
     expect(gateCount(cur, lc(), diff)).toBe(3); // a, b, d
+  });
+});
+
+describe('lifecycle storage', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('returns an empty versioned store when nothing is saved', () => {
+    expect(loadLifecycle()).toEqual({ fpVersion: FP_VERSION, records: {}, legacy: null });
+  });
+  it('tolerates corrupt JSON without throwing', () => {
+    localStorage.setItem(LIFECYCLE_KEY, '{ not json');
+    expect(loadLifecycle()).toEqual({ fpVersion: FP_VERSION, records: {}, legacy: null });
+  });
+  it('round-trips records through save/load', () => {
+    const s = upsertRecord(loadLifecycle(), 'fp1', { suppressed: true, note: 'n' }, '2026-01-01');
+    saveLifecycle(s);
+    const back = loadLifecycle();
+    expect(back.records.fp1.suppressed).toBe(true);
+    expect(back.records.fp1.note).toBe('n');
+    expect(back.records.fp1.status).toBe('open'); // default filled by upsert
+  });
+  it('quarantines records from an older fpVersion as legacy (never dropped)', () => {
+    localStorage.setItem(LIFECYCLE_KEY, JSON.stringify({ fpVersion: 0, records: { oldfp: { note: 'x' } } }));
+    const s = loadLifecycle();
+    expect(s.records).toEqual({});
+    expect(s.legacy).toEqual({ fpVersion: 0, records: { oldfp: { note: 'x' } } });
+  });
+});
+
+describe('snapshot storage', () => {
+  beforeEach(() => localStorage.clear());
+  const snap = (fp) => ({ runId: 'r', createdAt: 'T', scopeHash: 'sh', items: [item(fp)] });
+
+  it('defaults to null baseline/lastRun', () => {
+    expect(loadSnapshots()).toEqual({ fpVersion: FP_VERSION, baseline: null, lastRun: null });
+  });
+  it('recordRun sets lastRun without touching baseline', () => {
+    let s = pinBaseline(loadSnapshots(), snap('base'));
+    s = recordRun(s, snap('latest'));
+    expect(s.baseline.items[0].fp).toBe('base');
+    expect(s.lastRun.items[0].fp).toBe('latest');
+  });
+  it('pinBaseline sets baseline without touching lastRun', () => {
+    let s = recordRun(loadSnapshots(), snap('latest'));
+    s = pinBaseline(s, snap('pinned'));
+    expect(s.lastRun.items[0].fp).toBe('latest');
+    expect(s.baseline.items[0].fp).toBe('pinned');
+  });
+  it('round-trips through save/load', () => {
+    saveSnapshots(pinBaseline(loadSnapshots(), snap('base')));
+    expect(loadSnapshots().baseline.items[0].fp).toBe('base');
   });
 });

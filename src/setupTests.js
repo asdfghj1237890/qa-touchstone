@@ -5,6 +5,36 @@
 import '@testing-library/jest-dom/vitest';
 import { vi, beforeEach, afterEach } from 'vitest';
 
+// Node.js 25 ships a built-in localStorage stub that lacks setItem/getItem/clear.
+// Install a fully-functional in-memory replacement so all tests can use the Web
+// Storage API as they would in a real browser (jsdom environment).
+(function installWebStorage() {
+  function makeStorage() {
+    let store = Object.create(null);
+    return {
+      get length() { return Object.keys(store).length; },
+      key(n) { return Object.keys(store)[n] ?? null; },
+      getItem(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem(k, v) { store[String(k)] = String(v); },
+      removeItem(k) { delete store[String(k)]; },
+      clear() { store = Object.create(null); },
+    };
+  }
+  const ls = makeStorage();
+  const ss = makeStorage();
+  // Overwrite both the global and window references so any access path works.
+  try {
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true });
+    Object.defineProperty(globalThis, 'sessionStorage', { value: ss, configurable: true, writable: true });
+  } catch (_) { /* already defined non-configurable — leave it */ }
+  if (typeof window !== 'undefined') {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: ls, configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: ss, configurable: true, writable: true });
+    } catch (_) { /* already non-configurable */ }
+  }
+}());
+
 // Mock IntersectionObserver for components that use it
 global.IntersectionObserver = class IntersectionObserver {
   constructor() {}
