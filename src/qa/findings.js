@@ -3,7 +3,7 @@
 // Stable identity, effective severity, run diff, gate counting, and versioned
 // localStorage persistence for findings management. UI lives in FindingsPanel.
 import './setup.js';
-import { SEVERITY_ORDER, normalizePath } from './oracles.js';
+import { normalizePath } from './oracles.js';
 
 export const FP_VERSION = 1;
 export const LIFECYCLE_KEY = 'qa_security_lifecycle';
