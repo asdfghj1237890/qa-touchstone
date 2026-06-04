@@ -92,8 +92,19 @@ The current public-facing scope is API testing only:
   or debug fields).
 - **Configurable AI provider**: every AI feature (test generation, response
   review, sensitive-data scan, and security triage) runs on a provider you
-  choose — built-in Claude with no API key, OpenAI, or any OpenAI-compatible
-  endpoint — with credentials kept on the local machine.
+  choose — built-in Claude with no API key, OpenAI, or a custom / self-managed
+  (enterprise on-prem) OpenAI-compatible endpoint — with credentials kept on the
+  local machine.
+- **AI privacy mode**: all AI calls pass through one egress chokepoint that is
+  redacted-by-default. Three modes — `full context`, `redacted` (default), and
+  `local only` — control what leaves the machine. `redacted` masks URLs (host
+  stripped), bodies (structure-preserving — values become type tokens, keys
+  kept), headers, and identifiers (email, tokens, UUID, IP, Luhn-valid cards,
+  SSN) locally before sending, and reduces OpenAPI specs to path shape (no real
+  host, no example values). `local only` blocks cloud providers and allows only
+  a self-managed endpoint (loopback / private / explicitly attested). A preview
+  shows the exact prompt before it is sent, and a CI / org lockdown (env
+  `QA_ALLOW_EXTERNAL_AI`) can force external AI off.
 - **Docs and codegen**: generate API docs, standalone HTML exports, and request
   code snippets (cURL, Python, JavaScript, HTTPie).
 - **Realtime testing**: test WebSocket and Server-Sent Events streams.
@@ -136,8 +147,10 @@ flowchart LR
   K6 --> APIs
   Realtime --> APIs
 
-  AI --> LLM["Built-in / OpenAI-compatible LLM"]
-  Security --> LLM
+  AI --> AIGate["AI privacy chokepoint (qaAiSend): redact + preview + egress policy"]
+  Security --> AIGate
+  AIGate --> LLM["Built-in / OpenAI / self-managed LLM"]
+  AIGate --> AIPolicy["Egress policy (Rust get_ai_policy / lockdown)"]
   Findings --> Storage["localStorage + local config files"]
   UI --> Storage
 ```
@@ -259,9 +272,12 @@ Runtime configuration is stored locally. Common generated files include:
 - `postman_collections_cache.json` for cached collection metadata
 - `api_credential_configs.json` for reusable API credential profile metadata
 
-LLM settings are stored in browser localStorage and sent directly to the chosen
-provider. Do not commit credentials, generated cache files, local tokens, or
-machine-specific paths.
+LLM settings are stored in browser localStorage. AI privacy mode is
+redacted-by-default: prompts are masked locally and shown in a preview before
+being sent to the chosen provider; `local only` mode restricts AI to a
+self-managed endpoint, and a CI / org lockdown (`QA_ALLOW_EXTERNAL_AI`) can
+disable external AI entirely. Do not commit credentials, generated cache files,
+local tokens, or machine-specific paths.
 
 Security run records persist only a compact, redacted snapshot — request/response
 bodies are never stored. The richer redacted evidence artifact is held in memory

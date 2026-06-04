@@ -82,7 +82,16 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
   response 找出敏感資料外洩（PII、secrets、內部或 debug 欄位）。
 - **可設定的 AI 供應商（Configurable AI provider）**：所有 AI 功能（測試產生、
   response review、敏感資料掃描、安全分流）都跑在你選的供應商上——內建 Claude
-  （免 API key）、OpenAI，或任何 OpenAI 相容的 endpoint——憑證只留在本機。
+  （免 API key）、OpenAI，或自訂 / 企業自管（on-prem）的 OpenAI 相容 endpoint
+  ——憑證只留在本機。
+- **AI 隱私模式（AI privacy mode）**：所有 AI 呼叫都經過單一 egress chokepoint，
+  且預設遮蔽。三段模式——`full context`、`redacted`（預設）、`local only`
+  ——決定哪些資料離開裝置。`redacted` 在送出前於本機遮蔽 URL（去 host）、回應內容
+  （結構保留、值轉型別 token、保留 key 名）、headers 與識別碼（email、token、UUID、
+  IP、Luhn 卡號、SSN），並把 OpenAPI 規格縮成 path shape（不送真實 host、不送 example
+  值）；`local only` 封鎖雲端供應商、只允許自管端點（loopback／私網／已聲明）。送出前
+  會顯示完整 prompt 預覽，且 CI／組織 lockdown（env `QA_ALLOW_EXTERNAL_AI`）可強制
+  關閉外部 AI。
 - **Docs and codegen**：產生 API docs、獨立 HTML 匯出，以及 request code
   snippets（cURL、Python、JavaScript、HTTPie）。
 - **Realtime testing**：測試 WebSocket 與 Server-Sent Events streams。
@@ -124,8 +133,10 @@ flowchart LR
   K6 --> APIs
   Realtime --> APIs
 
-  AI --> LLM["Built-in / OpenAI-compatible LLM"]
-  Security --> LLM
+  AI --> AIGate["AI privacy chokepoint (qaAiSend): redact + preview + egress policy"]
+  Security --> AIGate
+  AIGate --> LLM["Built-in / OpenAI / self-managed LLM"]
+  AIGate --> AIPolicy["Egress policy (Rust get_ai_policy / lockdown)"]
   Findings --> Storage["localStorage + local config files"]
   UI --> Storage
 ```
@@ -245,7 +256,9 @@ Runtime configuration 儲存在本機。常見產生檔案包含：
 - `postman_collections_cache.json`：cached collection metadata
 - `api_credential_configs.json`：可重複使用的 API credential profile metadata
 
-LLM settings 儲存在 browser localStorage，並直接送到你選擇的 provider。
+LLM settings 儲存在 browser localStorage。AI 隱私模式預設遮蔽：prompt 會在本機
+遮蔽、並於送出前顯示預覽,才送到你選擇的 provider;`local only` 模式只允許自管
+端點,CI／組織 lockdown（`QA_ALLOW_EXTERNAL_AI`）可完全停用外部 AI。
 請不要 commit credentials、generated cache files、local tokens 或
 machine-specific paths。
 
