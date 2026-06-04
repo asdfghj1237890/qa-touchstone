@@ -1,7 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { Icon, Spinner, StatusPill, highlightJson } from './components.jsx';
-import { qaCallLLM } from './llm.js';
+import { qaAiSend } from './llm.js';
 import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — response panel (hero: send → response animates in) ─────
@@ -150,21 +150,21 @@ function ResponsePanel({ state, response, req, env, varMap, testList }) {
     if (!response) return;
     setAiState('loading'); setAiText('');
     const expected = (testList || []).map(t => window.qaAssertLabel ? window.qaAssertLabel(t) : JSON.stringify(t));
-    const bodyStr = response.body == null ? t('response.prompt.noBody') : JSON.stringify(response.body).slice(0, 1500);
-    const prompt = [
-      'You are a senior QA engineer reviewing one API response. Be terse (max 4 lines).',
-      'Say whether it looks correct, and flag anything suspicious (wrong status, error body, missing fields, security smells).',
-      `REQUEST: ${req.method} ${req.url}`,
-      expected.length ? `EXPECTED (assertions): ${expected.join('; ')}` : 'EXPECTED: (none specified)',
-      `RESPONSE: ${response.status} ${response.statusText}, ${response.time}ms`,
-      `BODY: ${bodyStr}`,
-    ].join('\n');
     try {
-      const out = await qaCallLLM(prompt);
+      const out = await qaAiSend({
+        site: 'response-review',
+        kind: 'response-review',
+        payload: {
+          method: req.method, url: req.url,
+          status: response.status, statusText: response.statusText, time: response.time,
+          expected, body: response.body, headers: response.headers,
+        },
+      });
       if (!aiMountedRef.current) return;
       setAiText(String(out || '').trim() || t('response.ai.empty')); setAiState('done');
     } catch (e) {
       if (!aiMountedRef.current) return;
+      if (e && e.name === 'AiCancelledError') { setAiState('idle'); return; }
       setAiText(t('response.ai.error', { message: String(e && e.message || e) })); setAiState('error');
     }
   };
