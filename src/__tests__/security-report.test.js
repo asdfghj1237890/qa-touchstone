@@ -116,6 +116,30 @@ describe('sevToSarifLevel', () => {
   });
 });
 
+describe('buildReport redaction levels', () => {
+  it('"strict" omits both evidence and evidenceArtifact', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'strict' });
+    expect(rep.findings[0].evidence).toBeUndefined();
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+    expect(rep.meta.redaction).toBe('strict');
+  });
+  it('"redacted" keeps the short evidence but NOT the artifact', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'redacted' });
+    expect(rep.findings[0].evidence).toBe('eyJ…<redacted>…0');
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+  });
+  it('"evidence" attaches the artifact from the in-memory map by fp', () => {
+    const map = new Map([['fp1', { engine: 'matrix', request: { method: 'GET', url: '/me' } }]]);
+    const rep = buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map });
+    expect(rep.meta.redaction).toBe('evidence');
+    expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'matrix' });
+  });
+  it('"evidence" falls back to a persisted item artifact when the map has no entry', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'bola' } })]), null, lc(), { redaction: 'evidence' });
+    expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'bola' });
+  });
+});
+
 describe('reportToSarif', () => {
   const parse = (model) => JSON.parse(reportToSarif(model));
   it('emits a valid 2.1.0 skeleton with unique rules and a result per current finding', () => {

@@ -21,7 +21,9 @@ function annOf(records, fp) {
 // Build the normalized report model. `severity` is the recorded effective
 // severity (frozen in the run item); annotations join from the CURRENT lifecycle.
 export function buildReport(runRecord, baselineRecord, lifecycle, opts = {}) {
-  const redaction = opts.redaction === 'strict' ? 'strict' : 'redacted';
+  const redaction = opts.redaction === 'strict' ? 'strict'
+    : (opts.redaction === 'evidence' ? 'evidence' : 'redacted');
+  const evidenceSrc = opts.evidence;
   const records = (lifecycle && lifecycle.records) || {};
   const curItems = (runRecord && runRecord.items) || [];
   const baseItems = (baselineRecord && baselineRecord.items) || [];
@@ -41,6 +43,10 @@ export function buildReport(runRecord, baselineRecord, lifecycle, opts = {}) {
       path: it.path || '', count: it.count || 1, ...annOf(records, it.fp),
     };
     if (redaction !== 'strict' && it.evidence) f.evidence = it.evidence;
+    if (redaction === 'evidence') {
+      const art = (evidenceSrc && evidenceSrc.get && evidenceSrc.get(it.fp)) || it.evidenceArtifact || null;
+      if (art) f.evidenceArtifact = art;
+    }
     findings.push(f);
   }
 
