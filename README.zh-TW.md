@@ -68,8 +68,11 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
   並將每次掃描與釘選的基準（baseline）比對——新增/延續/已消失標記，加上新增高/嚴重計數。
 - **安全報告 / CI 產物（Security reports / CI artifacts）**：將一次完整的 suite 執行
   匯出為 JSON 產物、HTML 主管報告、JUnit XML（CI 測試檢查）或 SARIF（GitHub code
-  scanning）——以「新增的高/嚴重發現」作為 gate，並提供遮蔽政策（遮蔽或省略佐證）
-  以保護離開本機的產物。
+  scanning）——以「新增的高/嚴重發現」作為 gate，並提供三段遮蔽等級給離開本機的產物：
+  `strict` 完全不含佐證、`redacted` 保留短遮罩值、`evidence` 再附上一份結構保留、
+  **預設遮掩（mask-by-default）** 的 request/response 摘要以定位每筆發現——除了發現本身那一個
+  葉節點外，其餘值一律型別化，確保 token、cookie、PII 永不外洩。該佐證摘要為即時生成，
+  僅在明確選擇時才落地進該次執行。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
@@ -108,7 +111,9 @@ flowchart LR
   Security --> Executor
 
   Security --> Findings["Findings lifecycle + baseline diff (RunRecord)"]
+  Findings --> Evidence["Redacted evidence artifact (mask-by-default)"]
   Findings --> Reports["Security reports: JSON / HTML / JUnit / SARIF"]
+  Evidence --> Reports
 
   Executor --> Vars["Variables + Environments"]
   Executor --> Cookies["Local Cookie Jar"]
@@ -243,6 +248,10 @@ Runtime configuration 儲存在本機。常見產生檔案包含：
 LLM settings 儲存在 browser localStorage，並直接送到你選擇的 provider。
 請不要 commit credentials、generated cache files、local tokens 或
 machine-specific paths。
+
+安全執行記錄只會持久化一份壓縮、已遮蔽的 snapshot——絕不儲存 request/response body。
+較完整的「已遮蔽佐證摘要」僅在當前工作階段保留在記憶體，唯有你明確選擇時才會寫入
+已儲存的執行（或釘選的 baseline）。
 
 </details>
 

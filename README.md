@@ -75,8 +75,13 @@ The current public-facing scope is API testing only:
   badges plus a new-high/critical counter.
 - **Security reports / CI artifacts**: export a completed suite run as a JSON
   artifact, an HTML executive report, JUnit XML (CI test checks), or SARIF
-  (GitHub code scanning) — gated on new high/critical findings, with a redaction
-  policy (mask or omit evidence) for artifacts that leave the machine.
+  (GitHub code scanning) — gated on new high/critical findings, with three
+  redaction levels for artifacts that leave the machine: `strict` omits evidence
+  entirely, `redacted` keeps a short masked value, and `evidence` attaches a
+  structure-preserving, **mask-by-default** request/response summary that locates
+  each finding while guaranteeing tokens, cookies, and PII never leak (every leaf
+  is type-tokenized except the finding itself). The evidence summary is generated
+  on demand and only persisted into a run on explicit opt-in.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress
@@ -118,7 +123,9 @@ flowchart LR
   Security --> Executor
 
   Security --> Findings["Findings lifecycle + baseline diff (RunRecord)"]
+  Findings --> Evidence["Redacted evidence artifact (mask-by-default)"]
   Findings --> Reports["Security reports: JSON / HTML / JUnit / SARIF"]
+  Evidence --> Reports
 
   Executor --> Vars["Variables + Environments"]
   Executor --> Cookies["Local Cookie Jar"]
@@ -255,6 +262,11 @@ Runtime configuration is stored locally. Common generated files include:
 LLM settings are stored in browser localStorage and sent directly to the chosen
 provider. Do not commit credentials, generated cache files, local tokens, or
 machine-specific paths.
+
+Security run records persist only a compact, redacted snapshot — request/response
+bodies are never stored. The richer redacted evidence artifact is held in memory
+for the current session and only written into a saved run (or pinned baseline)
+when you explicitly opt in.
 
 </details>
 
