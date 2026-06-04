@@ -1,6 +1,6 @@
 {
   "name": "qa-touchstone",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "private": true,
   "description": "A local-first, Postman-compatible desktop workspace for API QA — REST/GraphQL client, collection runner, k6 performance testing, security testing (RBAC/BOLA/rate-limit) with CI-ready reports, realtime (WS/SSE), and AI assistance.",
   "scripts": {
