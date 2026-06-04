@@ -5,9 +5,10 @@
 import './setup.js';
 import { qaAiSend } from './llm.js';
 import { SEVERITY_ORDER } from './oracles.js';
+import { TRIAGE_CATEGORIES } from './triageConstants.js';
 
 export const TRIAGE_CAP = 150;
-export const TRIAGE_CATEGORIES = ['object-authz', 'schema-drift', 'sensitive-exposure', 'rate-limit', 'auth-matrix', 'false-positive', 'other'];
+export { TRIAGE_CATEGORIES };
 const PRIORITIES = ['p1', 'p2', 'p3'];
 
 // Normalize one engine's findings into the flat triage shape with a back-ref.

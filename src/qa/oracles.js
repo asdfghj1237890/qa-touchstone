@@ -2,7 +2,6 @@
 // Scans a captured response for sensitive-data exposure and schema/contract
 // drift, producing Finding[]. UI lives in Security.jsx; this file is unit-tested.
 import './setup.js';
-import { qaAiSend } from './llm.js';
 
 export const SEVERITY_ORDER = ['info', 'low', 'medium', 'high', 'critical'];
 
@@ -206,11 +205,14 @@ export function summarizeFindings(results) {
 }
 
 // Optional, on-demand only. `send` is injectable for tests; defaults to the
-// shared qaAiSend. Never called automatically and never blocks a matrix run.
-export async function scanSensitiveLLM(payload, send = qaAiSend) {
+// shared qaAiSend, imported lazily so this module doesn't statically depend on
+// llm.js (which would form an oracles → llm → aiPrivacy → evidence → oracles
+// import cycle). Never called automatically and never blocks a matrix run.
+export async function scanSensitiveLLM(payload, send) {
+  const doSend = send || (await import('./llm.js')).qaAiSend;
   let raw;
   try {
-    raw = await send({ site: 'sensitive-scan', kind: 'sensitive-scan', payload: { body: payload && payload.body, headers: (payload && payload.headers) || {} } });
+    raw = await doSend({ site: 'sensitive-scan', kind: 'sensitive-scan', payload: { body: payload && payload.body, headers: (payload && payload.headers) || {} } });
   } catch (e) {
     if (e && e.name === 'AiCancelledError') return [];
     throw new Error('LLM scan failed: ' + ((e && e.message) || e));

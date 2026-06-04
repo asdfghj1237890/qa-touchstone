@@ -6,7 +6,7 @@
 // ONLY — clipboard/export/report redaction is separate (see securityReport.js).
 import './setup.js';
 import { snippetAround, headerVal } from './evidence.js';
-import { TRIAGE_CATEGORIES } from './triage.js';
+import { TRIAGE_CATEGORIES } from './triageConstants.js';
 
 export const PRIVACY_DEFAULT_CFG = {
   mode: 'redacted',            // 'full' | 'redacted' | 'local'
