@@ -22,6 +22,7 @@ import { buildReq } from './qa/buildReq.js';
 import { requestOAuthToken } from './qa/oauth.js';
 import { I18nProvider } from './qa/i18n.jsx';
 import { useI18n } from './qa/useI18n.js';
+import { PromptPreviewHost } from './qa/PromptPreview.jsx';
 import api from './api/index.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
@@ -387,6 +388,7 @@ function AppShell() {
           <span className="qa-toast-cta">{t('toast.viewJar')}</span>
         </div>
       )}
+      <PromptPreviewHost />
     </div>
   );
 }
