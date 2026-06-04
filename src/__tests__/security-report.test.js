@@ -138,6 +138,11 @@ describe('buildReport redaction levels', () => {
     const rep = buildReport(run([item({ evidenceArtifact: { engine: 'bola' } })]), null, lc(), { redaction: 'evidence' });
     expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'bola' });
   });
+  it('"evidence" emits no evidenceArtifact key when neither map nor item has one', () => {
+    const rep = buildReport(run([item()]), null, lc(), { redaction: 'evidence' });
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+    expect('evidenceArtifact' in rep.findings[0]).toBe(false);
+  });
 });
 
 describe('reportToSarif', () => {
