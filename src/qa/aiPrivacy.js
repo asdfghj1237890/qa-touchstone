@@ -134,3 +134,26 @@ export function redactBody(body, headers) {
     byteLength: typeof body === 'string' ? body.length : 0,
   } };
 }
+
+// Drop scheme+host, keep path, collapse id-like segments to {id}, keep query keys
+// and mask query values. NOTE: deliberately separate from evidence.redactUrl
+// (which preserves host for report artifacts).
+const ID_SEG = /^\d+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function redactUrlForAI(url) {
+  try {
+    const s = String(url == null ? '' : url).split('#')[0];
+    let pathQuery = s;
+    const m = s.match(/^[a-z][a-z0-9+.-]*:\/\/[^/]*(\/.*)?$/i);
+    if (m) pathQuery = m[1] || '/';
+    const qIdx = pathQuery.indexOf('?');
+    const pathPart = qIdx < 0 ? pathQuery : pathQuery.slice(0, qIdx);
+    const queryPart = qIdx < 0 ? null : pathQuery.slice(qIdx + 1);
+    const segs = pathPart.split('/').map(seg => (seg && ID_SEG.test(seg) ? '{id}' : seg)).join('/');
+    if (queryPart == null) return segs || '/';
+    const q = queryPart.split('&').map(p => {
+      const i = p.indexOf('=');
+      return i < 0 ? p : p.slice(0, i) + '=<redacted>';
+    }).join('&');
+    return (segs || '/') + '?' + q;
+  } catch { return '<redacted-url>'; }
+}
