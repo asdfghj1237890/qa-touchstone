@@ -1,6 +1,6 @@
 // src/__tests__/evidence.test.js
 import { describe, it, expect } from 'vitest';
-import { leafToken, tokenizePath, snippetAround, SNIPPET_KEYS } from '../qa/evidence.js';
+import { leafToken, tokenizePath, snippetAround, SNIPPET_KEYS, REDACTED } from '../qa/evidence.js';
 
 describe('leafToken', () => {
   it('emits a type token carrying no value characters', () => {
@@ -45,5 +45,33 @@ describe('snippetAround', () => {
     for (let i = 0; i < SNIPPET_KEYS + 5; i++) big['k' + i] = i;
     const s = snippetAround({ wrap: big }, 'wrap.k0');
     expect(s.truncated).toBe(true);
+  });
+});
+
+import { redactUrl, redactHeaders } from '../qa/evidence.js';
+
+describe('redactUrl', () => {
+  it('keeps path + query keys, masks query values', () => {
+    expect(redactUrl('/api/orders/123?token=abc&page=2'))
+      .toBe('/api/orders/123?token=<redacted>&page=<redacted>');
+  });
+  it('masks a secret-like (high-entropy) path segment', () => {
+    const out = redactUrl('/reset/eyJhbGciOiJI.eyJzdWIiOiJ.SflKxwRJ');
+    expect(out).toBe('/reset/' + REDACTED);
+  });
+  it('leaves short slug segments intact', () => {
+    expect(redactUrl('/api/orders/42')).toBe('/api/orders/42');
+  });
+});
+
+describe('redactHeaders', () => {
+  it('fully masks denylisted + name-pattern headers, passes others through', () => {
+    const out = redactHeaders({
+      Authorization: 'Bearer x', Cookie: 'a=b', 'x-session-id': 's', 'content-type': 'application/json',
+    });
+    expect(out.Authorization).toBe(REDACTED);
+    expect(out.Cookie).toBe(REDACTED);
+    expect(out['x-session-id']).toBe(REDACTED);
+    expect(out['content-type']).toBe('application/json');
   });
 });

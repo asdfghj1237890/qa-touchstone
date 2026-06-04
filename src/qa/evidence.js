@@ -12,6 +12,10 @@ export const REDACTED = '<redacted>';
 export const SNIPPET_DEPTH = 2;
 export const SNIPPET_KEYS = 12;
 
+const HEADER_DENY = /^(authorization|cookie|set-cookie|x-api-key|proxy-authorization)$/i;
+const HEADER_DENY_SUBSTR = /(token|secret|key|auth|session|cookie)/i;
+const SECRET_VALUE = /eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9_-]{32,}/;
+
 // A primitive leaf -> a type token carrying NO value characters.
 export function leafToken(v) {
   if (v === null) return '<null>';
@@ -75,4 +79,40 @@ export function snippetAround(body, findingPath) {
     const markKey = tokens[tokens.length - 1];
     return { snippetPath: findingPath, tree: scrub(node, markKey, 0, caps), truncated: caps.truncated };
   } catch { return null; }
+}
+
+// Keep path structure (mask secret-like segments); keep query keys, mask values.
+export function redactUrl(url) {
+  try {
+    const s = String(url == null ? '' : url);
+    const qIdx = s.indexOf('?');
+    const pathPart = qIdx < 0 ? s : s.slice(0, qIdx);
+    const queryPart = qIdx < 0 ? null : s.slice(qIdx + 1);
+    const segs = pathPart.split('/').map(seg => (seg && SECRET_VALUE.test(seg)) ? REDACTED : seg).join('/');
+    if (queryPart == null) return segs;
+    const q = queryPart.split('&').map(pair => {
+      const i = pair.indexOf('=');
+      return i < 0 ? pair : pair.slice(0, i) + '=' + REDACTED;
+    }).join('&');
+    return segs + '?' + q;
+  } catch { return REDACTED; }
+}
+
+// Fully mask denylisted header values; pass others through as strings.
+export function redactHeaders(headers) {
+  const out = {};
+  try {
+    for (const k of Object.keys(headers || {})) {
+      out[k] = (HEADER_DENY.test(k) || HEADER_DENY_SUBSTR.test(k)) ? REDACTED : String(headers[k]);
+    }
+  } catch { return {}; }
+  return out;
+}
+
+// Case-insensitive header lookup (used to label non-JSON bodies).
+export function headerVal(headers, lowerName) {
+  try {
+    for (const k of Object.keys(headers || {})) if (k.toLowerCase() === lowerName) return headers[k];
+  } catch { /* ignore */ }
+  return '';
 }
