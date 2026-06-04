@@ -7,6 +7,7 @@
 // emit raw on error.
 import './setup.js';
 import { redact } from './oracles.js';
+import { fingerprint } from './findings.js';
 
 export const REDACTED = '<redacted>';
 export const SNIPPET_DEPTH = 2;
@@ -121,4 +122,71 @@ export function headerVal(headers, lowerName) {
     for (const k of Object.keys(headers || {})) if (k.toLowerCase() === lowerName) return headers[k];
   } catch { /* ignore */ }
   return '';
+}
+
+// A body may arrive already-parsed (object) or as a JSON string.
+function asJson(body) {
+  if (body && typeof body === 'object') return { ok: true, value: body };
+  if (typeof body === 'string') { try { return { ok: true, value: JSON.parse(body) }; } catch { return { ok: false }; } }
+  return { ok: false };
+}
+
+// Build one redacted artifact from a union item's transient `raw`. Never throws.
+export function buildEvidenceArtifact(raw, item) {
+  try {
+    if (!raw) return null;
+    const req = raw.request || {};
+    const artifact = {
+      engine: (item && item.engine) || '',
+      request: {
+        method: req.method || '',
+        url: redactUrl(req.url || req.path || ''),
+        identity: req.identity || (item && item.identityLabel) || '',
+        headers: redactHeaders(req.headers || {}),
+      },
+      response: null,
+    };
+    if (raw.stats) {
+      const st = raw.stats;
+      artifact.stats = {
+        sent: st.sent != null ? st.sent : null,
+        completed: st.completed != null ? st.completed : null,
+        throttleSeen: !!st.throttleSeen,
+      };
+      return artifact;
+    }
+    const resp = raw.response;
+    if (resp) {
+      const r = { status: resp.status != null ? resp.status : null, headers: redactHeaders(resp.headers || {}), snippetPath: '', snippet: null, nonJson: null, truncated: false };
+      const parsed = asJson(resp.body);
+      const s = parsed.ok ? snippetAround(parsed.value, (item && item.path) || '') : null;
+      if (s) { r.snippet = s.tree; r.snippetPath = s.snippetPath; r.truncated = s.truncated; }
+      else if (!parsed.ok) { r.nonJson = { contentType: String(headerVal(resp.headers, 'content-type') || ''), length: typeof resp.body === 'string' ? resp.body.length : 0 }; }
+      artifact.response = r;
+    }
+    return artifact;
+  } catch { return null; }
+}
+
+// fp -> artifact for a run's union (first occurrence per fp wins, mirrors snapshotOf).
+export function buildEvidenceMap(union) {
+  const map = new Map();
+  for (const it of (union || [])) {
+    if (!it || !it.raw) continue;
+    let fp;
+    try { fp = fingerprint(it).fp; } catch { continue; }
+    if (map.has(fp)) continue;
+    const a = buildEvidenceArtifact(it.raw, it);
+    if (a) map.set(fp, a);
+  }
+  return map;
+}
+
+// Opt-in persistence: copy artifacts onto snapshot items by fp (returns a new array).
+export function embedEvidence(items, map) {
+  if (!map || !map.get) return items || [];
+  return (items || []).map(it => {
+    const a = map.get(it.fp);
+    return a ? { ...it, evidenceArtifact: a } : it;
+  });
 }

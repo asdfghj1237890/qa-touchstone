@@ -93,3 +93,58 @@ describe('redactUrl / redactHeaders leak-path regressions', () => {
     expect(JSON.stringify(out)).not.toContain('SECRETLEAK');
   });
 });
+
+import { buildEvidenceArtifact, buildEvidenceMap, embedEvidence } from '../qa/evidence.js';
+import { fingerprint } from '../qa/findings.js';
+
+describe('buildEvidenceArtifact', () => {
+  it('builds request + response with a masked snippet for a body finding', () => {
+    const item = { engine: 'matrix', ruleId: 'jwt', path: 'data.token', identityLabel: 'admin' };
+    const raw = {
+      request: { method: 'GET', url: '/me?token=abc', identity: 'admin', headers: { authorization: 'Bearer x' } },
+      response: { status: 200, headers: { 'content-type': 'application/json', 'set-cookie': 'sid=1' }, body: { data: { token: 'eyJabc.def.ghi', name: 'bob' } } },
+    };
+    const a = buildEvidenceArtifact(raw, item);
+    expect(a.request.url).toBe('/me?token=<redacted>');
+    expect(a.request.headers.authorization).toBe('<redacted>');
+    expect(a.response.status).toBe(200);
+    expect(a.response.headers['set-cookie']).toBe('<redacted>');
+    expect(a.response.headers['content-type']).toBe('application/json');
+    expect(a.response.snippet.token).toContain('<redacted>');
+    expect(a.response.snippet.name).toBe('<str:3>');
+  });
+  it('emits metadata only for a non-JSON body — NO raw bytes', () => {
+    const item = { engine: 'matrix', ruleId: 'x', path: '' };
+    const raw = { request: { method: 'GET', url: '/x' }, response: { status: 200, headers: { 'content-type': 'text/html' }, body: '<html>secret-token-xyz</html>' } };
+    const a = buildEvidenceArtifact(raw, item);
+    expect(a.response.snippet).toBeNull();
+    expect(a.response.nonJson).toEqual({ contentType: 'text/html', length: 29 });
+    expect(JSON.stringify(a)).not.toContain('secret-token-xyz');
+  });
+  it('yields stats and a null response for a rate-limit finding', () => {
+    const a = buildEvidenceArtifact(
+      { request: { method: 'POST', url: '/login' }, stats: { sent: 100, completed: 100, throttleSeen: false } },
+      { engine: 'ratelimit' });
+    expect(a.response).toBeNull();
+    expect(a.stats).toEqual({ sent: 100, completed: 100, throttleSeen: false });
+  });
+  it('never throws on garbage input', () => {
+    expect(buildEvidenceArtifact(null, null)).toBeNull();
+    expect(() => buildEvidenceArtifact({ response: { body: 12345 } }, {})).not.toThrow();
+  });
+});
+
+describe('buildEvidenceMap + embedEvidence', () => {
+  it('keys by the SAME fingerprint snapshotOf uses, and embeds onto items', () => {
+    const it = {
+      engine: 'matrix', ruleId: 'jwt', path: 'data.token', method: 'GET', endpoint: '/me', identityLabel: 'admin',
+      raw: { request: { method: 'GET', url: '/me' }, response: { status: 200, headers: {}, body: { data: { token: 'eyJa.bc.de' } } } },
+    };
+    const fp = fingerprint(it).fp;
+    const map = buildEvidenceMap([it]);
+    expect(map.has(fp)).toBe(true);
+    const items = embedEvidence([{ fp }], map);
+    expect(items[0].evidenceArtifact).toBeTruthy();
+    expect(items[0].evidenceArtifact.response.snippet.token).toContain('<redacted>');
+  });
+});
