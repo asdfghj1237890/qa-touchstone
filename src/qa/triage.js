@@ -3,7 +3,7 @@
 // Normalize findings across engines, cap by severity, build/parse a single
 // advisory LLM pass. Never mutates the real findings. UI in TriagePanel.jsx.
 import './setup.js';
-import { qaCallLLM } from './llm.js';
+import { qaAiSend } from './llm.js';
 import { SEVERITY_ORDER } from './oracles.js';
 
 export const TRIAGE_CAP = 150;
@@ -31,17 +31,6 @@ export function buildTriageInput(union, cap = TRIAGE_CAP) {
   return { input, kept, dropped: Math.max(0, sorted.length - kept.length) };
 }
 
-export function buildTriagePrompt(input) {
-  return (
-    'You are triaging security findings from an automated API scan. ' +
-    'Group related findings, surface the few that truly need a human, and flag likely false positives. ' +
-    'Categories you may use: ' + TRIAGE_CATEGORIES.join(', ') + '. ' +
-    'Return ONLY a JSON object: {"headline": string, "items": [{"title": string, "category": string, ' +
-    '"priority": "p1"|"p2"|"p3", "rationale": string, "findingIndexes": number[], "likelyFalsePositive": boolean}]}. ' +
-    'Reference findings only by their `i` index. Never invent findings.\n\n' +
-    'Findings:\n' + JSON.stringify(input, null, 2)
-  );
-}
 
 // Defensive parse: strip code fences, extract the first balanced JSON object,
 // validate items, resolve findingIndexes back to `kept`, drop invalid refs and
@@ -82,14 +71,20 @@ export function parseTriage(raw, kept) {
   return { headline: String(obj.headline || ''), items };
 }
 
-// Orchestration. `callLLM` is injectable for tests; defaults to qaCallLLM.
+// Orchestration. `send` is injectable for tests; defaults to qaAiSend.
 // Returns { headline, items, dropped, total }. Empty union -> no LLM call.
-export async function runTriage(union, callLLM = qaCallLLM, opts = {}) {
+export async function runTriage(union, send = qaAiSend, opts = {}) {
   const cap = opts.cap || TRIAGE_CAP;
   const { input, kept, dropped } = buildTriageInput(union, cap);
   const total = (union || []).length;
   if (!input.length) return { headline: '', items: [], dropped: 0, total: 0 };
-  const raw = await callLLM(buildTriagePrompt(input));
+  let raw;
+  try {
+    raw = await send({ site: 'triage', kind: 'triage', payload: { input } });
+  } catch (e) {
+    if (e && e.name === 'AiCancelledError') return { headline: '', items: [], dropped, total };
+    throw e;
+  }
   const parsed = parseTriage(raw, kept);
   return { ...parsed, dropped, total };
 }

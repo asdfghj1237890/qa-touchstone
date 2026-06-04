@@ -1,6 +1,6 @@
 // src/__tests__/triage.test.js
 import { describe, it, expect } from 'vitest';
-import { normalizeFindings, buildTriageInput, TRIAGE_CAP, buildTriagePrompt, parseTriage, runTriage } from '../qa/triage.js';
+import { normalizeFindings, buildTriageInput, TRIAGE_CAP, parseTriage, runTriage } from '../qa/triage.js';
 
 const f = (severity, over = {}) => ({ severity, oracle: 'schema', title: 'T', path: 'a.b', evidence: 'e', ...over });
 
@@ -39,13 +39,6 @@ const kept = [
   { engine: 'matrix', severity: 'high', oracle: 'schema', title: 'Undeclared field', path: 'user.ssn', evidence: '', ref: { reqId: 'r', idId: 'i' } },
 ];
 
-describe('buildTriagePrompt', () => {
-  it('embeds the indexed findings and forbids inventing findings', () => {
-    const p = buildTriagePrompt([{ i: 0, severity: 'high', title: 'X' }]);
-    expect(p).toContain('Never invent findings');
-    expect(p).toContain('"i": 0');
-  });
-});
 
 describe('parseTriage', () => {
   it('parses a clean object and resolves findingIndexes back to kept findings', () => {
@@ -89,15 +82,22 @@ describe('runTriage', () => {
     { engine: 'bola', severity: 'critical', oracle: 'object-authz', title: 'X', path: 'GET /o', evidence: '', ref: { testId: 't' } },
     { engine: 'matrix', severity: 'low', oracle: 'schema', title: 'Y', path: 'a', evidence: '', ref: { reqId: 'r', idId: 'i' } },
   ];
-  it('passes the prompt to the injected callLLM and returns parsed + meta', async () => {
-    let seenPrompt = '';
-    const stub = async (p) => { seenPrompt = p; return JSON.stringify({ headline: 'h', items: [{ title: 't', category: 'object-authz', priority: 'p1', rationale: 'r', findingIndexes: [0] }] }); };
+  it('submits a triage AiRequest and returns parsed + meta', async () => {
+    let seenReq = null;
+    const stub = async (r) => { seenReq = r; return JSON.stringify({ headline: 'h', items: [{ title: 't', category: 'object-authz', priority: 'p1', rationale: 'r', findingIndexes: [0] }] }); };
     const out = await runTriage(union, stub);
-    expect(seenPrompt).toContain('Never invent findings');
+    expect(seenReq.kind).toBe('triage');
+    expect(seenReq.payload.input).toHaveLength(2);
     expect(out.headline).toBe('h');
     expect(out.total).toBe(2);
     expect(out.dropped).toBe(0);
     expect(out.items[0].findings[0].engine).toBe('bola');
+  });
+  it('returns empty triage when the user cancels', async () => {
+    const send = async () => { const e = new Error('x'); e.name = 'AiCancelledError'; throw e; };
+    const out = await runTriage(union, send);
+    expect(out.items).toEqual([]);
+    expect(out.total).toBe(2);
   });
   it('short-circuits an empty union without calling the LLM', async () => {
     let called = false;
