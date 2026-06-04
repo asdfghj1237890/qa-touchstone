@@ -92,6 +92,51 @@ function luhnValid(s) {
   return sum % 10 === 0;
 }
 
+// Non-global mirrors of the heuristic patterns, for whole-string secret/PII tests
+// on object KEYS. (Reusing the /g regexes above with .test() would carry lastIndex
+// state and yield alternating true/false across calls.)
+const KEY_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const KEY_JWT = /eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}/;
+const KEY_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b/;
+const KEY_OPAQUE = /[A-Za-z0-9_-]{40,}/;
+const KEY_SSN = /\b\d{3}-\d{2}-\d{4}\b/;
+
+// True when a string is itself secret/PII-shaped (email, JWT, token prefix, SSN,
+// long opaque token, or a Luhn-valid card). Ordinary field names (customerId,
+// email, items) are NOT flagged — they lack the secret SHAPE. Used to mask object
+// KEYS on the AI-egress path only (evidence.js report scrub deliberately keeps keys).
+export function looksSecret(str) {
+  const s = String(str == null ? '' : str);
+  if (!s) return false;
+  if (KEY_EMAIL.test(s) || KEY_JWT.test(s) || KEY_TOKEN.test(s) || KEY_SSN.test(s) || KEY_OPAQUE.test(s)) return true;
+  const digits = s.replace(/[ -]/g, '');
+  return /^\d{13,19}$/.test(digits) && luhnValid(digits);
+}
+
+const REDACTED_KEY = '<redacted-key>';
+// Post-process a masked tree, replacing any object KEY that is itself secret/PII-
+// shaped with a placeholder. Array indices and (already-masked) values are left
+// untouched. Colliding masked siblings get a numeric suffix so child count — the
+// structure-preserving guarantee — is kept. Never throws.
+function maskSecretKeys(node) {
+  if (Array.isArray(node)) return node.map(maskSecretKeys);
+  if (node && typeof node === 'object') {
+    const out = {};
+    for (const k of Object.keys(node)) {
+      const child = maskSecretKeys(node[k]);
+      if (looksSecret(k)) {
+        let nk = REDACTED_KEY, n = 2;
+        while (Object.prototype.hasOwnProperty.call(out, nk)) nk = `${REDACTED_KEY}-${n++}`;
+        out[nk] = child;
+      } else {
+        out[k] = child;
+      }
+    }
+    return out;
+  }
+  return node;
+}
+
 export function buildScrubber(cfg) {
   const c = cfg || PRIVACY_DEFAULT_CFG;
   const denyNames = [...DEFAULT_DENY, ...(c.customFieldNames || [])].filter(Boolean);
@@ -134,7 +179,9 @@ export function redactBody(body, headers) {
   const parsed = asJson(body);
   if (parsed.ok) {
     const s = snippetAround(parsed.value, '');
-    if (s) return { tree: s.tree, truncated: s.truncated };
+    // snippetAround (shared with the evidence/report artifact) preserves object KEYS
+    // verbatim; on the AI path we additionally mask keys that are themselves PII/secrets.
+    if (s) return { tree: maskSecretKeys(s.tree), truncated: s.truncated };
   }
   return { nonJson: {
     contentType: String(headerVal(headers || {}, 'content-type') || ''),
