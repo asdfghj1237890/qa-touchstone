@@ -35,3 +35,28 @@ export function classifyDestination(cfg) {
   const isCloud = !isPrivate && (CLOUD_HOSTS.test(host) || host.length > 0);
   return { provider, label: host || 'custom endpoint', host, isCloud, isPrivate, isLoopback };
 }
+
+export class EgressBlockedError extends Error {
+  constructor(key) { super(key); this.name = 'EgressBlockedError'; this.key = key; }
+}
+
+export function resolvePolicy(cfg, backendPolicy) {
+  const stored = cfg || PRIVACY_DEFAULT_CFG;
+  const bp = backendPolicy || null;
+  let mode = stored.mode || 'redacted';
+  let locked = false;
+  let source = 'user';
+  if (stored.lockdown) { mode = 'local'; locked = true; source = 'lockdown-toggle'; }
+  if (bp && (bp.locked || bp.externalAllowed === false || bp.forcedMode === 'local')) {
+    mode = 'local'; locked = true; source = 'backend';
+  }
+  return { effectiveMode: mode, externalAllowed: mode !== 'local', locked, source };
+}
+
+export function assertEgressAllowed(effectiveMode, dest, cfg) {
+  if (effectiveMode === 'full' || effectiveMode === 'redacted') return;
+  // local: self-managed destinations only
+  if (dest.isLoopback || dest.isPrivate) return;
+  if (dest.provider === 'custom' && cfg && cfg.selfManagedAttested) return;
+  throw new EgressBlockedError('ai.gate.localBlocked');
+}
