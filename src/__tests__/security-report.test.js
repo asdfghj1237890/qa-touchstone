@@ -166,3 +166,22 @@ describe('reportToSarif', () => {
     expect(byFp.b.suppressions).toBeUndefined();
   });
 });
+
+describe('reportToHtml evidence artifact', () => {
+  const artifact = {
+    engine: 'matrix',
+    request: { method: 'GET', url: '/me?token=<redacted>', identity: 'admin', headers: { authorization: '<redacted>' } },
+    response: { status: 200, headers: { 'content-type': 'application/json' }, snippetPath: 'data.token', snippet: { token: 'eyJ…<redacted>…0', name: '<str:3>' }, nonJson: null, truncated: false },
+  };
+  it('renders an expandable <details> with the masked, escaped request line', () => {
+    const map = new Map([['fp1', artifact]]);
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    expect(html).toContain('<details>');
+    expect(html).toContain('GET /me?token=&lt;redacted&gt;');
+  });
+  it('falls back to the plain evidence cell when there is no artifact', () => {
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'redacted' }));
+    expect(html).not.toContain('<details>');
+    expect(html).toContain('eyJ…&lt;redacted&gt;…0');
+  });
+});

@@ -155,6 +155,34 @@ export function reportToSarif(model) {
   }, null, 2);
 }
 
+// Render a finding's evidence cell: an expandable <details> when an artifact is
+// present, else the plain masked string. Everything is htmlEscape-d.
+export function evidenceCellHtml(f) {
+  const h = htmlEscape;
+  const plain = f.evidence ? '<code>' + h(f.evidence) + '</code>' : '';
+  const a = f.evidenceArtifact;
+  if (!a) return plain;
+  const req = a.request || {};
+  const reqLine = h(`${req.method || ''} ${req.url || ''}`.trim());
+  const hdr = obj => Object.keys(obj || {}).map(k => `${h(k)}: ${h(obj[k])}`).join('\n');
+  let resp = '';
+  if (a.response) {
+    const r = a.response;
+    const snip = r.snippet != null
+      ? JSON.stringify(r.snippet, null, 2)
+      : (r.nonJson ? `(${r.nonJson.contentType || 'non-JSON'}, ${r.nonJson.length} bytes — body omitted)` : '');
+    resp = `<div>status ${h(String(r.status))}${r.truncated ? ' · truncated' : ''}</div>`
+      + (Object.keys(r.headers || {}).length ? `<pre>${h(hdr(r.headers))}</pre>` : '')
+      + (snip ? `<pre>${h(snip)}</pre>` : '');
+  } else if (a.stats) {
+    resp = `<div>${h(String(a.stats.sent))} sent · throttle seen: ${a.stats.throttleSeen ? 'yes' : 'no'}</div>`;
+  }
+  return `<details><summary>${plain || 'evidence'}</summary>`
+    + `<pre>${reqLine}</pre>`
+    + (Object.keys(req.headers || {}).length ? `<pre>${h(hdr(req.headers))}</pre>` : '')
+    + resp + '</details>';
+}
+
 export function reportToHtml(model) {
   const m = model.meta, s = model.summary, h = htmlEscape;
   const sevChips = SEVERITY_ORDER.slice().reverse()
@@ -162,7 +190,7 @@ export function reportToHtml(model) {
   const engRows = model.engines.map(e =>
     `<tr><td>${h(e.engine)}</td><td>${e.ran ? e.findingCount : h(e.skipped || 'skipped')}</td><td>${Math.round((e.durationMs || 0) / 1000)}s</td><td>${h(e.error || '')}</td></tr>`).join('');
   const findRows = model.findings.map(f =>
-    `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${f.evidence ? '<code>' + h(f.evidence) + '</code>' : ''}</td></tr>`).join('');
+    `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${evidenceCellHtml(f)}</td></tr>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>QA Touchstone — Security report</title>
 <style>body{font-family:system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}.gate{font-size:20px;font-weight:700}.chip{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}.sev-critical,.sev-high{color:#b91c1c}.sev-medium{color:#b45309}.suppressed,.p-resolved{opacity:.55}</style>
 </head><body>
