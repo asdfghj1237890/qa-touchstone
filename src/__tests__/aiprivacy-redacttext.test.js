@@ -20,6 +20,7 @@ describe('redactText heuristics', () => {
     expect(out).toContain('tenantId=');
     expect(out).not.toContain('acme-7731');
   });
+  it('masks an SSN', () => { expect(redactText('ssn 123-45-6789 here', s)).toContain('<ssn>'); });
 });
 
 describe('redactText custom layers', () => {

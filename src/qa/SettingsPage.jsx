@@ -334,7 +334,7 @@ export function PrivacySettings() {
           <FieldRow label={t('settings.privacy.lockdown')}>
             <MiniCheck checked={cfg.lockdown} onChange={v => save({ lockdown: v })} />
           </FieldRow>
-          {cfg.mode === 'local' && dest.provider === 'custom' && dest.isCloud && (
+          {policy.effectiveMode === 'local' && dest.provider === 'custom' && dest.isCloud && (
             <>
               <FieldRow label={t('settings.privacy.attest')}>
                 <MiniCheck checked={cfg.selfManagedAttested} onChange={v => save({ selfManagedAttested: v })} />

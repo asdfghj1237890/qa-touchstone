@@ -32,4 +32,16 @@ describe('redactOpenApi', () => {
   it('falls back to text redaction on unparseable input', () => {
     expect(redactOpenApi('not json email a@b.com')).toContain('<email>');
   });
+  it('strips servers host from YAML-style specs via fallback', () => {
+    const yaml = 'openapi: 3.0.0\nservers:\n  - url: https://internal.acme.corp/v1\npaths: {}\n';
+    const out = redactOpenApi(yaml);
+    expect(out).not.toContain('internal.acme.corp');
+  });
+  it('scrubs free-text string values (description) in JSON specs', () => {
+    const spec = JSON.stringify({ paths: { '/x': { get: { description: 'contact admin@acme.com or ssn 123-45-6789' } } } });
+    const out = redactOpenApi(spec);
+    expect(out).not.toContain('admin@acme.com');
+    expect(out).not.toContain('123-45-6789');
+    expect(out).toContain('/x'); // path template still present
+  });
 });

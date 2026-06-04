@@ -77,6 +77,7 @@ const RE_IPV6 = /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi;
 const RE_TOKEN_PREFIX = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})\b/g;
 const RE_SECRET = /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}\b|\b[A-Za-z0-9_-]{40,}\b/g;
 const RE_CARDISH = /\b(?:\d[ -]?){13,19}\b/g;
+const RE_SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
 const DEFAULT_DENY = ['customerId','customer_id','tenantId','tenant_id','email','userId','user_id','accountId','account_id','ssn','phone','password','authorization','token','secret','apiKey','api_key'];
 
 function luhnValid(s) {
@@ -102,6 +103,7 @@ export function buildScrubber(cfg) {
       let out = String(str == null ? '' : str);
       out = out.replace(denyRe, (_m, key, sep) => `${key}${sep}<redacted>`);
       out = out.replace(RE_CARDISH, m => (luhnValid(m) ? '<card>' : m));
+      out = out.replace(RE_SSN, '<ssn>');
       out = out.replace(RE_TOKEN_PREFIX, '<token>');
       out = out.replace(RE_SECRET, '<secret>');
       out = out.replace(RE_EMAIL, '<email>');
@@ -144,6 +146,8 @@ export function redactBody(body, headers) {
 // and mask query values. NOTE: deliberately separate from evidence.redactUrl
 // (which preserves host for report artifacts).
 const ID_SEG = /^\d+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A path segment that is itself a secret/identifier (email, JWT, AWS key, GH/opaque token).
+const SECRET_SEG = /@|^eyJ[\w-]+\.[\w-]+\.[\w-]+$|^AKIA[0-9A-Z]{16}$|^gh[pousr]_[A-Za-z0-9]{20,}$|^[A-Za-z0-9_-]{40,}$/;
 export function redactUrlForAI(url) {
   try {
     const s = String(url == null ? '' : url).split('#')[0];
@@ -153,7 +157,7 @@ export function redactUrlForAI(url) {
     const qIdx = pathQuery.indexOf('?');
     const pathPart = qIdx < 0 ? pathQuery : pathQuery.slice(0, qIdx);
     const queryPart = qIdx < 0 ? null : pathQuery.slice(qIdx + 1);
-    const segs = pathPart.split('/').map(seg => (seg && ID_SEG.test(seg) ? '{id}' : seg)).join('/');
+    const segs = pathPart.split('/').map(seg => (seg && (ID_SEG.test(seg) || SECRET_SEG.test(seg)) ? '{id}' : seg)).join('/');
     if (queryPart == null) return segs || '/';
     const q = queryPart.split('&').map(p => {
       const i = p.indexOf('=');
@@ -178,13 +182,31 @@ function stripSpecValues(node) {
   return node;
 }
 
+// Replace any scheme://host[:port] with <host>, keeping the path.
+function stripUrlHosts(text) {
+  return String(text).replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s/"']+/gi, '<host>');
+}
+// Recursively scrub free-text string VALUES (descriptions, summaries, titles, etc.);
+// object KEYS and structure are preserved.
+function scrubSpecStrings(node, scrubber) {
+  if (typeof node === 'string') return stripUrlHosts(scrubber.maskText(node));
+  if (Array.isArray(node)) return node.map(n => scrubSpecStrings(n, scrubber));
+  if (node && typeof node === 'object') {
+    const out = {};
+    for (const k of Object.keys(node)) out[k] = scrubSpecStrings(node[k], scrubber);
+    return out;
+  }
+  return node;
+}
+
 export function redactOpenApi(specText) {
+  const scrubber = buildScrubber(PRIVACY_DEFAULT_CFG);
   try {
     const spec = JSON.parse(specText);
     if (!spec || typeof spec !== 'object') throw new Error('not an object');
-    return JSON.stringify(stripSpecValues(spec), null, 2);
+    return JSON.stringify(scrubSpecStrings(stripSpecValues(spec), scrubber), null, 2);
   } catch {
-    return redactText(specText, buildScrubber(PRIVACY_DEFAULT_CFG));
+    return stripUrlHosts(redactText(specText, scrubber));
   }
 }
 
