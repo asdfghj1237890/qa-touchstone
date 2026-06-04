@@ -54,7 +54,7 @@ function SuiteRunBar({ suite, onRun, onStop, canExport, onExport, canEvidence, o
               {expOpen && (
                 <span className="qa-report-menu">
                   <label className="qa-report-redaction">{t('report.redaction')}:
-                    <select value={redaction} onChange={e => setRedaction(e.target.value)}>
+                    <select value={(!canEvidence && redaction === 'evidence') ? 'redacted' : redaction} onChange={e => setRedaction(e.target.value)}>
                       <option value="redacted">{t('report.redaction.redacted')}</option>
                       <option value="strict">{t('report.redaction.strict')}</option>
                       {canEvidence && <option value="evidence">{t('report.redaction.evidence')}</option>}

@@ -289,6 +289,9 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     suiteAbortRef.current = controller;
     setSuite({ running: true, engine: null, done: 0, total: 0, lastRecord: null });
     setResults({}); setBolaResults({}); setRlResults({});
+    // Evidence map is per-run and transient (never persisted unless the user opts in).
+    // An aborted run leaves it null while snapshots.lastRun (the prior good report) survives;
+    // exporting that report then falls back to persisted/none — by design.
     evidenceMapRef.current = null; setEvidenceReady(false);
 
     const matrixAdapter = async (cfg, { signal }) => {
