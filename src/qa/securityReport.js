@@ -172,14 +172,14 @@ export function evidenceCellHtml(f) {
       ? JSON.stringify(r.snippet, null, 2)
       : (r.nonJson ? `(${r.nonJson.contentType || 'non-JSON'}, ${r.nonJson.length} bytes — body omitted)` : '');
     resp = `<div>status ${h(String(r.status))}${r.truncated ? ' · truncated' : ''}</div>`
-      + (Object.keys(r.headers || {}).length ? `<pre>${h(hdr(r.headers))}</pre>` : '')
+      + (Object.keys(r.headers || {}).length ? `<pre>${hdr(r.headers)}</pre>` : '')
       + (snip ? `<pre>${h(snip)}</pre>` : '');
   } else if (a.stats) {
     resp = `<div>${h(String(a.stats.sent))} sent · throttle seen: ${a.stats.throttleSeen ? 'yes' : 'no'}</div>`;
   }
   return `<details><summary>${plain || 'evidence'}</summary>`
     + `<pre>${reqLine}</pre>`
-    + (Object.keys(req.headers || {}).length ? `<pre>${h(hdr(req.headers))}</pre>` : '')
+    + (Object.keys(req.headers || {}).length ? `<pre>${hdr(req.headers)}</pre>` : '')
     + resp + '</details>';
 }
 

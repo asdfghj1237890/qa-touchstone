@@ -185,3 +185,21 @@ describe('reportToHtml evidence artifact', () => {
     expect(html).toContain('eyJ…&lt;redacted&gt;…0');
   });
 });
+
+describe('reportToHtml evidence headers are single-escaped', () => {
+  it('escapes header values exactly once (no double-escape)', () => {
+    const artifact = {
+      engine: 'matrix',
+      request: { method: 'GET', url: '/x', identity: 'a', headers: { authorization: '<redacted>' } },
+      response: { status: 200, headers: { 'x-test': '<a>&b' }, snippetPath: '', snippet: { k: '<num>' }, nonJson: null, truncated: false },
+    };
+    const map = new Map([['fp1', artifact]]);
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    // request header value single-escaped
+    expect(html).toContain('authorization: &lt;redacted&gt;');
+    // response header value with & and <> single-escaped
+    expect(html).toContain('x-test: &lt;a&gt;&amp;b');
+    // and NOT double-escaped
+    expect(html).not.toContain('&amp;lt;');
+  });
+});
