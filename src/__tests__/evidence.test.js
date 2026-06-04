@@ -75,3 +75,21 @@ describe('redactHeaders', () => {
     expect(out['content-type']).toBe('application/json');
   });
 });
+
+describe('redactUrl / redactHeaders leak-path regressions', () => {
+  it('drops a URL fragment (OAuth implicit #access_token leaks otherwise)', () => {
+    expect(redactUrl('/cb#access_token=SECRETLEAK&state=x')).toBe('/cb');
+    expect(redactUrl('/cb?ok=1#access_token=SECRETLEAK')).toBe('/cb?ok=<redacted>');
+  });
+  it('redacts URL-valued headers (Location/Referer) that embed tokens', () => {
+    const out = redactHeaders({
+      Location: 'https://app/cb?code=SECRETLEAK&state=s',
+      Referer: 'https://app/p?token=SECRETLEAK',
+      'content-type': 'text/html',
+    });
+    expect(out.Location).toBe('https://app/cb?code=<redacted>&state=<redacted>');
+    expect(out.Referer).toBe('https://app/p?token=<redacted>');
+    expect(out['content-type']).toBe('text/html');
+    expect(JSON.stringify(out)).not.toContain('SECRETLEAK');
+  });
+});

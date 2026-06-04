@@ -14,6 +14,7 @@ export const SNIPPET_KEYS = 12;
 
 const HEADER_DENY = /^(authorization|cookie|set-cookie|x-api-key|proxy-authorization)$/i;
 const HEADER_DENY_SUBSTR = /(token|secret|key|auth|session|cookie)/i;
+const HEADER_URL_VALUED = /^(location|content-location|referer)$/i;
 const SECRET_VALUE = /eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9_-]{32,}/;
 
 // A primitive leaf -> a type token carrying NO value characters.
@@ -84,7 +85,10 @@ export function snippetAround(body, findingPath) {
 // Keep path structure (mask secret-like segments); keep query keys, mask values.
 export function redactUrl(url) {
   try {
-    const s = String(url == null ? '' : url);
+    // Drop any #fragment first — it can carry secrets (e.g. OAuth implicit #access_token=…).
+    // Note: only the first '?' starts the query; any later '?' lands inside a query value,
+    // which is masked anyway.
+    const s = String(url == null ? '' : url).split('#')[0];
     const qIdx = s.indexOf('?');
     const pathPart = qIdx < 0 ? s : s.slice(0, qIdx);
     const queryPart = qIdx < 0 ? null : s.slice(qIdx + 1);
@@ -103,7 +107,9 @@ export function redactHeaders(headers) {
   const out = {};
   try {
     for (const k of Object.keys(headers || {})) {
-      out[k] = (HEADER_DENY.test(k) || HEADER_DENY_SUBSTR.test(k)) ? REDACTED : String(headers[k]);
+      if (HEADER_DENY.test(k) || HEADER_DENY_SUBSTR.test(k)) out[k] = REDACTED;
+      else if (HEADER_URL_VALUED.test(k)) out[k] = redactUrl(String(headers[k]));
+      else out[k] = String(headers[k]);
     }
   } catch { return {}; }
   return out;
