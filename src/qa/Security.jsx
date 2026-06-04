@@ -244,7 +244,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     if (!drawer || !drawerCell || !drawerCell.response) return;
     setAiScan({ busy: true, error: null });
     try {
-      const extra = await scanSensitiveLLM(drawerCell.response);
+      const extra = await scanSensitiveLLM({ body: drawerCell.response.body, headers: drawerCell.response.headers });
       const { reqId, idId } = drawer;
       // The endpoint/identity may have been removed while the scan was in flight;
       // skip the merge rather than dereferencing a now-missing cell.
