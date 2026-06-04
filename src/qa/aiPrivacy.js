@@ -1,6 +1,7 @@
 // src/qa/aiPrivacy.js
 // ── QA Touchstone — AI Privacy Mode (pure, no React/DOM/network) ────────────
 import './setup.js';
+import { snippetAround, headerVal } from './evidence.js';
 
 export const PRIVACY_DEFAULT_CFG = {
   mode: 'redacted',            // 'full' | 'redacted' | 'local'
@@ -111,4 +112,25 @@ export function buildScrubber(cfg) {
 export function redactText(str, scrubber) {
   const s = scrubber || buildScrubber(PRIVACY_DEFAULT_CFG);
   return s.maskText(str);
+}
+
+function asJson(body) {
+  if (body && typeof body === 'object') return { ok: true, value: body };
+  if (typeof body === 'string') { try { return { ok: true, value: JSON.parse(body) }; } catch { return { ok: false }; } }
+  return { ok: false };
+}
+
+// Structure-preserving body redaction: keys kept, every leaf value -> type token
+// (delegated to evidence.js scrub via snippetAround with no finding path). Non-JSON
+// bodies never emit bytes — only a descriptor.
+export function redactBody(body, headers) {
+  const parsed = asJson(body);
+  if (parsed.ok) {
+    const s = snippetAround(parsed.value, '');
+    if (s) return { tree: s.tree, truncated: s.truncated };
+  }
+  return { nonJson: {
+    contentType: String(headerVal(headers || {}, 'content-type') || ''),
+    byteLength: typeof body === 'string' ? body.length : 0,
+  } };
 }
