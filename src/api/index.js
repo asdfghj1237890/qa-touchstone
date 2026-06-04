@@ -58,6 +58,7 @@ const notPorted = (name) => () => Promise.reject(new NotPortedError(name));
 export const api = {
   // --- 階段 0 真實實作 ---
   getPlatform: () => invoke('get_platform'),
+  getAiPolicy: () => invoke('get_ai_policy'),
   getProcessEnv: () => cachedProcessEnv,
   openSettings: () => invoke('open_settings'),
   closeWindow: () => getCurrentWindow().close(),

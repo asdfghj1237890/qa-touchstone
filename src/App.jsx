@@ -24,6 +24,7 @@ import { I18nProvider } from './qa/i18n.jsx';
 import { useI18n } from './qa/useI18n.js';
 import { PromptPreviewHost } from './qa/PromptPreview.jsx';
 import api from './api/index.js';
+import { loadAiPolicy } from './qa/aiPolicy.js';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
 
@@ -152,6 +153,9 @@ function AppShell() {
   }));
 
   const createMonitor = (mon) => setMonitors(ms => [normalizeMonitor(mon), ...ms]);
+
+  // Resolve backend AI policy once at boot; failures are harmless (web/dev fallback).
+  useEffectApp(() => { loadAiPolicy().catch(() => {}); }, []);
 
   // Apply theme whenever the accent changes; persist it.
   useEffectApp(() => {
