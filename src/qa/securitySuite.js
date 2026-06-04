@@ -48,7 +48,7 @@ export function normalizeBola(results, tests) {
         title: f.title, path: f.path, evidence: f.evidence || '',
         ref: { testId: test.id, attackerId: a, ownerId: o },
         raw: {
-          request: rq ? { method: rq.method, url: rq.path, identity: rq.identity, idValue: rq.idValue } : null,
+          request: rq ? { method: rq.method, url: rq.path, identity: rq.identity } : null,
           response: resp ? { status: resp.status, headers: resp.headers, body: resp.body } : null,
         },
       });

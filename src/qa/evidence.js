@@ -39,7 +39,9 @@ export function tokenizePath(p) {
 
 // Recursively mask a container. A DIRECT child whose key === markKey keeps the
 // redact() preview; every other leaf becomes a type token. Bounded by depth/key
-// caps; sets caps.truncated when the key cap trims a level.
+// caps; sets caps.truncated when the key cap trims a level. Object/array KEYS are
+// preserved verbatim — mask-by-default covers VALUES; keys are assumed field
+// names, not secrets.
 function scrub(node, markKey, depth, caps) {
   if (node === null || typeof node !== 'object') return leafToken(node);
   if (depth >= SNIPPET_DEPTH) return Array.isArray(node) ? '<array>' : '<object>';
