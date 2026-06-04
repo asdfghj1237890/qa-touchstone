@@ -11,7 +11,7 @@ describe('normalizeMatrix', () => {
       anon: { findings: [] },
     } };
     const out = normalizeMatrix(results, endpoints, identities);
-    expect(out).toEqual([{
+    expect(out).toMatchObject([{
       engine: 'matrix', ruleId: 'jwt', severity: 'high', oracle: 'sensitive-data',
       title: 'JWT in response', path: 'data.token', evidence: 'x',
       method: 'GET', endpoint: '/me', identityLabel: 'Admin', ref: { reqId: 'r1', idId: 'admin' },
@@ -30,7 +30,7 @@ describe('normalizeBola', () => {
     const tests = [{ id: 't1' }];
     const results = { t1: { attacks: { a: { o: { finding: { oracle: 'object-authz', severity: 'high', title: 'Cross-object access confirmed', path: 'GET /o' } } } } } };
     const out = normalizeBola(results, tests);
-    expect(out).toEqual([{
+    expect(out).toMatchObject([{
       engine: 'bola', ruleId: 'object-authz', severity: 'high', oracle: 'object-authz',
       title: 'Cross-object access confirmed', path: 'GET /o', evidence: '',
       ref: { testId: 't1', attackerId: 'a', ownerId: 'o' },
@@ -43,7 +43,7 @@ describe('normalizeRateLimit', () => {
     const tests = [{ id: 't9' }];
     const results = { t9: { finding: { oracle: 'rate-limit', severity: 'medium', title: 'No rate limiting', path: 'GET /x', evidence: '30 requests' } } };
     const out = normalizeRateLimit(results, tests);
-    expect(out).toEqual([{
+    expect(out).toMatchObject([{
       engine: 'ratelimit', ruleId: 'rate-limit', severity: 'medium', oracle: 'rate-limit',
       title: 'No rate limiting', path: 'GET /x', evidence: '30 requests', ref: { testId: 't9' },
     }]);
@@ -151,5 +151,39 @@ describe('runSuite', () => {
     const rec = await runSuite(cfg, recordingRunners(log), { now: fakeNow() });
     expect(log).toEqual(['matrix', 'ratelimit']);   // bola skipped, ratelimit still last
     expect(rec.engines.find(e => e.engine === 'bola')).toMatchObject({ ran: false, skipped: 'no-config' });
+  });
+});
+
+describe('normalizers attach transient raw', () => {
+  it('normalizeMatrix attaches request + response from the cell', () => {
+    const endpoints = [{ reqId: 'r1', method: 'GET', path: '/me' }];
+    const identities = [{ id: 'admin', name: 'Admin' }];
+    const results = { r1: { admin: {
+      response: { status: 200, headers: { x: '1' }, body: { token: 'eyJ' } },
+      findings: [{ ruleId: 'jwt', oracle: 'sensitive-data', severity: 'high', title: 'JWT', path: 'token', evidence: 'e' }],
+    } } };
+    const u = normalizeMatrix(results, endpoints, identities);
+    expect(u[0].raw.request).toMatchObject({ method: 'GET', url: '/me', identity: 'Admin' });
+    expect(u[0].raw.response).toMatchObject({ status: 200, body: { token: 'eyJ' } });
+  });
+
+  it('normalizeBola attaches request + response from the attack cell', () => {
+    const tests = [{ id: 't1', method: 'GET', path: '/orders/:id' }];
+    const results = { t1: { attacks: { alice: { bob: {
+      finding: { ruleId: 'bola', oracle: 'bola', severity: 'high', title: 'BOLA', path: '', evidence: 'x' },
+      request: { method: 'GET', path: '/orders/9', identity: 'alice', idValue: '9' },
+      response: { status: 200, headers: {}, body: { id: 9 } },
+    } } } } };
+    const u = normalizeBola(results, tests);
+    expect(u[0].raw.request).toMatchObject({ method: 'GET', url: '/orders/9', identity: 'alice' });
+    expect(u[0].raw.response).toMatchObject({ status: 200, body: { id: 9 } });
+  });
+
+  it('normalizeRateLimit attaches request + stats', () => {
+    const tests = [{ id: 't1', method: 'POST', path: '/login' }];
+    const results = { t1: { stats: { sent: 50, completed: 50, throttleSeen: false }, finding: { oracle: 'rate-limit', severity: 'medium', title: 'No throttle', path: 'POST /login', evidence: 'x' } } };
+    const u = normalizeRateLimit(results, tests);
+    expect(u[0].raw.request).toMatchObject({ method: 'POST', url: '/login' });
+    expect(u[0].raw.stats).toMatchObject({ sent: 50, throttleSeen: false });
   });
 });
