@@ -1,7 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, Spinner } from './components.jsx';
-import { qaCallLLM } from './llm.js';
+import { qaAiSend } from './llm.js';
 import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────
@@ -199,21 +199,6 @@ const TYPE_CHIP = {
 };
 
 // ── LLM generation ────────────────────────────────────────────────────────
-function buildPrompt(source, input) {
-  const kind = source === 'bdd' ? 'BDD / Gherkin feature' : source === 'openapi' ? 'OpenAPI spec' : 'requirements / PRD text';
-  return [
-    'You are a senior QA engineer. From the following ' + kind + ', generate API test cases.',
-    'Return ONLY a JSON array — no prose, no markdown fences. Each element must be:',
-    '{"title":string,"type":"happy"|"edge"|"negative","method":"GET|POST|PUT|PATCH|DELETE","path":string (use "—" if not stated),"status":number,"steps":[Given/When/Then strings, max 2],"assertions":[strings, max 2]}',
-    'Cover happy, negative, and edge cases. Maximum 6 cases. Be terse — short titles and steps.',
-    '',
-    'SOURCE:',
-    '"""',
-    String(input).slice(0, 6000),
-    '"""',
-  ].join('\n');
-}
-
 function extractCases(raw) {
   let txt = String(raw).trim();
   const fence = txt.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -369,11 +354,12 @@ function TestGen({ openSettings, onAddTests }) {
     }
     setBusy(true);
     try {
-      const raw = await qaCallLLM(buildPrompt(source, input));
+      const raw = await qaAiSend({ site: 'testgen', kind: 'testgen', payload: { source, input } });
       const parsed = extractCases(raw);
       if (!parsed || !parsed.length) { setErr(t('testgen.err.badModelOutput')); setBusy(false); return; }
       setCases(parsed); setBusy(false);
     } catch (ex) {
+      if (ex && ex.name === 'AiCancelledError') { setBusy(false); return; }
       setErr(t('testgen.err.llmFailed', { message: ex.message })); setBusy(false);
     }
   };
