@@ -1,5 +1,9 @@
 // src/qa/aiPrivacy.js
 // ── QA Touchstone — AI Privacy Mode (pure, no React/DOM/network) ────────────
+// INVARIANTS: redaction never throws (on error, emit a fully-masked token, never
+// raw). Structure-preserving body masking is the guarantee; the heuristic/regex
+// layer is bonus detection, not the sole defense. AI Privacy Mode governs AI egress
+// ONLY — clipboard/export/report redaction is separate (see securityReport.js).
 import './setup.js';
 import { snippetAround, headerVal } from './evidence.js';
 import { TRIAGE_CATEGORIES } from './triage.js';
