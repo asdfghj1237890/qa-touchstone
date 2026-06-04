@@ -2,6 +2,7 @@
 // ── QA Touchstone — AI Privacy Mode (pure, no React/DOM/network) ────────────
 import './setup.js';
 import { snippetAround, headerVal } from './evidence.js';
+import { TRIAGE_CATEGORIES } from './triage.js';
 
 export const PRIVACY_DEFAULT_CFG = {
   mode: 'redacted',            // 'full' | 'redacted' | 'local'
@@ -182,3 +183,87 @@ export function redactOpenApi(specText) {
     return redactText(specText, buildScrubber(PRIVACY_DEFAULT_CFG));
   }
 }
+
+function bodyStrFor(redacted) {
+  if (redacted == null) return '(no body)';
+  if (redacted.nonJson) return `(non-JSON body: ${redacted.nonJson.contentType || 'unknown'}, ${redacted.nonJson.byteLength} bytes)`;
+  return JSON.stringify(redacted.tree != null ? redacted.tree : redacted).slice(0, 1500);
+}
+
+export const AI_KINDS = {
+  'response-review': {
+    redact(p, ctx) {
+      if (ctx.mode === 'full') {
+        return { method: p.method, url: p.url, status: p.status, statusText: p.statusText, time: p.time, expected: p.expected || [], bodyText: p.body == null ? '(no body)' : JSON.stringify(p.body).slice(0, 1500) };
+      }
+      return { method: p.method, url: redactUrlForAI(p.url), status: p.status, statusText: p.statusText, time: p.time, expected: p.expected || [], bodyText: bodyStrFor(redactBody(p.body, p.headers)) };
+    },
+    buildPrompt(r) {
+      return [
+        'You are a senior QA engineer reviewing one API response. Be terse (max 4 lines).',
+        'Say whether it looks correct, and flag anything suspicious (wrong status, error body, missing fields, security smells).',
+        `REQUEST: ${r.method} ${r.url}`,
+        r.expected.length ? `EXPECTED (assertions): ${r.expected.join('; ')}` : 'EXPECTED: (none specified)',
+        `RESPONSE: ${r.status} ${r.statusText}, ${r.time}ms`,
+        `BODY: ${r.bodyText}`,
+      ].join('\n');
+    },
+  },
+  'sensitive-scan': {
+    redact(p, ctx) {
+      if (ctx.mode === 'full') {
+        const body = p.body; const text = typeof body === 'string' ? body : JSON.stringify(body || {}, null, 2);
+        return { text: text.slice(0, 4000) };
+      }
+      const rb = redactBody(p.body, p.headers);
+      return { text: JSON.stringify(rb.tree != null ? rb.tree : rb, null, 2).slice(0, 4000) };
+    },
+    buildPrompt(r) {
+      return 'You are a security reviewer. Identify sensitive data exposure in this API ' +
+        'response body: PII, secrets/tokens, or internal/debug fields a client should ' +
+        'not receive. Return ONLY a JSON array of {"path","title","severity"} where ' +
+        'severity is one of info,low,medium,high,critical. If nothing, return [].\n\n' +
+        'Response body:\n' + r.text;
+    },
+  },
+  'testgen': {
+    redact(p, ctx) {
+      if (ctx.mode === 'full') return { source: p.source, input: String(p.input).slice(0, 6000) };
+      const red = p.source === 'openapi' ? redactOpenApi(p.input) : redactText(p.input, ctx.scrubber);
+      return { source: p.source, input: String(red).slice(0, 6000) };
+    },
+    buildPrompt(r) {
+      const kind = r.source === 'bdd' ? 'BDD / Gherkin feature' : r.source === 'openapi' ? 'OpenAPI spec' : 'requirements / PRD text';
+      return [
+        'You are a senior QA engineer. From the following ' + kind + ', generate API test cases.',
+        'Return ONLY a JSON array — no prose, no markdown fences. Each element must be:',
+        '{"title":string,"type":"happy"|"edge"|"negative","method":"GET|POST|PUT|PATCH|DELETE","path":string (use "—" if not stated),"status":number,"steps":[Given/When/Then strings, max 2],"assertions":[strings, max 2]}',
+        'Cover happy, negative, and edge cases. Maximum 6 cases. Be terse — short titles and steps.',
+        '', 'SOURCE:', '"""', r.input, '"""',
+      ].join('\n');
+    },
+  },
+  'triage': {
+    redact(p, ctx) {
+      const sc = ctx.scrubber;
+      const input = (p.input || []).map(f => ({
+        i: f.i, engine: f.engine, severity: f.severity, oracle: f.oracle,
+        title: ctx.mode === 'full' ? f.title : redactText(f.title || '', sc),
+        path: ctx.mode === 'full' ? f.path : redactUrlForAI(String(f.path || '')),
+        evidence: ctx.mode === 'full' ? f.evidence : redactText(f.evidence || '', sc),
+      }));
+      return { input };
+    },
+    buildPrompt(r) {
+      return (
+        'You are triaging security findings from an automated API scan. ' +
+        'Group related findings, surface the few that truly need a human, and flag likely false positives. ' +
+        'Categories you may use: ' + TRIAGE_CATEGORIES.join(', ') + '. ' +
+        'Return ONLY a JSON object: {"headline": string, "items": [{"title": string, "category": string, ' +
+        '"priority": "p1"|"p2"|"p3", "rationale": string, "findingIndexes": number[], "likelyFalsePositive": boolean}]}. ' +
+        'Reference findings only by their `i` index. Never invent findings.\n\n' +
+        'Findings:\n' + JSON.stringify(r.input, null, 2)
+      );
+    },
+  },
+};
