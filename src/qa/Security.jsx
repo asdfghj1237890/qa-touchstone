@@ -26,6 +26,7 @@ import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
 } from './findings.js';
 import { buildReport, reportToJson, reportToHtml, reportToJUnit, reportToSarif } from './securityReport.js';
+import { buildEvidenceMap, embedEvidence } from './evidence.js';
 import { downloadFile } from './download.js';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
@@ -127,6 +128,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const [snapshots, setSnapshots] = useS(() => loadSnapshots());
   const [suite, setSuite] = useS({ running: false, engine: null, done: 0, total: 0, lastRecord: null });
   const suiteAbortRef = useRef(null);
+  const evidenceMapRef = useRef(null);
+  const [evidenceReady, setEvidenceReady] = useS(false);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(() => withDefaults({ identities, endpoints, expect, denySet: denySet.length ? denySet : DEFAULT_DENY_SET, oracleConfig, bola, rateLimit }), [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]);
@@ -286,6 +289,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     suiteAbortRef.current = controller;
     setSuite({ running: true, engine: null, done: 0, total: 0, lastRecord: null });
     setResults({}); setBolaResults({}); setRlResults({});
+    evidenceMapRef.current = null; setEvidenceReady(false);
 
     const matrixAdapter = async (cfg, { signal }) => {
       const baselines = {};
@@ -346,6 +350,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         bola: (bola.tests || []).map(x => x.id).sort(), rl: (rateLimit.tests || []).map(x => x.id).sort(),
       });
       const items = snapshotOf(rec.union, loadLifecycle(), { runId: rec.finishedAt, createdAt: rec.finishedAt, scopeHash }).items;
+      evidenceMapRef.current = buildEvidenceMap(rec.union);
+      setEvidenceReady(evidenceMapRef.current.size > 0);
       const record = { runId: rec.finishedAt, scopeHash, createdAt: rec.finishedAt,
                        startedAt: rec.startedAt, finishedAt: rec.finishedAt, durationMs: rec.durationMs,
                        status: 'complete', engines: rec.engines, items };
@@ -360,7 +366,8 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
   const onExportReport = (format, redaction) => {
     const runRec = snapshots.lastRun;
     if (!runRec) return;
-    const model = buildReport(runRec, snapshots.baseline, loadLifecycle(), { redaction });
+    const model = buildReport(runRec, snapshots.baseline, loadLifecycle(),
+      redaction === 'evidence' ? { redaction, evidence: evidenceMapRef.current } : { redaction });
     const base = `qa-security-${String(runRec.runId || 'run').replace(/[^a-z0-9]+/gi, '-')}`;
     if (format === 'json') downloadFile(`${base}.json`, reportToJson(model), 'application/json');
     else if (format === 'html') downloadFile(`${base}.html`, reportToHtml(model), 'text/html');
@@ -368,10 +375,22 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     else if (format === 'sarif') downloadFile(`${base}.sarif.json`, reportToSarif(model), 'application/json');
   };
 
+  const onSaveEvidence = () => {
+    const map = evidenceMapRef.current;
+    if (!map || !map.size) return;
+    setSnapshots(prev => {
+      if (!prev.lastRun) return prev;
+      const next = { ...prev, lastRun: { ...prev.lastRun, items: embedEvidence(prev.lastRun.items, map) } };
+      saveSnapshots(next);
+      return next;
+    });
+  };
+
   return (
     <div className="qa-sec">
       <SuiteRunBar suite={suite} onRun={runFullSuite} onStop={stopSuite}
-                   canExport={!!snapshots.lastRun} onExport={onExportReport} />
+                   canExport={!!snapshots.lastRun} onExport={onExportReport}
+                   canEvidence={evidenceReady} onSaveEvidence={onSaveEvidence} />
       <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
       <div className="qa-sec-tabs">
         <button className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`} onClick={() => setMode('matrix')}>{t('security.mode.matrix')}</button>
@@ -386,7 +405,13 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
           snapshots={snapshots}
           scopeMismatch={scopeMismatch}
           onPinBaseline={snapshots.lastRun ? () => {
-            setSnapshots(prev => { const next = pinBaseline(prev, prev.lastRun); saveSnapshots(next); return next; });
+            setSnapshots(prev => {
+              const map = evidenceMapRef.current;
+              const src = (map && map.size) ? { ...prev.lastRun, items: embedEvidence(prev.lastRun.items, map) } : prev.lastRun;
+              const next = pinBaseline(prev, src);
+              saveSnapshots(next);
+              return next;
+            });
           } : undefined}
         />
       ) : mode === 'bola' ? (
