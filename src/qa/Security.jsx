@@ -1,6 +1,8 @@
 import React from 'react';
 import './setup.js';
 import { Icon, MethodBadge, loadLlmCfg } from './components.jsx';
+import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed } from './aiPrivacy.js';
+import { getCachedAiPolicy } from './aiPolicy.js';
 import { AuthEditor } from './AuthEditor.jsx';
 import { useI18n } from './useI18n.js';
 import { qaRunSavedRequest } from './sendRequest.js';
@@ -259,12 +261,15 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     }
   };
 
-  // Is an LLM reachable for the optional AI scan? Mirrors qaCallLLM's preconditions
-  // so we can disable the button with a hint instead of failing only on click.
+  // Is an LLM reachable AND egress-allowed for the optional AI scan?
   const cfg = loadLlmCfg();
-  const aiReady = cfg.provider === 'builtin'
+  const policy = resolvePolicy(loadPrivacyCfg(), getCachedAiPolicy());
+  const dest = classifyDestination(cfg);
+  let egressOk = true;
+  try { assertEgressAllowed(policy.effectiveMode, dest, loadPrivacyCfg()); } catch { egressOk = false; }
+  const aiReady = egressOk && (cfg.provider === 'builtin'
     ? !!(window.claude && window.claude.complete)
-    : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl;
+    : cfg.provider === 'openai' ? !!cfg.key : !!cfg.baseUrl);
 
   // Shared per-request runner for BOLA. The panel's onRun and the later suite
   // adapter use this SAME closure so Security owns the runner for reuse.

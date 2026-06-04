@@ -4,6 +4,8 @@ import { Dropdown, Icon, MiniCheck } from './components.jsx';
 import { FieldRow, KVTable, SecretInput } from './RequestBuilder.jsx';
 import { useI18n } from './useI18n.js';
 import { LOCALES } from './i18nOptions.js';
+import { loadPrivacyCfg, savePrivacyCfg, resolvePolicy, classifyDestination } from './aiPrivacy.js';
+import { getCachedAiPolicy } from './aiPolicy.js';
 
 // ── QA Touchstone — Settings (Environment + API credentials) ───────────────
 const { useState: useStateST } = React;
@@ -308,6 +310,60 @@ function LlmSettings() {
   );
 }
 
+export function PrivacySettings() {
+  const { t } = useI18n();
+  const [cfg, setCfg] = useStateST(() => loadPrivacyCfg());
+  const save = (d) => { const n = { ...cfg, ...d }; setCfg(n); savePrivacyCfg(n); };
+  const policy = resolvePolicy(cfg, getCachedAiPolicy());
+  const dest = classifyDestination(window.loadLlmCfg());
+  const MODES = ['full', 'redacted', 'local'];
+  const visibleModes = policy.locked ? ['local'] : MODES;
+  return (
+    <div className="qa-set-grid qa-set-grid--api">
+      <section className="qa-panel">
+        <div className="qa-panel-head"><span><Icon name="shield" size={14} /> {t('settings.privacy.mode')}</span></div>
+        <div className="qa-set-body">
+          {policy.locked && <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.privacy.lockedBy.' + policy.source)}</div>}
+          <div className="qa-seg">
+            {visibleModes.map(m => (
+              <button key={m} data-testid={`privacy-mode-${m}`} data-active={cfg.mode === m ? '1' : '0'}
+                disabled={policy.locked} onClick={() => save({ mode: m })}>{t('settings.privacy.mode.' + m)}</button>
+            ))}
+          </div>
+          <p className="qa-set-copy">{t('settings.privacy.mode.' + policy.effectiveMode + '.desc')}</p>
+          <FieldRow label={t('settings.privacy.lockdown')}>
+            <MiniCheck checked={cfg.lockdown} onChange={v => save({ lockdown: v })} />
+          </FieldRow>
+          {cfg.mode === 'local' && dest.provider === 'custom' && dest.isCloud && (
+            <>
+              <FieldRow label={t('settings.privacy.attest')}>
+                <MiniCheck checked={cfg.selfManagedAttested} onChange={v => save({ selfManagedAttested: v })} />
+              </FieldRow>
+              {cfg.selfManagedAttested && <div className="qa-auth-note qa-auth-warn"><Icon name="zap" size={13} /> {t('settings.privacy.attestWarn')}</div>}
+            </>
+          )}
+        </div>
+      </section>
+      <section className="qa-panel">
+        <div className="qa-panel-head"><span><Icon name="filter" size={14} /> {t('settings.privacy.custom')}</span></div>
+        <div className="qa-set-body">
+          <FieldRow label={t('settings.privacy.customFields')}>
+            <input className="qa-inp" value={(cfg.customFieldNames || []).join(', ')}
+              onChange={e => save({ customFieldNames: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+              placeholder="customerRef, internalId" />
+          </FieldRow>
+          <FieldRow label={t('settings.privacy.customPatterns')}>
+            <input className="qa-inp" value={(cfg.customPatterns || []).join(' | ')}
+              onChange={e => save({ customPatterns: e.target.value.split('|').map(s => s.trim()).filter(Boolean) })}
+              placeholder="PRJ-\\d+ | ACME-[A-Z]+" />
+          </FieldRow>
+          <div className="qa-auth-note"><Icon name="shield" size={13} /> {t('settings.privacy.customNote')}</div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function SettingsPage({ accent, setAccent, initialTab, vars, setVars, cookies, setCookies, sslVerify, setSslVerify }) {
   const { t } = useI18n();
   const [tab, setTab] = useStateST(initialTab || 'appearance');
@@ -318,6 +374,7 @@ function SettingsPage({ accent, setAccent, initialTab, vars, setVars, cookies, s
     ['cookies', t('settings.tab.cookies')],
     ['api', t('settings.tab.api')],
     ['llm', t('settings.tab.llm')],
+    ['privacy', t('settings.tab.privacy')],
   ];
   return (
     <div className="qa-settings">
@@ -333,6 +390,7 @@ function SettingsPage({ accent, setAccent, initialTab, vars, setVars, cookies, s
         {tab === 'cookies' && <CookieSettings cookies={cookies} setCookies={setCookies} />}
         {tab === 'api' && <ApiSettings />}
         {tab === 'llm' && <LlmSettings />}
+        {tab === 'privacy' && <PrivacySettings />}
       </div>
     </div>
   );
