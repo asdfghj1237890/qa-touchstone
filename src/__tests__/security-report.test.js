@@ -116,6 +116,35 @@ describe('sevToSarifLevel', () => {
   });
 });
 
+describe('buildReport redaction levels', () => {
+  it('"strict" omits both evidence and evidenceArtifact', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'strict' });
+    expect(rep.findings[0].evidence).toBeUndefined();
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+    expect(rep.meta.redaction).toBe('strict');
+  });
+  it('"redacted" keeps the short evidence but NOT the artifact', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'redacted' });
+    expect(rep.findings[0].evidence).toBe('eyJ…<redacted>…0');
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+  });
+  it('"evidence" attaches the artifact from the in-memory map by fp', () => {
+    const map = new Map([['fp1', { engine: 'matrix', request: { method: 'GET', url: '/me' } }]]);
+    const rep = buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map });
+    expect(rep.meta.redaction).toBe('evidence');
+    expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'matrix' });
+  });
+  it('"evidence" falls back to a persisted item artifact when the map has no entry', () => {
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'bola' } })]), null, lc(), { redaction: 'evidence' });
+    expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'bola' });
+  });
+  it('"evidence" emits no evidenceArtifact key when neither map nor item has one', () => {
+    const rep = buildReport(run([item()]), null, lc(), { redaction: 'evidence' });
+    expect(rep.findings[0].evidenceArtifact).toBeUndefined();
+    expect('evidenceArtifact' in rep.findings[0]).toBe(false);
+  });
+});
+
 describe('reportToSarif', () => {
   const parse = (model) => JSON.parse(reportToSarif(model));
   it('emits a valid 2.1.0 skeleton with unique rules and a result per current finding', () => {
@@ -135,5 +164,42 @@ describe('reportToSarif', () => {
     expect(byFp.b.baselineState).toBe('unchanged');
     expect(byFp.a.suppressions[0].justification).toBe('fp');
     expect(byFp.b.suppressions).toBeUndefined();
+  });
+});
+
+describe('reportToHtml evidence artifact', () => {
+  const artifact = {
+    engine: 'matrix',
+    request: { method: 'GET', url: '/me?token=<redacted>', identity: 'admin', headers: { authorization: '<redacted>' } },
+    response: { status: 200, headers: { 'content-type': 'application/json' }, snippetPath: 'data.token', snippet: { token: 'eyJ…<redacted>…0', name: '<str:3>' }, nonJson: null, truncated: false },
+  };
+  it('renders an expandable <details> with the masked, escaped request line', () => {
+    const map = new Map([['fp1', artifact]]);
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    expect(html).toContain('<details>');
+    expect(html).toContain('GET /me?token=&lt;redacted&gt;');
+  });
+  it('falls back to the plain evidence cell when there is no artifact', () => {
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'redacted' }));
+    expect(html).not.toContain('<details>');
+    expect(html).toContain('eyJ…&lt;redacted&gt;…0');
+  });
+});
+
+describe('reportToHtml evidence headers are single-escaped', () => {
+  it('escapes header values exactly once (no double-escape)', () => {
+    const artifact = {
+      engine: 'matrix',
+      request: { method: 'GET', url: '/x', identity: 'a', headers: { authorization: '<redacted>' } },
+      response: { status: 200, headers: { 'x-test': '<a>&b' }, snippetPath: '', snippet: { k: '<num>' }, nonJson: null, truncated: false },
+    };
+    const map = new Map([['fp1', artifact]]);
+    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    // request header value single-escaped
+    expect(html).toContain('authorization: &lt;redacted&gt;');
+    // response header value with & and <> single-escaped
+    expect(html).toContain('x-test: &lt;a&gt;&amp;b');
+    // and NOT double-escaped
+    expect(html).not.toContain('&amp;lt;');
   });
 });

@@ -199,6 +199,50 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     expect(loadSnapshots().lastRun.status).toBe('complete');
   });
 
+  it('exposes the redacted-evidence export option after a suite run and persists artifacts only on opt-in', async () => {
+    // Override the canned response with an email leak so the matrix oracle emits
+    // a real `sensitive-data` finding (a VULN verdict alone is not an oracle
+    // finding). normalizeMatrix attaches `.raw` to that finding, so the suite's
+    // buildEvidenceMap() yields a non-empty map → evidenceReady fires on complete.
+    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 3, size: 9, body: { email: 'a@b.co' }, headers: {} } };
+    renderPage();
+
+    // Add the endpoint via the picker (same flow as the matrix-run tests).
+    fireEvent.click(screen.getByRole('button', { name: /add endpoints/i }));
+    const pickerModal = document.querySelector('.qa-sec-picker');
+    fireEvent.click(within(pickerModal).getByText('https://api.test/thing').closest('button.qa-sec-picker-row'));
+    fireEvent.click(document.querySelector('.qa-sec-modal'));
+
+    // Run the FULL suite via the SuiteRunBar button (NOT the matrix-only "Run all").
+    fireEvent.click(screen.getByText('Run full security suite'));
+
+    // Wait for the suite to complete: the export control appears once
+    // snapshots.lastRun is set (canExport={!!snapshots.lastRun}).
+    await waitFor(() => expect(screen.getByText('Export report ▾')).toBeInTheDocument(), { timeout: 4000 });
+
+    const { loadSnapshots } = await import('../qa/findings.js');
+
+    // Opt-in proof, part 1: BEFORE saving, the persisted run has findings but NONE
+    // carry an evidenceArtifact (persistence is opt-in, never automatic).
+    const before = loadSnapshots().lastRun;
+    expect(before.items.length).toBeGreaterThan(0);
+    expect(before.items.some(it => 'evidenceArtifact' in it)).toBe(false);
+
+    // Open the export menu and assert the redacted-evidence option is now present —
+    // this proves the evidenceReady ref/state wiring fired after the suite run.
+    fireEvent.click(screen.getByText('Export report ▾'));
+    expect(screen.getByText('Evidence (redacted artifact)')).toBeInTheDocument();
+
+    // Opt-in proof, part 2: clicking "Save evidence into run" embeds artifacts onto
+    // the persisted snapshot items (deeper artifact-shape coverage lives in
+    // evidence.test.js's embedEvidence/buildEvidenceArtifact unit tests).
+    fireEvent.click(screen.getByText('Save evidence into run'));
+    await waitFor(() => {
+      const after = loadSnapshots().lastRun;
+      expect(after.items.some(it => 'evidenceArtifact' in it && it.evidenceArtifact)).toBe(true);
+    }, { timeout: 4000 });
+  });
+
   it('matrix-only "Run all" does not record a snapshot (suite is the only boundary)', async () => {
     // Render with one endpoint (reuse the file's setup helper) + the canned 200 response.
     renderPage();

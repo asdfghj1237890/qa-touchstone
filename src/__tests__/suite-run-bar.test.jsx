@@ -37,3 +37,21 @@ describe('SuiteRunBar export menu', () => {
     expect(screen.queryByText('Export report ▾')).toBeNull();
   });
 });
+
+describe('SuiteRunBar evidence option', () => {
+  it('offers the Evidence redaction option only when canEvidence and forwards it', () => {
+    const onExport = vi.fn();
+    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}}
+                      canExport canEvidence onExport={onExport} onSaveEvidence={() => {}} />);
+    fireEvent.click(screen.getByText('Export report ▾'));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'evidence' } });
+    fireEvent.click(screen.getByText('JSON'));
+    expect(onExport).toHaveBeenCalledWith('json', 'evidence');
+  });
+  it('hides the Evidence option when canEvidence is false', () => {
+    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}}
+                      canExport onExport={() => {}} />);
+    fireEvent.click(screen.getByText('Export report ▾'));
+    expect(screen.queryByRole('option', { name: 'Evidence (redacted artifact)' })).toBeNull();
+  });
+});

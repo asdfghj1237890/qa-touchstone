@@ -18,7 +18,7 @@ function summarize(record, t) {
     `${t('suite.engine.' + e.engine)} ${e.ran ? e.findingCount : t('suite.skipped')}`).join(' · ');
 }
 
-function SuiteRunBar({ suite, onRun, onStop, canExport, onExport }) {
+function SuiteRunBar({ suite, onRun, onStop, canExport, onExport, canEvidence, onSaveEvidence }) {
   const { t } = useI18n();
   const rec = suite.lastRecord;
   const [expOpen, setExpOpen] = useS(false);
@@ -54,11 +54,15 @@ function SuiteRunBar({ suite, onRun, onStop, canExport, onExport }) {
               {expOpen && (
                 <span className="qa-report-menu">
                   <label className="qa-report-redaction">{t('report.redaction')}:
-                    <select value={redaction} onChange={e => setRedaction(e.target.value)}>
+                    <select value={(!canEvidence && redaction === 'evidence') ? 'redacted' : redaction} onChange={e => setRedaction(e.target.value)}>
                       <option value="redacted">{t('report.redaction.redacted')}</option>
                       <option value="strict">{t('report.redaction.strict')}</option>
+                      {canEvidence && <option value="evidence">{t('report.redaction.evidence')}</option>}
                     </select>
                   </label>
+                  {canEvidence && onSaveEvidence && (
+                    <button className="qa-report-fmt" onClick={() => { onSaveEvidence(); setExpOpen(false); }}>{t('report.saveEvidence')}</button>
+                  )}
                   {FORMATS.map(fmt => (
                     <button key={fmt} className="qa-report-fmt" onClick={() => { onExport(fmt, redaction); setExpOpen(false); }}>{t('report.format.' + fmt)}</button>
                   ))}

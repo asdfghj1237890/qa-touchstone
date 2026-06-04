@@ -14,13 +14,18 @@ export function normalizeMatrix(results, endpoints, identities) {
   for (const ep of (endpoints || [])) {
     for (const id of (identities || [])) {
       const cell = results && results[ep.reqId] && results[ep.reqId][id.id];
+      const identityLabel = id.id === 'anon' ? 'anon' : (id.name || id.id);
+      const resp = cell && cell.response;
       for (const f of (cell && cell.findings) || []) {
         out.push({
           engine: 'matrix', ruleId: f.ruleId, severity: f.severity, oracle: f.oracle,
           title: f.title, path: f.path, evidence: f.evidence || '',
-          method: ep.method, endpoint: ep.path,
-          identityLabel: id.id === 'anon' ? 'anon' : (id.name || id.id),
+          method: ep.method, endpoint: ep.path, identityLabel,
           ref: { reqId: ep.reqId, idId: id.id },
+          raw: {
+            request: { method: ep.method, url: ep.path, identity: identityLabel },
+            response: resp ? { status: resp.status, headers: resp.headers, body: resp.body } : null,
+          },
         });
       }
     }
@@ -34,11 +39,18 @@ export function normalizeBola(results, tests) {
   for (const test of (tests || [])) {
     const atk = (results && results[test.id] && results[test.id].attacks) || {};
     for (const a in atk) for (const o in atk[a]) {
-      const f = atk[a][o] && atk[a][o].finding;
+      const cell = atk[a][o];
+      const f = cell && cell.finding;
+      const rq = cell && cell.request;
+      const resp = cell && cell.response;
       if (f) out.push({
         engine: 'bola', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
         title: f.title, path: f.path, evidence: f.evidence || '',
         ref: { testId: test.id, attackerId: a, ownerId: o },
+        raw: {
+          request: rq ? { method: rq.method, url: rq.path, identity: rq.identity } : null,
+          response: resp ? { status: resp.status, headers: resp.headers, body: resp.body } : null,
+        },
       });
     }
   }
@@ -49,10 +61,12 @@ export function normalizeBola(results, tests) {
 export function normalizeRateLimit(results, tests) {
   const out = [];
   for (const test of (tests || [])) {
-    const f = results && results[test.id] && results[test.id].finding;
+    const tr = results && results[test.id];
+    const f = tr && tr.finding;
     if (f) out.push({
       engine: 'ratelimit', ruleId: f.ruleId || f.oracle, severity: f.severity, oracle: f.oracle,
       title: f.title, path: f.path, evidence: f.evidence || '', ref: { testId: test.id },
+      raw: { request: { method: test.method, url: test.path }, stats: tr.stats || null },
     });
   }
   return out;
