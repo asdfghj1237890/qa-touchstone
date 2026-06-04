@@ -145,11 +145,16 @@ function Spinner({ size = 16 }) {
 }
 
 // Tiny toggle row used in params/headers tables.
-function MiniCheck({ on, onClick }) {
+function MiniCheck({ on, onClick, checked, onChange }) {
   const { t } = useI18n();
+  const active = checked !== undefined ? checked : on;
+  const handleClick = () => {
+    if (onClick) onClick();
+    else if (onChange) onChange(!active);
+  };
   return (
-    <button onClick={onClick} className="qa-minicheck" data-on={on ? '1' : '0'} aria-label={t('common.toggleRow')}>
-      {on && <Icon name="check" size={11} stroke={3} />}
+    <button onClick={handleClick} className="qa-minicheck" data-on={active ? '1' : '0'} aria-label={t('common.toggleRow')}>
+      {active && <Icon name="check" size={11} stroke={3} />}
     </button>
   );
 }

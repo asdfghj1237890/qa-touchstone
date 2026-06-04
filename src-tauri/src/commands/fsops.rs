@@ -1,17 +1,37 @@
 use crate::error::{AppError, AppResult};
-use tauri::Manager;
+use std::path::{Path, PathBuf};
 use tauri::path::BaseDirectory;
+use tauri::Manager;
 
-fn rejects_traversal(p: &str) -> bool {
-    p.is_empty() || p.contains("..")
+fn canonical_temp_dir() -> Option<PathBuf> {
+    std::fs::canonicalize(std::env::temp_dir()).ok()
+}
+
+fn canonical_existing_under_temp(path: impl AsRef<Path>) -> Option<PathBuf> {
+    let p = std::fs::canonicalize(path).ok()?;
+    let temp = canonical_temp_dir()?;
+    if p.starts_with(temp) { Some(p) } else { None }
+}
+
+fn clean_suffix(suffix: Option<String>) -> String {
+    let raw = suffix.unwrap_or_else(|| "txt".into());
+    let mut cleaned: String = raw
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(16)
+        .collect();
+    if cleaned.is_empty() {
+        cleaned = "txt".into();
+    }
+    cleaned
 }
 
 #[tauri::command]
 pub fn read_directory(folder_path: String) -> Vec<String> {
-    if rejects_traversal(&folder_path) {
+    let Some(folder) = canonical_existing_under_temp(&folder_path) else {
         return Vec::new();
-    }
-    match std::fs::read_dir(&folder_path) {
+    };
+    match std::fs::read_dir(&folder) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .filter_map(|e| e.file_name().into_string().ok())
@@ -22,10 +42,8 @@ pub fn read_directory(folder_path: String) -> Vec<String> {
 
 #[tauri::command]
 pub fn find_hex_file(folder_path: String) -> Option<String> {
-    if rejects_traversal(&folder_path) {
-        return None;
-    }
-    let entries = std::fs::read_dir(&folder_path).ok()?;
+    let folder = canonical_existing_under_temp(&folder_path)?;
+    let entries = std::fs::read_dir(&folder).ok()?;
     for entry in entries.filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("hex")) == Some(true) {
@@ -40,11 +58,10 @@ pub fn read_file_content(file_path: String) -> AppResult<String> {
     if file_path.is_empty() {
         return Err(AppError::Other("Invalid file path provided.".into()));
     }
-    // 阻擋目錄穿越（對齊 Electron 的 includes('..') 檢查）
-    if file_path.contains("..") {
+    let Some(path) = canonical_existing_under_temp(&file_path) else {
         return Err(AppError::Other("Access to the path is restricted.".into()));
-    }
-    std::fs::read_to_string(&file_path)
+    };
+    std::fs::read_to_string(&path)
         .map_err(|e| AppError::Other(format!("Failed to read file: {e}")))
 }
 
@@ -86,9 +103,11 @@ pub fn cleanup_temp_file(path: String) -> AppResult<()> {
         return Err(AppError::Other("Empty path".into()));
     }
     let p = std::path::PathBuf::from(&path);
-    let temp = std::env::temp_dir();
-    let canon_p = std::fs::canonicalize(&p).unwrap_or_else(|_| p.clone());
-    let canon_t = std::fs::canonicalize(&temp).unwrap_or_else(|_| temp.clone());
+    let canon_p = std::fs::canonicalize(&p)
+        .map_err(|e| AppError::Other(format!("Invalid temp file path: {e}")))?;
+    let Some(canon_t) = canonical_temp_dir() else {
+        return Err(AppError::Other("Temp dir is unavailable".into()));
+    };
     if !canon_p.starts_with(&canon_t) {
         return Err(AppError::Other("Refusing to delete outside the temp dir".into()));
     }
@@ -103,7 +122,7 @@ pub fn cleanup_temp_file(path: String) -> AppResult<()> {
 #[tauri::command]
 pub fn write_temp_text(content: String, suffix: Option<String>) -> AppResult<String> {
     use std::io::Write;
-    let suffix = suffix.unwrap_or_else(|| "txt".into());
+    let suffix = clean_suffix(suffix);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -130,12 +149,27 @@ mod tests {
     }
 
     #[test]
+    fn read_file_content_allows_temp_file() {
+        let path = write_temp_text("hello\n".into(), Some("txt".into())).unwrap();
+        let r = read_file_content(path.clone()).unwrap();
+        assert_eq!(r, "hello\n");
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
     fn write_temp_text_roundtrip() {
         let path = write_temp_text("hello k6\n".into(), Some("js".into())).unwrap();
         assert!(path.ends_with(".js"));
         let back = std::fs::read_to_string(&path).unwrap();
         assert_eq!(back, "hello k6\n");
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn write_temp_text_sanitizes_suffix() {
+        let path = write_temp_text("x".into(), Some("../bad/js".into())).unwrap();
+        assert!(path.ends_with(".badjs"));
+        std::fs::remove_file(path).ok();
     }
 
     #[test]

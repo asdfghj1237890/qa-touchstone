@@ -22,15 +22,14 @@ pub fn is_likely_text(remote_path: &str) -> bool {
 
 /// 建構接收指令（含換行）。對齊 Electron 的兩種模板。
 pub fn build_receive_command(remote_path: &str, is_text: bool) -> String {
+    let p = shell_quote(remote_path);
     if is_text {
         format!(
-            "echo \"=== FILE_START ===\" && wc -c \"{p}\" && echo \"=== CONTENT_START ===\" && cat \"{p}\" && echo \"=== FILE_END ===\"\n",
-            p = remote_path
+            "echo \"=== FILE_START ===\" && wc -c {p} && echo \"=== CONTENT_START ===\" && cat {p} && echo \"=== FILE_END ===\"\n"
         )
     } else {
         format!(
-            "echo \"=== FILE_START ===\" && wc -c \"{p}\" && echo \"=== CONTENT_START ===\" && echo \"Binary file detected, encoding...\" && base64 \"{p}\" && echo \"=== FILE_END ===\"\n",
-            p = remote_path
+            "echo \"=== FILE_START ===\" && wc -c {p} && echo \"=== CONTENT_START ===\" && echo \"Binary file detected, encoding...\" && base64 {p} && echo \"=== FILE_END ===\"\n"
         )
     }
 }
@@ -147,6 +146,10 @@ pub fn escape_single_quotes(s: &str) -> String {
     s.replace('\'', "'\"'\"'")
 }
 
+pub fn shell_quote(s: &str) -> String {
+    format!("'{}'", escape_single_quotes(s))
+}
+
 /// 計算送檔最終目的地（對齊 Electron：目錄則補檔名）。
 pub fn compute_send_dest(dest_path: &str, file_name: &str) -> String {
     if dest_path.ends_with('/') {
@@ -155,6 +158,28 @@ pub fn compute_send_dest(dest_path: &str, file_name: &str) -> String {
         format!("{dest_path}/{file_name}")
     } else {
         dest_path.to_string()
+    }
+}
+
+pub fn safe_listing_name(filename: &str) -> Option<String> {
+    let name = filename.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.chars().any(|c| c == '\0' || c.is_control())
+    {
+        return None;
+    }
+    let path = std::path::Path::new(name);
+    if path.is_absolute() {
+        return None;
+    }
+    if path.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
+        Some(name.to_string())
+    } else {
+        None
     }
 }
 
@@ -203,9 +228,7 @@ pub fn parse_ls_output(response: &str) -> Vec<(String, bool)> {
             continue;
         }
         let filename = parts[8..].join(" ");
-        if filename.is_empty() || filename == "." || filename == ".." {
-            continue;
-        }
+        let Some(filename) = safe_listing_name(&filename) else { continue; };
         if is_file {
             if filename == "btmp" || filename == "wtmp" || !filename.contains('.') {
                 continue;
@@ -240,11 +263,11 @@ mod tests {
     #[test]
     fn receive_command_templates() {
         let t = build_receive_command("/etc/hosts", true);
-        assert!(t.contains("cat \"/etc/hosts\""));
+        assert!(t.contains("cat '/etc/hosts'"));
         assert!(t.starts_with("echo \"=== FILE_START ===\""));
         assert!(t.ends_with("\n"));
         let b = build_receive_command("/f.bin", false);
-        assert!(b.contains("base64 \"/f.bin\""));
+        assert!(b.contains("base64 '/f.bin'"));
         assert!(b.contains("Binary file detected, encoding..."));
     }
 
@@ -310,6 +333,14 @@ mod tests {
     #[test]
     fn escape_quotes() {
         assert_eq!(escape_single_quotes("a'b"), "a'\"'\"'b");
+        assert_eq!(shell_quote("/tmp/a'b"), "'/tmp/a'\"'\"'b'");
+    }
+
+    #[test]
+    fn receive_command_quotes_remote_path() {
+        let cmd = build_receive_command("/tmp/a\" && reboot #.txt", true);
+        assert!(cmd.contains("cat '/tmp/a\" && reboot #.txt'"));
+        assert!(!cmd.contains("cat \"/tmp/a\" && reboot"));
     }
 
     #[test]
@@ -337,6 +368,27 @@ drwxr-xr-x 2 root root 4096 Jan  1 00:00 private\n\
 # ";
         let items = parse_ls_output(resp);
         assert_eq!(items, vec![("config.json".to_string(), false), ("logs".to_string(), true)]);
+    }
+
+    #[test]
+    fn parse_ls_rejects_path_escape_names() {
+        let resp = "total 4\n\
+-rw-r--r-- 1 root root 1 Jan 1 00:00 ok.txt\n\
+-rw-r--r-- 1 root root 1 Jan 1 00:00 ../evil.txt\n\
+-rw-r--r-- 1 root root 1 Jan 1 00:00 sub/evil.txt\n\
+-rw-r--r-- 1 root root 1 Jan 1 00:00 sub\\evil.txt\n\
+drwxr-xr-x 2 root root 1 Jan 1 00:00 /tmp/evil\n# ";
+        assert_eq!(parse_ls_output(resp), vec![("ok.txt".to_string(), false)]);
+    }
+
+    #[test]
+    fn safe_listing_name_accepts_single_component_only() {
+        assert_eq!(safe_listing_name("file name.txt"), Some("file name.txt".to_string()));
+        assert!(safe_listing_name("../evil.txt").is_none());
+        assert!(safe_listing_name("sub/evil.txt").is_none());
+        assert!(safe_listing_name("sub\\evil.txt").is_none());
+        assert!(safe_listing_name("/tmp/evil.txt").is_none());
+        assert!(safe_listing_name("bad\nname.txt").is_none());
     }
 
     #[test]

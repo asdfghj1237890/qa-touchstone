@@ -3,7 +3,7 @@ use crate::serial_xfer;
 use crate::state::{AppState, SerialConfig};
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -247,6 +247,22 @@ fn basename(p: &str) -> String {
     p.rsplit(['/', '\\']).next().unwrap_or(p).to_string()
 }
 
+fn safe_local_child(root: &Path, name: &str) -> Result<PathBuf, String> {
+    let safe_name = serial_xfer::safe_listing_name(name)
+        .ok_or_else(|| "Unsafe file name from device listing".to_string())?;
+    let child = root.join(safe_name);
+    if child.exists() {
+        let root_canon = std::fs::canonicalize(root)
+            .map_err(|e| format!("Invalid download root: {e}"))?;
+        let child_canon = std::fs::canonicalize(&child)
+            .map_err(|e| format!("Invalid existing download path: {e}"))?;
+        if !child_canon.starts_with(&root_canon) {
+            return Err("Existing download path escapes the selected folder".into());
+        }
+    }
+    Ok(child)
+}
+
 #[tauri::command]
 pub fn send_file_serial(app: AppHandle, state: State<AppState>, file_path: String, dest_path: String) -> Value {
     let content = match std::fs::read_to_string(&file_path) {
@@ -255,7 +271,11 @@ pub fn send_file_serial(app: AppHandle, state: State<AppState>, file_path: Strin
     };
     let file_name = basename(&file_path);
     let final_dest = serial_xfer::compute_send_dest(&dest_path, &file_name);
-    let command = format!("echo '{}' > {}\n", serial_xfer::escape_single_quotes(&content), final_dest);
+    let command = format!(
+        "echo {} > {}\n",
+        serial_xfer::shell_quote(&content),
+        serial_xfer::shell_quote(&final_dest),
+    );
 
     let mut s = state.serial.lock();
     if s.transfer_active.swap(true, Ordering::SeqCst) {
@@ -346,7 +366,7 @@ fn listing_done(response: &str) -> bool {
 
 fn receive_directory(app: &AppHandle, s: &mut crate::state::SerialState, save_path: &Path, remote_path: &str) -> Value {
     emit_progress(app, "starting", "Listing directory contents...");
-    let command = format!("cd \"{remote_path}\" && ls -l\n");
+    let command = format!("cd {} && ls -l\n", serial_xfer::shell_quote(remote_path));
     let response = {
         let port = match s.port.as_mut() {
             Some(p) => p,
@@ -384,8 +404,17 @@ fn download_files_sequentially(
         }
         if *is_dir {
             let remote_dir = format!("{remote_path}/{name}");
-            let local_dir = save_path.join(name);
-            let _ = std::fs::create_dir_all(&local_dir);
+            let local_dir = match safe_local_child(save_path, name) {
+                Ok(p) => p,
+                Err(e) => {
+                    emit_progress(app, "downloading", &format!("Skipping unsafe entry {name}: {e}"));
+                    continue;
+                }
+            };
+            if let Err(e) = std::fs::create_dir_all(&local_dir) {
+                emit_progress(app, "downloading", &format!("Skipping {name}: {e}"));
+                continue;
+            }
             emit_progress(app, "downloading", &format!("Processing directory {name}..."));
             let r = receive_directory(app, s, &local_dir, &remote_dir);
             if r.get("success").and_then(|v| v.as_bool()) == Some(true) {
@@ -393,7 +422,13 @@ fn download_files_sequentially(
             }
         } else {
             let remote_file = format!("{remote_path}/{name}");
-            let local_file = save_path.join(name);
+            let local_file = match safe_local_child(save_path, name) {
+                Ok(p) => p,
+                Err(e) => {
+                    emit_progress(app, "downloading", &format!("Skipping unsafe entry {name}: {e}"));
+                    continue;
+                }
+            };
             let mut retry = 0;
             loop {
                 let result = receive_single_file(app, s, &local_file, &remote_file);
@@ -505,5 +540,34 @@ mod tests {
     #[test]
     fn list_serial_ports_does_not_panic() {
         let _ = list_serial_ports();
+    }
+
+    #[test]
+    fn safe_local_child_rejects_path_escape_names() {
+        let dir = std::env::temp_dir().join(format!("serialsafe_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(safe_local_child(&dir, "ok.txt").unwrap().ends_with("ok.txt"));
+        assert!(safe_local_child(&dir, "../evil.txt").is_err());
+        assert!(safe_local_child(&dir, "sub/evil.txt").is_err());
+        assert!(safe_local_child(&dir, "sub\\evil.txt").is_err());
+        assert!(safe_local_child(&dir, "/tmp/evil.txt").is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_local_child_rejects_existing_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("serialroot_{}", std::process::id()));
+        let outside = std::env::temp_dir().join(format!("serialoutside_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&outside, "outside").unwrap();
+        symlink(&outside, root.join("link.txt")).unwrap();
+
+        assert!(safe_local_child(&root, "link.txt").is_err());
+
+        std::fs::remove_file(&outside).ok();
+        std::fs::remove_dir_all(&root).ok();
     }
 }

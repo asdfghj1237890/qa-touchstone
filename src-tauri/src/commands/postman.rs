@@ -2,7 +2,7 @@ use crate::commands::config::load_config_raw;
 use crate::events::POSTMAN_COLLECTIONS_UPDATED;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
 #[derive(Serialize)]
@@ -83,6 +83,25 @@ fn configured_path(app: &AppHandle) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn canonical_dir(path: impl AsRef<Path>) -> Option<PathBuf> {
+    let p = std::fs::canonicalize(path).ok()?;
+    if p.is_dir() { Some(p) } else { None }
+}
+
+fn path_is_under(path: &Path, root: &Path) -> bool {
+    path == root || path.starts_with(root)
+}
+
+fn configured_collection_root(app: &AppHandle) -> Option<PathBuf> {
+    configured_path(app).and_then(canonical_dir)
+}
+
+fn allowed_collection_dir(app: &AppHandle, folder_path: &str) -> Option<PathBuf> {
+    let root = configured_collection_root(app)?;
+    let folder = canonical_dir(folder_path)?;
+    if path_is_under(&folder, &root) { Some(folder) } else { None }
+}
+
 #[tauri::command]
 pub fn get_postman_collection_path(app: AppHandle) -> Value {
     match load_config_raw(&app).get("postmanCollectionPath") {
@@ -97,7 +116,10 @@ pub fn scan_postman_collections(app: AppHandle, folder_path: Option<String>) -> 
         Some(f) if !f.is_empty() => f,
         _ => return Vec::new(),
     };
-    let collections = scan_dir_for_collections(&folder);
+    let Some(folder) = allowed_collection_dir(&app, &folder) else {
+        return Vec::new();
+    };
+    let collections = scan_dir_for_collections(&folder.to_string_lossy());
     let _ = app.emit(POSTMAN_COLLECTIONS_UPDATED, ());
     collections
 }
@@ -105,8 +127,8 @@ pub fn scan_postman_collections(app: AppHandle, folder_path: Option<String>) -> 
 #[tauri::command]
 pub fn load_cached_postman_collections(app: AppHandle) -> Vec<Value> {
     // 不用快取檔：重掃設定的目錄（維持前端刷新迴圈）。
-    match configured_path(&app) {
-        Some(p) => scan_dir_for_collections(&p),
+    match configured_collection_root(&app) {
+        Some(p) => scan_dir_for_collections(&p.to_string_lossy()),
         None => Vec::new(),
     }
 }
@@ -131,11 +153,25 @@ pub fn save_postman_collection(app: AppHandle, file_path: String, collection_dat
     if path.extension().and_then(|e| e.to_str()).map(|e| !e.eq_ignore_ascii_case("json")).unwrap_or(true) {
         return SaveResult { success: false, error: Some("Only .json paths are accepted.".into()) };
     }
+    let Some(root) = configured_collection_root(&app) else {
+        return SaveResult { success: false, error: Some("No configured collection root.".into()) };
+    };
     // Refuse if the parent directory does not already exist — prevents
     // mkdir-anywhere accidents.
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            return SaveResult { success: false, error: Some("Parent directory does not exist.".into()) };
+    let Some(parent) = path.parent() else {
+        return SaveResult { success: false, error: Some("Path has no parent directory.".into()) };
+    };
+    let Some(canon_parent) = canonical_dir(parent) else {
+        return SaveResult { success: false, error: Some("Parent directory does not exist.".into()) };
+    };
+    if !path_is_under(&canon_parent, &root) {
+        return SaveResult { success: false, error: Some("Path is outside the configured collection root.".into()) };
+    }
+    if path.exists() {
+        match std::fs::canonicalize(path) {
+            Ok(canon_file) if path_is_under(&canon_file, &root) => {}
+            Ok(_) => return SaveResult { success: false, error: Some("Refusing to overwrite a file outside the configured collection root.".into()) },
+            Err(e) => return SaveResult { success: false, error: Some(e.to_string()) },
         }
     }
     if collection_data.get("info").is_none() {
@@ -216,5 +252,13 @@ mod tests {
     fn save_rejects_missing_info() {
         let data = json!({ "item": [] });
         assert!(data.get("info").is_none());
+    }
+
+    #[test]
+    fn path_scope_helper_requires_root_prefix() {
+        let root = Path::new("/tmp/collections");
+        assert!(path_is_under(Path::new("/tmp/collections"), root));
+        assert!(path_is_under(Path::new("/tmp/collections/a/b.json"), root));
+        assert!(!path_is_under(Path::new("/tmp/collections2/b.json"), root));
     }
 }

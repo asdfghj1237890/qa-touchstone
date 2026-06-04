@@ -4,7 +4,7 @@
 // persist the raw prompt or response.
 import './setup.js';
 import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed, buildScrubber, AI_KINDS } from './aiPrivacy.js';
-import { getCachedAiPolicy } from './aiPolicy.js';
+import { ensureAiPolicy } from './aiPolicy.js';
 import { requestPromptApproval } from './PromptPreview.jsx';
 
 const LLM_CFG_DEFAULTS = { provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: '' };
@@ -18,7 +18,7 @@ function _loadLlmCfg() {
 // Re-checks the egress gate as defense-in-depth so a regression still fails closed.
 export async function qaCallLLM(prompt) {
   const cfg = _loadLlmCfg();
-  const policy = resolvePolicy(loadPrivacyCfg(), getCachedAiPolicy());
+  const policy = resolvePolicy(loadPrivacyCfg(), await ensureAiPolicy());
   assertEgressAllowed(policy.effectiveMode, classifyDestination(cfg), loadPrivacyCfg());
   if (cfg.provider === 'builtin') {
     if (!(window.claude && window.claude.complete)) throw new Error('built-in Claude unavailable');
@@ -41,7 +41,7 @@ export async function qaCallLLM(prompt) {
 export async function qaAiSend(request, opts = {}) {
   const llmCfg = opts.llmCfg || _loadLlmCfg();
   const privacyCfg = opts.privacyCfg || loadPrivacyCfg();
-  const backendPolicy = 'backendPolicy' in opts ? opts.backendPolicy : getCachedAiPolicy();
+  const backendPolicy = 'backendPolicy' in opts ? opts.backendPolicy : await ensureAiPolicy(opts.api);
   const callLLM = opts.callLLM || qaCallLLM;
   const approve = opts.approve || requestPromptApproval;
 

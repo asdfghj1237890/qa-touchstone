@@ -12,9 +12,28 @@ fn ssh_test_args(ip: &str, username: &str) -> Vec<String> {
         "StrictHostKeyChecking=no".into(),
         "-o".into(),
         "PasswordAuthentication=no".into(),
+        "--".into(),
         format!("{username}@{ip}"),
         "echo 'SSH_TEST_SUCCESS' && hostname".into(),
     ]
+}
+
+fn valid_ssh_user(username: &str) -> bool {
+    !username.is_empty()
+        && !username.starts_with('-')
+        && username.len() <= 64
+        && username
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+fn valid_ssh_host(host: &str) -> bool {
+    !host.is_empty()
+        && !host.starts_with('-')
+        && host.len() <= 253
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
 }
 
 /// 解析 ssh 結果（純函式）。對齊 Electron test-ssh-connection 的分支。
@@ -51,6 +70,9 @@ pub fn test_ssh_connection(ip: String, username: Option<String>) -> Value {
     use wait_timeout::ChildExt;
 
     let username = username.unwrap_or_else(|| "root".to_string());
+    if !valid_ssh_user(&username) || !valid_ssh_host(&ip) {
+        return json!({ "success": false, "error": "Invalid SSH target" });
+    }
     let args = ssh_test_args(&ip, &username);
     let mut child = match Command::new("ssh")
         .args(&args)
@@ -266,8 +288,21 @@ mod tests {
     fn ssh_args_shape() {
         let a = ssh_test_args("1.2.3.4", "root");
         assert!(a.contains(&"PasswordAuthentication=no".to_string()));
+        assert!(a.contains(&"--".to_string()));
         assert!(a.contains(&"root@1.2.3.4".to_string()));
         assert_eq!(a.last().unwrap(), "echo 'SSH_TEST_SUCCESS' && hostname");
+    }
+
+    #[test]
+    fn ssh_target_validation_rejects_option_injection_shapes() {
+        assert!(valid_ssh_user("root"));
+        assert!(valid_ssh_user("qa-runner_1"));
+        assert!(!valid_ssh_user("-oProxyCommand=touch /tmp/pwn"));
+        assert!(!valid_ssh_user("bad user"));
+        assert!(valid_ssh_host("192.168.1.220"));
+        assert!(valid_ssh_host("[::1]"));
+        assert!(!valid_ssh_host("-F/tmp/config"));
+        assert!(!valid_ssh_host("host name"));
     }
 
     #[test]

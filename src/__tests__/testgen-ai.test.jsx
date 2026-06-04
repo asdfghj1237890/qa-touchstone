@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { qaAiSend } from '../qa/llm.js';
+import { setCachedAiPolicy } from '../qa/aiPolicy.js';
 
-beforeEach(() => { localStorage.clear(); localStorage.setItem('qa_llm_cfg', JSON.stringify({ provider: 'openai', model: 'm', key: 'k', baseUrl: '' })); });
+beforeEach(() => {
+  localStorage.clear();
+  localStorage.setItem('qa_llm_cfg', JSON.stringify({ provider: 'openai', model: 'm', key: 'k', baseUrl: '' }));
+  setCachedAiPolicy({ externalAllowed: true, locked: false });
+});
 
 describe('testgen kind redaction', () => {
   it('openapi source is host-stripped when sent', async () => {

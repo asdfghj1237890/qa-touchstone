@@ -6,8 +6,6 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("not found: {0}")]
-    NotFound(String),
     #[error("{0}")]
     Other(String),
 }

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ResponsePanel } from '../qa/ResponsePanel.jsx';
 import { I18nProvider } from '../qa/i18n.jsx';
+import { setCachedAiPolicy } from '../qa/aiPolicy.js';
 
 // Auto-approve the prompt preview so qaAiSend proceeds to the transport.
 vi.mock('../qa/PromptPreview.jsx', () => ({
@@ -33,6 +34,7 @@ describe('ResponsePanel AI review', () => {
   afterEach(() => cleanup());
   beforeEach(() => {
     installLocalStorage({ qa_locale: 'en-US' });
+    setCachedAiPolicy({ externalAllowed: true, locked: false });
     window.loadLlmCfg = () => ({ provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: '' });
     window.claude = { complete: vi.fn().mockResolvedValue('Looks correct: 200 with the expected body.') };
   });

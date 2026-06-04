@@ -4,6 +4,7 @@ use crate::credentials::parse_credential_file_content;
 use crate::reqprep::{rebase_url, remove_json_comments, substitute_body, substitute_url};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
+use std::time::Duration;
 use tauri::AppHandle;
 
 fn err(msg: impl Into<String>) -> Value {
@@ -56,6 +57,10 @@ fn string_array_field(v: &Value, key: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn method_allows_body(method: &str) -> bool {
+    !matches!(method, "GET" | "HEAD")
 }
 
 fn rebase_url_for_environment(raw_url: &str, env: &Value) -> String {
@@ -116,7 +121,7 @@ pub async fn execute_postman_request(
 
     let mut content_type = "application/json".to_string();
     let mut post_data: Option<String> = None;
-    if matches!(method.as_str(), "POST" | "PUT" | "PATCH") {
+    if method_allows_body(method.as_str()) {
         if let Some(body) = req.get("body") {
             if str_field(body, "mode") == Some("raw") {
                 if let Some(raw) = str_field(body, "raw") {
@@ -223,6 +228,8 @@ pub async fn execute_postman_request(
     // Set-Cookie along the way (browsers + Postman do the same).
     let verify = ssl_verify.unwrap_or(true);
     let client_builder = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(60))
         .redirect(reqwest::redirect::Policy::none());
     let client_builder = if verify { client_builder } else { client_builder.danger_accept_invalid_certs(true) };
     let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
@@ -427,5 +434,14 @@ mod tests {
         );
 
         assert_eq!(rebased, "https://new.example.com/prod/devices");
+    }
+
+    #[test]
+    fn body_policy_allows_delete_but_not_get_or_head() {
+        assert!(method_allows_body("POST"));
+        assert!(method_allows_body("PATCH"));
+        assert!(method_allows_body("DELETE"));
+        assert!(!method_allows_body("GET"));
+        assert!(!method_allows_body("HEAD"));
     }
 }

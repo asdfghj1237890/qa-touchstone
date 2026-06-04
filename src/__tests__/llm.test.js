@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { qaCallLLM } from '../qa/llm.js';
+import { setCachedAiPolicy } from '../qa/aiPolicy.js';
 
 describe('qaCallLLM provider dispatch', () => {
   beforeEach(() => {
+    setCachedAiPolicy({ externalAllowed: true, locked: false });
     window.loadLlmCfg = () => ({ provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: '' });
     window.claude = { complete: vi.fn().mockResolvedValue('hello from builtin') };
   });
