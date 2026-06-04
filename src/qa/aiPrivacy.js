@@ -157,3 +157,28 @@ export function redactUrlForAI(url) {
     return (segs || '/') + '?' + q;
   } catch { return '<redacted-url>'; }
 }
+
+const OPENAPI_STRIP_KEYS = new Set(['example', 'examples', 'default', 'enum']);
+function stripSpecValues(node) {
+  if (Array.isArray(node)) return node.map(stripSpecValues);
+  if (node && typeof node === 'object') {
+    const out = {};
+    for (const k of Object.keys(node)) {
+      if (k === 'servers') continue;            // drop host(s)
+      if (OPENAPI_STRIP_KEYS.has(k)) continue;   // drop concrete sample values at any depth
+      out[k] = stripSpecValues(node[k]);
+    }
+    return out;
+  }
+  return node;
+}
+
+export function redactOpenApi(specText) {
+  try {
+    const spec = JSON.parse(specText);
+    if (!spec || typeof spec !== 'object') throw new Error('not an object');
+    return JSON.stringify(stripSpecValues(spec), null, 2);
+  } catch {
+    return redactText(specText, buildScrubber(PRIVACY_DEFAULT_CFG));
+  }
+}
