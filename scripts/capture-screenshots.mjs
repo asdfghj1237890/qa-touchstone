@@ -23,6 +23,15 @@ const PORT = 9333;
 const W = 1320, H = 880, SCALE = 2;
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots');
 
+// Safely embed a string as a JavaScript literal inside source we build for
+// Runtime.evaluate. JSON.stringify alone leaves '<', '>', '/' and the U+2028 /
+// U+2029 line separators intact, any of which can break out of the surrounding
+// code, so escape each one to its \uXXXX form.
+const UNSAFE_JS_CHARS = new RegExp("[<>/" + String.fromCharCode(0x2028, 0x2029) + "]", "g");
+const jsString = (value) =>
+  JSON.stringify(value).replace(UNSAFE_JS_CHARS,
+    (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase());
+
 // ── tiny CDP client over a WebSocket ───────────────────────────────────────
 function makeCDP(wsUrl) {
   const ws = new WebSocket(wsUrl);
@@ -85,7 +94,7 @@ async function main() {
   await S('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: SCALE, mobile: false });
   // Pin the UI language before any app script runs.
   await S('Page.addScriptToEvaluateOnNewDocument', {
-    source: `try { localStorage.setItem('qa_locale', ${JSON.stringify(LOCALE)}); } catch (e) {}`,
+    source: `try { localStorage.setItem('qa_locale', ${jsString(LOCALE)}); } catch (e) {}`,
   });
 
   const evalJs = async (expression, awaitPromise = false) => {
@@ -104,7 +113,7 @@ async function main() {
     throw new Error('waitFor timed out: ' + cond);
   };
   const click = async (selector) => {
-    const ok = await evalJs(`(()=>{const el=document.querySelector(${JSON.stringify(selector)}); if(!el) return false; el.click(); return true;})()`);
+    const ok = await evalJs(`(()=>{const el=document.querySelector(${jsString(selector)}); if(!el) return false; el.click(); return true;})()`);
     if (!ok) throw new Error('element not found: ' + selector);
   };
   const nav = (label) => click(`button.qa-rail-btn[aria-label=${JSON.stringify(label)}]`);

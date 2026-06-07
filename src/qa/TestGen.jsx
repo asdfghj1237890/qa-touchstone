@@ -3,9 +3,25 @@ import './setup.js';
 import { Icon, MethodBadge, Spinner } from './components.jsx';
 import { qaAiSend } from './llm.js';
 import { useI18n } from './useI18n.js';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────
 const { useState: useTG } = React;
+
+// pdf.js is bundled locally (no CDN) and loaded on demand the first time a PDF
+// is imported, so it never weighs down the initial app bundle. The worker is
+// emitted as a same-origin asset by Vite (?url) and works under the Tauri CSP.
+let _pdfjsPromise = null;
+function loadPdfjs() {
+  if (!_pdfjsPromise) {
+    _pdfjsPromise = import('pdfjs-dist').then((mod) => {
+      const lib = mod.getDocument ? mod : mod.default;
+      lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+      return lib;
+    });
+  }
+  return _pdfjsPromise;
+}
 
 const SAMPLE_BDD = `Feature: User management API
 
@@ -311,10 +327,10 @@ function TestGen({ openSettings, onAddTests }) {
     setErr(''); setCases([]);
     try {
       if (name.endsWith('.pdf')) {
-        if (!window.pdfjsLib) { setErr(t('testgen.err.pdfUnavailable')); return; }
         setExtracting(f.name);
         const buf = await f.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+        const pdfjsLib = await loadPdfjs();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
         let text = '';
         for (let p = 1; p <= pdf.numPages; p++) {
           const page = await pdf.getPage(p);
