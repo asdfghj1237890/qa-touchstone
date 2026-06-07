@@ -292,8 +292,10 @@ when you explicitly opt in.
 <summary>macOS, Windows, and Gatekeeper notes</summary>
 
 macOS builds produce a `.dmg` under
-`src-tauri/target/release/bundle/dmg/`. Windows builds produce an NSIS
-installer. The macOS k6 binary is bundled into the app at
+`src-tauri/target/release/bundle/dmg/`. Windows builds produce both an NSIS
+installer (`-x64-setup.exe`) and a no-install portable ZIP (`-x64-portable.zip`)
+that holds the executable next to its bundled `resources/k6.exe`. The macOS k6
+binary is bundled into the app at
 `Contents/Resources/resources/k6`, so Performance testing works without a
 system k6 install.
 
@@ -308,6 +310,21 @@ xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"
 For wider distribution, sign and notarize the build.
 
 </details>
+
+## Credits
+
+- **Performance testing** is powered by [Grafana k6](https://k6.io)
+  ([`grafana/k6`](https://github.com/grafana/k6)), licensed under
+  [AGPL-3.0](https://github.com/grafana/k6/blob/master/LICENSE.md). The official
+  k6 binary is downloaded, SHA256-verified, and bundled under the app's
+  `resources/` directory (see [k6 Binary](#k6-binary) and
+  [Packaging Notes](#packaging-notes)). It runs as a separate executable invoked
+  by the app — it is not linked into QA Touchstone. Thanks to the Grafana Labs
+  team and the k6 contributors.
+- Built with [Tauri](https://tauri.app), [React](https://react.dev), and
+  [MUI](https://mui.com).
+
+Trademarks and project names belong to their respective owners.
 
 ## License
 

@@ -274,7 +274,9 @@ machine-specific paths。
 <summary>macOS、Windows 與 Gatekeeper notes</summary>
 
 macOS build 會在 `src-tauri/target/release/bundle/dmg/` 產生 `.dmg`。
-Windows build 會產生 NSIS installer。macOS k6 binary 會 bundle 到 app 的
+Windows build 會同時產生 NSIS installer（`-x64-setup.exe`）與一個免安裝的
+portable ZIP（`-x64-portable.zip`，內含執行檔與旁邊的 `resources/k6.exe`）。
+macOS k6 binary 會 bundle 到 app 的
 `Contents/Resources/resources/k6`，所以 Performance testing 不需要額外安裝
 system k6。
 
@@ -288,6 +290,19 @@ xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"
 若要更廣泛發佈，請 sign 並 notarize build。
 
 </details>
+
+## Credits
+
+- **效能測試**由 [Grafana k6](https://k6.io)
+  （[`grafana/k6`](https://github.com/grafana/k6)）提供，採
+  [AGPL-3.0](https://github.com/grafana/k6/blob/master/LICENSE.md) 授權。官方
+  k6 binary 會經下載、SHA256 驗證後 bundle 到 app 的 `resources/` 目錄（見
+  [k6 Binary](#k6-binary) 與 [Packaging Notes](#packaging-notes)）。它以獨立執行檔
+  的方式被 app 呼叫，並未連結進 QA Touchstone 本體。感謝 Grafana Labs 團隊與
+  k6 contributors。
+- 以 [Tauri](https://tauri.app)、[React](https://react.dev)、[MUI](https://mui.com) 打造。
+
+各商標與專案名稱歸其各自所有者所有。
 
 ## License
 
