@@ -3,7 +3,7 @@ import './setup.js';
 import { Icon, MethodBadge, Spinner } from './components.jsx';
 import { qaAiSend } from './llm.js';
 import { useI18n } from './useI18n.js';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────
 const { useState: useTG } = React;
@@ -330,7 +330,9 @@ function TestGen({ openSettings, onAddTests }) {
         setExtracting(f.name);
         const buf = await f.arrayBuffer();
         const pdfjsLib = await loadPdfjs();
-        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        // isEvalSupported:false disables pdf.js's eval-based font path (defence in
+        // depth vs CVE-2024-4367); we only extract text, so there is no downside.
+        const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
         let text = '';
         for (let p = 1; p <= pdf.numPages; p++) {
           const page = await pdf.getPage(p);

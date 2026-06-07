@@ -1,6 +1,6 @@
 {
   "name": "qa-touchstone",
-  "version": "0.20.5",
+  "version": "0.20.6",
   "private": true,
   "description": "A local-first, Postman-compatible desktop workspace for API QA — REST/GraphQL client, collection runner, k6 performance testing, security testing (RBAC/BOLA/rate-limit) with CI-ready reports, realtime (WS/SSE), and AI assistance.",
   "scripts": {
@@ -35,7 +35,7 @@
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "dompurify": "^3.4.7",
-    "pdfjs-dist": "^3.11.174",
+    "pdfjs-dist": "^6.0.227",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.6.2"
