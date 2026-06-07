@@ -59,10 +59,10 @@ jobs:
 
             ## English
 
-            ### Windows (NSIS installer)
-            If you see "Windows protected your PC":
-            1. Click **More info**
-            2. Click **Run anyway**
+            ### Windows
+            Two options:
+            - **Installer** (`-x64-setup.exe`): standard install. If you see "Windows protected your PC" → **More info** → **Run anyway**.
+            - **Portable** (`-x64-portable.zip`): no install, no admin rights. Unzip and run `QA Touchstone.exe`. Keep the sibling `resources/` folder — it holds the bundled k6 used for performance testing.
 
             ### macOS (DMG · Apple Silicon / arm64)
             Gatekeeper blocks unsigned, un-notarized apps. Pick one:
@@ -79,10 +79,10 @@ jobs:
 
             桌面版安裝檔（Windows / macOS）。**這些 build 未經程式碼簽章**，第一次開啟需手動略過系統防護提示：
 
-            ### Windows（NSIS 安裝檔）
-            出現「Windows 已保護您的電腦」時：
-            1. 點 **「其他資訊」**
-            2. 點 **「仍要執行」**
+            ### Windows
+            兩種任選：
+            - **安裝版**（`-x64-setup.exe`）：一般安裝。若出現「Windows 已保護您的電腦」→「其他資訊」→「仍要執行」。
+            - **免安裝版**（`-x64-portable.zip`）：免安裝、免系統管理員權限。解壓後執行 `QA Touchstone.exe`，並保留旁邊的 `resources/` 資料夾（內含效能測試用的 k6）。
 
             ### macOS（DMG · Apple Silicon / arm64）
             因未簽章、未公證，Gatekeeper 會擋。任選一種：
@@ -92,3 +92,24 @@ jobs:
               `xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"`
 
             ⚠️ macOS 僅提供 Apple Silicon（arm64）；Intel Mac 尚未提供。
+
+      # Tauri has no native "portable" Windows target, so assemble one by hand:
+      # the raw exe + its bundled resources/ (k6), zipped. Same layout the NSIS
+      # installer lays down, so BaseDirectory::Resource resolves k6 next to the exe.
+      - name: Package Windows portable ZIP
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $stage = "portable/QA Touchstone"
+          New-Item -ItemType Directory -Force -Path "$stage/resources" | Out-Null
+          $exe = Get-ChildItem "src-tauri/target/release/*.exe" |
+                 Where-Object { $_.Name -notlike '*setup*' } | Select-Object -First 1
+          if (-not $exe) { throw "No portable exe found under src-tauri/target/release" }
+          Copy-Item $exe.FullName "$stage/QA Touchstone.exe"
+          Copy-Item "src-tauri/resources/k6.exe" "$stage/resources/k6.exe"
+          $zip = "QA.Touchstone_${ver}_x64-portable.zip"
+          Compress-Archive -Path "$stage" -DestinationPath $zip -Force
+          gh release upload "${{ github.ref_name }}" "$zip" --clobber
