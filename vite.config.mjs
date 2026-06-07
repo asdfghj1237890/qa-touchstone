@@ -59,14 +59,10 @@ export default defineConfig({
       },
     },
     setupFiles: ['./src/setupTests.js'],
-    reporter: ['verbose', 'html'],
+    reporters: ['verbose', 'html'],
     outputFile: {
       html: './src/__tests__/test-report/test-results.html'
     },
-    watchExclude: [
-      'src/__tests__/test-report/**',
-      'build/**'
-    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
