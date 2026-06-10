@@ -1,9 +1,10 @@
 # QA Touchstone
 
-[![CI](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml)
+[![CI](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#architecture)
 [![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#architecture)
+[![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)](#architecture)
 [![Build: Vite](https://img.shields.io/badge/build-Vite-646CFF.svg)](#development)
 [![Tests: Vitest](https://img.shields.io/badge/tests-Vitest-6E9F18.svg)](#development)
 [![Performance: k6](https://img.shields.io/badge/performance-k6-7D64FF.svg)](#k6-binary)
@@ -158,40 +159,38 @@ flowchart LR
   Security --> AIGate
   AIGate --> LLM["Built-in / OpenAI / self-managed LLM"]
   AIGate --> AIPolicy["Egress policy (Rust get_ai_policy / lockdown)"]
-  Findings --> Storage["localStorage + local config files"]
+  Findings --> Storage["Storage layer (versioned, disk-mirrored)"]
+  Storage --> Disk["Rust app-data files (user_data.json, config.json)"]
   UI --> Storage
 ```
 
-- **Frontend**: React 18 + Vite
+- **Frontend**: React 18 + Vite, **100% TypeScript** (strict). Workspace,
+  request/send, and monitor state live in typed React context providers
+  (`src/qa/state/`); shared domain types in `src/qa/types.ts`.
 - **Desktop shell**: Tauri 2
-- **Backend commands**: Rust, including request execution, process helpers, and
-  local file operations
+- **Backend commands**: Rust — request execution (reqwest + manual redirect
+  following, AWS SigV4), the k6 process runner, temp-file helpers, and local
+  config/data persistence. The renderer's command surface is intentionally
+  minimal (no shell, no arbitrary file or network access).
+- **Storage**: a single versioned layer (`src/qa/storage.ts`) mirrors critical
+  workspace data to disk via the Rust backend; the cookie jar enforces the full
+  Public Suffix List (`src/qa/psl.ts`).
 - **Performance engine**: k6, materialized into `src-tauri/resources/`
-- **Tests**: Vitest + Testing Library for the frontend and Rust unit tests for
-  Tauri helpers
+- **Tests + checks**: Vitest + Testing Library and Rust unit tests, gated in CI
+  alongside `tsc --noEmit`, ESLint, and `npm audit`.
 
-## What Changed In This Refactor
+## Project Status
 
-<details>
-<summary>Refactor notes</summary>
-
-- Repositioned the product around API QA workflows instead of the earlier broad
-  desktop utility scope.
-- Removed obsolete non-API workflow descriptions from the public README and docs.
-- Kept the useful API testing surface: import, send, run, monitor, review,
-  document, export, and performance-test requests.
-- Promoted live execution paths: Runner and Monitors evaluate assertions against
-  real responses instead of demo-only data.
-- Added an app-level monitor scheduler so enabled monitors run on cadence while
-  the app is open.
-- Consolidated LLM usage through shared settings for Test Gen and response
-  review.
-
-</details>
+Actively maintained. The frontend is fully strict TypeScript; every push runs
+ESLint, `tsc --noEmit`, the Vitest suite, `npm audit`, and Rust unit tests, and
+the release pipeline refuses to build installers unless those pass. See
+[CHANGELOG.md](CHANGELOG.md) for the per-release history (recent work: legacy
+attack-surface removal, a versioned disk-mirrored storage layer, the full
+Public Suffix List cookie guard, and the TypeScript migration).
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 20 or newer (CI runs on 22)
 - npm
 - Rust toolchain for Tauri commands and desktop builds
 - k6 is handled by the setup scripts described below
@@ -223,6 +222,14 @@ Run tests:
 
 ```bash
 npm test
+```
+
+Type-check, lint, and format:
+
+```bash
+npm run typecheck
+npm run lint
+npm run format
 ```
 
 Build the frontend:

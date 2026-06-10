@@ -1,9 +1,10 @@
 # QA Touchstone
 
-[![CI](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml)
+[![CI](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#架構)
 [![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#架構)
+[![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)](#架構)
 [![Build: Vite](https://img.shields.io/badge/build-Vite-646CFF.svg)](#開發)
 [![Tests: Vitest](https://img.shields.io/badge/tests-Vitest-6E9F18.svg)](#開發)
 [![Performance: k6](https://img.shields.io/badge/performance-k6-7D64FF.svg)](#k6-binary)
@@ -144,38 +145,35 @@ flowchart LR
   Security --> AIGate
   AIGate --> LLM["Built-in / OpenAI / self-managed LLM"]
   AIGate --> AIPolicy["Egress policy (Rust get_ai_policy / lockdown)"]
-  Findings --> Storage["localStorage + local config files"]
+  Findings --> Storage["儲存層（版本化、磁碟鏡像）"]
+  Storage --> Disk["Rust app-data 檔（user_data.json、config.json）"]
   UI --> Storage
 ```
 
-- **Frontend**：React 18 + Vite
+- **Frontend**：React 18 + Vite，**100% TypeScript**（strict）。Workspace、
+  request/send、monitor 狀態都放在型別化的 React context provider
+  （`src/qa/state/`）；共用領域型別在 `src/qa/types.ts`。
 - **Desktop shell**：Tauri 2
-- **Backend commands**：Rust，包含 request execution、process helpers 與本機
-  file operations
+- **Backend commands**：Rust——request execution（reqwest + 手動跟隨 redirect、
+  AWS SigV4）、k6 子程序執行器、temp-file 輔助、本機 config/data 持久化。
+  暴露給 renderer 的指令面刻意維持最小（無 shell、無任意檔案或網路存取）。
+- **Storage**：單一版本化儲存層（`src/qa/storage.ts`）透過 Rust 後端把關鍵
+  工作區資料鏡像到磁碟；cookie jar 套用完整 Public Suffix List（`src/qa/psl.ts`）。
 - **Performance engine**：k6，會 materialize 到 `src-tauri/resources/`
-- **Tests**：Frontend 使用 Vitest + Testing Library；Tauri helpers 使用 Rust
-  unit tests
+- **Tests + checks**：Vitest + Testing Library 與 Rust unit tests，CI 連同
+  `tsc --noEmit`、ESLint、`npm audit` 一起把關。
 
-## 這次重構調整
+## 專案狀態
 
-<details>
-<summary>重構重點</summary>
-
-- 將產品定位整理成 API QA workflow，不再沿用早期較寬泛的桌面工具描述。
-- 從公開 README 與 docs 移除已淘汰的非 API workflow 描述。
-- 保留現在最有價值的 API 測試面：import、send、run、monitor、review、
-  document、export、performance test。
-- 強化真實執行路徑：Runner 與 Monitors 會用 live response 評估 assertions，
-  而不是只看 demo 資料。
-- 加入 app-level monitor scheduler；app 開著時，enabled monitors 會依 cadence
-  自動執行。
-- LLM 使用集中到共用設定，供 Test Gen 與 response review 使用。
-
-</details>
+持續維護中。前端已全面 strict TypeScript；每次 push 都會跑 ESLint、
+`tsc --noEmit`、Vitest 測試、`npm audit` 與 Rust unit tests，且 release
+流程在這些未通過前不會 build 安裝檔。逐版歷史見
+[CHANGELOG.md](CHANGELOG.md)（近期工作：移除遺留攻擊面、版本化磁碟鏡像
+儲存層、完整 Public Suffix List cookie 防護、TypeScript 遷移）。
 
 ## 需求
 
-- Node.js 18 或更新版本
+- Node.js 20 或更新版本（CI 使用 22）
 - npm
 - Rust toolchain，用於 Tauri commands 與 desktop builds
 - k6 由下方 setup scripts 處理
@@ -207,6 +205,14 @@ npm run tauri:dev
 
 ```bash
 npm test
+```
+
+型別檢查、lint 與格式化：
+
+```bash
+npm run typecheck
+npm run lint
+npm run format
 ```
 
 建置 frontend：
