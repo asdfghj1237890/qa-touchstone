@@ -26,29 +26,10 @@ function unsubscribe(callback: EventCallback): void {
   }
 }
 
-// Tauri 環境偵測：__TAURI_INTERNALS__ 由 Tauri 在載入腳本前注入。純瀏覽器
-// （vite dev、vitest）下不存在，呼叫 invoke 會丟 "reading 'invoke'"。
-// 與 qa/executor.ts 的 hasTauri() 同一套判斷。
-const hasTauri = () => typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
-
-// 啟動時一次性取得，維持同步介面
-let cachedProcessEnv: Record<string, string> = { NODE_ENV: 'production' };
-export async function initApi(): Promise<void> {
-  // 非 Tauri（瀏覽器 fallback / 測試）：保留上方預設值，不去呼叫 invoke，
-  // 否則每次啟動都會在 console 印出一筆 invoke undefined 的紅色錯誤。
-  if (!hasTauri()) return;
-  try {
-    cachedProcessEnv = await invoke('get_process_env');
-  } catch (e) {
-    console.error('initApi failed', e);
-  }
-}
-
 export const api = {
   // --- 系統 / 視窗 ---
   getPlatform: (): Promise<string> => invoke('get_platform'),
   getAiPolicy: (): Promise<unknown> => invoke('get_ai_policy'),
-  getProcessEnv: (): Record<string, string> => cachedProcessEnv,
   // Custom-titlebar X for the main window: quit the whole app deterministically
   // via a Rust command instead of relying on close() → CloseRequested → exit.
   quitApp: (): Promise<void> => invoke('quit_app'),
