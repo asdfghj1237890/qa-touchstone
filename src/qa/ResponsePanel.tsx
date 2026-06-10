@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup';
 import { Icon, Spinner, StatusPill } from './components';
+import { downloadFile } from './download';
 import { qaAiSend } from './llm';
 import { useI18n } from './useI18n';
 import type { QaRequest } from './buildReq';
@@ -62,11 +63,8 @@ function CodeBlock({ text }: { text: string }) {
 }
 
 function rpDownload(name: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  // 統一走 download.ts：Tauri 用原生存檔對話框、其他環境 blob fallback。
+  downloadFile(name, content, mime);
 }
 
 // response 為 executor / canned 回應形狀，過渡期以 any 表示。

@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup';
 import { Dropdown, Icon } from './components';
+import { downloadFile } from './download';
 import { useI18n } from './useI18n';
 import type { I18nValue } from './i18nContext';
 import type { QaEnv } from './state/WorkspaceContext';
@@ -101,10 +102,8 @@ function DocsPage({ env, onOpenRequest }: DocsPageProps) {
 
   const exportHtml = () => {
     const html = buildDocsHtml(col, env, t);
-    const blob = new Blob([html], { type: 'text/html' });
-    const u = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = u; a.download = `${col.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-docs.html`;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1500);
+    const name = `${col.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-docs.html`;
+    downloadFile(name, html, 'text/html');
   };
 
   return (

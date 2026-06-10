@@ -3,6 +3,25 @@
 All notable changes to QA Touchstone are documented here. Versions follow
 [SemVer](https://semver.org); 0.x releases may contain breaking changes.
 
+## [Unreleased]
+
+### Fixed
+- **Exports now work in the packaged desktop app.** Every export (perf reports,
+  security JSON/HTML/JUnit/SARIF, API docs, Postman collections, response /
+  history) used a blob `<a download>`, which the Tauri WebView silently
+  ignores — clicking a report did nothing. All exports now route through one
+  Tauri-aware helper (`src/qa/download.ts`): a native save dialog plus a
+  backend `save_text_file` command in Tauri, with the blob fallback kept for
+  browser/dev. Added `dialog:allow-save` capability.
+- Perf run-history export dropdown was clipped by the container's
+  `overflow: hidden`; the menu now overflows correctly.
+- Home header and nav rail showed a stale hardcoded version; the displayed
+  version is now injected from `package.json` at build time.
+
+### Performance
+- First paint no longer waits on an `initApi` IPC round-trip that cached
+  process env nothing read (dead code removed).
+
 ## [0.21.0] — 2026-06-10
 
 ### Security

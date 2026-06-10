@@ -1,4 +1,5 @@
 import './setup';
+import { downloadFile } from './download';
 
 // ── QA Touchstone — export a collection to Postman v2.1 collection JSON ─────
 
@@ -86,11 +87,7 @@ function buildPostmanCollection(col: any, env: any) {
 function exportCollection(col: any, env: any) {
   const obj = buildPostmanCollection(col, env);
   const name = `${col.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.postman_collection.json`;
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-  const u = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = u; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(u), 1500);
+  downloadFile(name, JSON.stringify(obj, null, 2), 'application/json');
 }
 
 Object.assign(window, { buildPostmanCollection, exportCollection });

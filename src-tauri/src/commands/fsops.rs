@@ -93,9 +93,39 @@ pub fn write_temp_text(content: String, suffix: Option<String>) -> AppResult<Str
         .ok_or_else(|| AppError::Other("Temp path is not valid UTF-8".into()))
 }
 
+/// Write `contents` to an absolute `path` the user picked via the native save
+/// dialog. The renderer's blob `<a download>` does not trigger a save in the
+/// Tauri WebView, so exports (perf reports, security JSON/HTML/JUnit/SARIF,
+/// docs, collections) route here instead. The path is user-chosen through the
+/// OS dialog, so this is not a renderer-controlled arbitrary write; we only
+/// reject an empty path.
+#[tauri::command]
+pub fn save_text_file(path: String, contents: String) -> AppResult<()> {
+    if path.trim().is_empty() {
+        return Err(AppError::Other("No save path provided.".into()));
+    }
+    std::fs::write(&path, contents.as_bytes())
+        .map_err(|e| AppError::Other(format!("Save failed: {e}")))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_text_file_writes_chosen_path() {
+        let p = std::env::temp_dir().join(format!("qa-save-{}.txt", std::process::id()));
+        let ps = p.to_string_lossy().to_string();
+        save_text_file(ps.clone(), "report-body\n".into()).unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "report-body\n");
+        std::fs::remove_file(&p).ok();
+    }
+
+    #[test]
+    fn save_text_file_rejects_empty_path() {
+        assert!(save_text_file("   ".into(), "x".into()).is_err());
+    }
 
     #[test]
     fn write_temp_text_roundtrip() {

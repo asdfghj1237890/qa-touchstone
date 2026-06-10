@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup';
 import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo } from './components';
+import { downloadFile } from './download';
 import './ExportData';
 import { ImportModal } from './ImportData';
 import { useI18n } from './useI18n';
@@ -12,9 +13,8 @@ import type { QaImportParsed, QaImportRequestMeta } from './import-parser';
 const { useState } = React;
 
 function histDownload(name: string, content: string, mime: string) {
-  const b = new Blob([content], { type: mime }); const u = URL.createObjectURL(b);
-  const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(u), 1500);
+  // 統一走 download.ts：Tauri 用原生存檔對話框、其他環境 blob fallback。
+  downloadFile(name, content, mime);
 }
 function histEntry(h: HistoryEntry) {
   const resp = window.QA.RESPONSES[h.id];

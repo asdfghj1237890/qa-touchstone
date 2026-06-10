@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
 
 /** 事件 payload 一律是字串或 JSON 物件；橋接層從寬。 */
 type EventCallback = (payload: any) => void;
@@ -52,6 +52,10 @@ export const api = {
   setApiCredentialConfigs: (configs: unknown[]): Promise<unknown> => invoke('set_api_credential_configs', { apiConfigs: configs }),
   selectDirectory: (): Promise<string | string[] | null> => openDialog({ directory: true, multiple: false }),
   selectFile: (): Promise<string | string[] | null> => openDialog({ directory: false, multiple: false }),
+
+  // --- 匯出：原生存檔對話框 + 後端寫檔（取代在 WebView 失效的 blob 下載）---
+  saveFileDialog: (opts: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null> => saveDialog(opts),
+  saveTextFile: (path: string, contents: string): Promise<void> => invoke('save_text_file', { path, contents }),
 
   // --- 本機資料（qaStorage 磁碟鏡像）---
   loadUserData: (): Promise<unknown> => invoke('load_user_data'),
