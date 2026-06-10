@@ -20,17 +20,6 @@
         "minHeight": 600,
         "decorations": false,
         "backgroundColor": "#121212"
-      },
-      {
-        "label": "settings",
-        "title": "Settings",
-        "width": 800,
-        "height": 600,
-        "minWidth": 600,
-        "minHeight": 400,
-        "decorations": false,
-        "backgroundColor": "#121212",
-        "visible": false
       }
     ],
     "security": {

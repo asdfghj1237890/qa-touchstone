@@ -1,0 +1,133 @@
+// ── QA Touchstone — 統一本機儲存層 ───────────────────────────────────────────
+// 取代散落各處的裸 localStorage 存取：
+// 1. loadJSON/saveJSON、loadString/saveString：解析失敗回 fallback；寫入失敗
+//    「不再無聲」—— console.error + 對 window 發出 'qa-storage-error' 事件，
+//    App 層可據此顯示 toast。
+// 2. 磁碟鏡像：MIRRORED_KEYS 透過 Tauri save_user_data/load_user_data 鏡像到
+//    app-data 的 user_data.json。webview 快取被清掉（localStorage 蒸發）時，
+//    開機自動從磁碟還原 —— findings/baseline/perf 歷史不再單點故障。
+// 3. 機密不落鏡像：qa_llm_cfg 內含 API key，刻意排除在 MIRRORED_KEYS 之外。
+
+export const STORAGE_ERROR_EVENT = 'qa-storage-error';
+
+export const MIRRORED_KEYS = [
+  'qa_security_lifecycle',
+  'qa_security_snapshots',
+  'qa_perf_runs',
+  'qa_monitor_storage',
+  'qa_ai_privacy',
+  'qa_accent',
+  'qa_locale',
+];
+
+const FLUSH_DELAY_MS = 1500;
+let _api = null;
+let _flushTimer = null;
+
+function notifyError(key, error) {
+  try {
+    window.dispatchEvent(
+      new CustomEvent(STORAGE_ERROR_EVENT, {
+        detail: { key, message: String((error && error.message) || error) },
+      })
+    );
+  } catch { /* window unavailable（純 node 測試）— 已有 console.error */ }
+}
+
+export function loadJSON(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error(`qaStorage: failed to read ${key}`, e);
+    return fallback;
+  }
+}
+
+export function saveJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error(`qaStorage: failed to write ${key}`, e);
+    notifyError(key, e);
+    return false;
+  }
+  scheduleMirrorFlush(key);
+  return true;
+}
+
+export function loadString(key, fallback = '') {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : raw;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveString(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch (e) {
+    console.error(`qaStorage: failed to write ${key}`, e);
+    notifyError(key, e);
+    return false;
+  }
+  scheduleMirrorFlush(key);
+  return true;
+}
+
+function scheduleMirrorFlush(key) {
+  if (!_api || !MIRRORED_KEYS.includes(key)) return;
+  if (_flushTimer) clearTimeout(_flushTimer);
+  _flushTimer = setTimeout(() => { flushMirror(); }, FLUSH_DELAY_MS);
+}
+
+// 把鏡像 key 目前的 localStorage 原始字串寫進 user_data.json（debounce 後呼叫）。
+export async function flushMirror() {
+  if (!_api) return;
+  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+  const blob = { __qaMirror: 1 };
+  for (const k of MIRRORED_KEYS) {
+    try {
+      const raw = localStorage.getItem(k);
+      if (raw != null) blob[k] = raw;
+    } catch { /* 單一 key 讀不到就略過 */ }
+  }
+  try {
+    await _api.saveUserData(blob);
+  } catch (e) {
+    console.error('qaStorage: disk mirror write failed', e);
+  }
+}
+
+// App 開機（render 前）呼叫。非 Tauri 環境 loadUserData 會 reject —— 安靜停用鏡像。
+// localStorage 已有的 key 一律以 localStorage 為準（不覆寫），只還原缺少的。
+export async function initStorageMirror(api) {
+  if (!api || typeof api.loadUserData !== 'function') return false;
+  let blob = null;
+  try {
+    blob = await api.loadUserData();
+  } catch {
+    return false; // 非 Tauri / 後端不可用：鏡像停用
+  }
+  _api = api;
+  if (!blob || typeof blob !== 'object' || Array.isArray(blob) || blob.__qaMirror !== 1) {
+    return true; // 鏡像啟用，但磁碟尚無快照（首次啟動）
+  }
+  for (const k of MIRRORED_KEYS) {
+    try {
+      if (localStorage.getItem(k) == null && typeof blob[k] === 'string') {
+        localStorage.setItem(k, blob[k]);
+      }
+    } catch { /* 還原單一 key 失敗不阻斷其他 key */ }
+  }
+  return true;
+}
+
+// 測試用：重設模組內部狀態。
+export function _resetStorageMirrorForTests() {
+  _api = null;
+  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+}

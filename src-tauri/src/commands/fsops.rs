@@ -1,16 +1,10 @@
 use crate::error::{AppError, AppResult};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::path::BaseDirectory;
 use tauri::Manager;
 
 fn canonical_temp_dir() -> Option<PathBuf> {
     std::fs::canonicalize(std::env::temp_dir()).ok()
-}
-
-fn canonical_existing_under_temp(path: impl AsRef<Path>) -> Option<PathBuf> {
-    let p = std::fs::canonicalize(path).ok()?;
-    let temp = canonical_temp_dir()?;
-    if p.starts_with(temp) { Some(p) } else { None }
 }
 
 fn clean_suffix(suffix: Option<String>) -> String {
@@ -24,45 +18,6 @@ fn clean_suffix(suffix: Option<String>) -> String {
         cleaned = "txt".into();
     }
     cleaned
-}
-
-#[tauri::command]
-pub fn read_directory(folder_path: String) -> Vec<String> {
-    let Some(folder) = canonical_existing_under_temp(&folder_path) else {
-        return Vec::new();
-    };
-    match std::fs::read_dir(&folder) {
-        Ok(entries) => entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.file_name().into_string().ok())
-            .collect(),
-        Err(_) => Vec::new(), // 對齊 Electron：錯誤回 []
-    }
-}
-
-#[tauri::command]
-pub fn find_hex_file(folder_path: String) -> Option<String> {
-    let folder = canonical_existing_under_temp(&folder_path)?;
-    let entries = std::fs::read_dir(&folder).ok()?;
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("hex")) == Some(true) {
-            return path.to_str().map(|s| s.to_string());
-        }
-    }
-    None
-}
-
-#[tauri::command]
-pub fn read_file_content(file_path: String) -> AppResult<String> {
-    if file_path.is_empty() {
-        return Err(AppError::Other("Invalid file path provided.".into()));
-    }
-    let Some(path) = canonical_existing_under_temp(&file_path) else {
-        return Err(AppError::Other("Access to the path is restricted.".into()));
-    };
-    std::fs::read_to_string(&path)
-        .map_err(|e| AppError::Other(format!("Failed to read file: {e}")))
 }
 
 /// Resolve the bundled k6 binary the perf runner should launch.
@@ -143,20 +98,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn read_file_content_blocks_traversal() {
-        let r = read_file_content("../secret.txt".into());
-        assert!(r.is_err());
-    }
-
-    #[test]
-    fn read_file_content_allows_temp_file() {
-        let path = write_temp_text("hello\n".into(), Some("txt".into())).unwrap();
-        let r = read_file_content(path.clone()).unwrap();
-        assert_eq!(r, "hello\n");
-        std::fs::remove_file(path).ok();
-    }
-
-    #[test]
     fn write_temp_text_roundtrip() {
         let path = write_temp_text("hello k6\n".into(), Some("js".into())).unwrap();
         assert!(path.ends_with(".js"));
@@ -188,30 +129,4 @@ mod tests {
         assert!(r.is_err());
     }
 
-    #[test]
-    fn read_directory_blocks_traversal() {
-        assert!(read_directory("../etc".into()).is_empty());
-    }
-
-    #[test]
-    fn read_file_content_rejects_empty() {
-        assert!(read_file_content(String::new()).is_err());
-    }
-
-    #[test]
-    fn find_hex_file_finds_hex() {
-        let dir = std::env::temp_dir().join(format!("hexdiag_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("firmware.hex"), "x").unwrap();
-        std::fs::write(dir.join("readme.txt"), "y").unwrap();
-        let found = find_hex_file(dir.to_str().unwrap().to_string()).unwrap();
-        assert!(found.to_lowercase().ends_with(".hex"));
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn read_directory_missing_returns_empty() {
-        let v = read_directory("/no/such/dir/xyz".into());
-        assert!(v.is_empty());
-    }
 }

@@ -6,12 +6,13 @@ import './setup.js';
 import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed, buildScrubber, AI_KINDS } from './aiPrivacy.js';
 import { ensureAiPolicy } from './aiPolicy.js';
 import { requestPromptApproval } from './PromptPreview.jsx';
+import { loadJSON } from './storage.js';
 
 const LLM_CFG_DEFAULTS = { provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: '' };
 function _loadLlmCfg() {
   if (typeof window !== 'undefined' && typeof window.loadLlmCfg === 'function') return window.loadLlmCfg();
-  try { return { ...LLM_CFG_DEFAULTS, ...JSON.parse(localStorage.getItem('qa_llm_cfg') || '{}') }; }
-  catch { return { ...LLM_CFG_DEFAULTS }; }
+  const raw = loadJSON('qa_llm_cfg', {});
+  return { ...LLM_CFG_DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
 }
 
 // Low-level transport. NOT for direct use by feature code — go through qaAiSend.

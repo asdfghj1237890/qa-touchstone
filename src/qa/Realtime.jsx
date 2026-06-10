@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Icon, Spinner, highlightJson } from './components.jsx';
+import { Icon, Spinner } from './components.jsx';
 import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — Realtime client: WebSocket + Server-Sent Events ────────
@@ -31,7 +31,7 @@ async function rtDataToText(data) {
   return rtTrimBody(String(data || ''));
 }
 
-function RealtimeClient({ env }) {
+function RealtimeClient() {
   const { t } = useI18n();
   const [proto, setProto] = useStateRT('ws');
   const [url, setUrl] = useStateRT(RT_DEMO_WS_URL);

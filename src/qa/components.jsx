@@ -1,6 +1,7 @@
 import React from 'react';
 import './setup.js';
 import { useI18n } from './useI18n.js';
+import { loadJSON as loadStorageJSON, saveJSON as saveStorageJSON } from './storage.js';
 
 // ── QA Touchstone — icons + shared atoms ───────────────────────────────────
 // Simple stroke icons (Lucide-style 24x24 paths) and small shared components.
@@ -160,26 +161,54 @@ function MiniCheck({ on, onClick, checked, onChange }) {
 }
 
 // Custom dropdown (replaces native <select> for reliable styling + rendering).
+// 鍵盤支援：按鈕上 ↑/↓ 開啟選單；選單內 ↑/↓/Home/End 移動焦點、Enter 選取
+// （原生 button）、Escape 關閉並把焦點還給按鈕。ARIA 採 listbox/option 模式。
 function Dropdown({ value, options, onChange, className, renderOption, renderValue }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
+  const menuRef = React.useRef(null);
   React.useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+  React.useEffect(() => {
+    if (!open || !menuRef.current) return;
+    const target = menuRef.current.querySelector('[data-active="1"]') || menuRef.current.querySelector('button');
+    if (target) target.focus();
+  }, [open]);
   const opts = options.map(o => typeof o === 'string' ? { value: o, label: o } : o);
   const cur = opts.find(o => o.value === value);
+  const closeAndRefocus = () => {
+    setOpen(false);
+    const btn = ref.current && ref.current.querySelector('.qa-dd-btn');
+    if (btn) btn.focus();
+  };
+  const onBtnKeyDown = (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setOpen(true); }
+  };
+  const onMenuKeyDown = (e) => {
+    const items = menuRef.current ? Array.from(menuRef.current.querySelectorAll('button')) : [];
+    const idx = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); closeAndRefocus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0]) && (items[idx + 1] || items[0]).focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1]) && (items[idx - 1] || items[items.length - 1]).focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0] && items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1] && items[items.length - 1].focus(); }
+    else if (e.key === 'Tab') { setOpen(false); }
+  };
   return (
     <div className={'qa-dd ' + (className || '')} ref={ref}>
-      <button className="qa-dd-btn" onClick={() => setOpen(o => !o)} type="button">
+      <button className="qa-dd-btn" onClick={() => setOpen(o => !o)} type="button"
+              aria-haspopup="listbox" aria-expanded={open} onKeyDown={onBtnKeyDown}>
         <span>{cur ? (renderValue ? renderValue(cur) : cur.label) : value}</span>
         <Icon name="chevron" size={14} className="qa-dd-chev" data-open={open ? '1' : '0'} />
       </button>
       {open && (
-        <div className="qa-dd-menu">
+        <div className="qa-dd-menu" role="listbox" ref={menuRef} onKeyDown={onMenuKeyDown}>
           {opts.map(o => (
-            <button key={o.value} type="button" data-active={o.value === value ? '1' : '0'}
+            <button key={o.value} type="button" role="option"
+                    aria-selected={o.value === value} data-active={o.value === value ? '1' : '0'}
                     title={o.title || (typeof o.label === 'string' ? o.label : undefined)}
                     onClick={() => { onChange(o.value); setOpen(false); }}>
               {renderOption ? renderOption(o) : o.label}
@@ -201,7 +230,7 @@ function fmtBytesShared(b) {
 function highlightJson(json) {
   json = String(json).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return json.replace(
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
     (m) => {
       let cls = 'qa-j-num';
       if (/^"/.test(m)) cls = /:$/.test(m) ? 'qa-j-key' : 'qa-j-str';
@@ -241,15 +270,18 @@ Object.assign(window, { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniC
 // Shared LLM config (used by Test Gen + Settings; persisted in localStorage).
 const LLM_DEFAULT_CFG = { provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: 'https://api.openai.com/v1/chat/completions' };
 const LLM_PROVIDERS = [
-  { value: 'builtin', label: 'Claude (built-in, no key)' },
+  // builtin 依賴 window.claude.complete，只存在於 claude.ai Artifacts 沙箱；
+  // 桌面版不可用（Settings 會顯示即時可用狀態）。
+  { value: 'builtin', label: 'Claude (built-in · Artifacts only)' },
   { value: 'openai',  label: 'OpenAI' },
   { value: 'custom',  label: 'Custom (OpenAI-compatible)' },
 ];
+// 注意：qa_llm_cfg 內含 API key，刻意不在 storage.js 的磁碟鏡像清單內。
 function loadLlmCfg() {
-  try { return { ...LLM_DEFAULT_CFG, ...JSON.parse(localStorage.getItem('qa_llm_cfg') || '{}') }; }
-  catch { return { ...LLM_DEFAULT_CFG }; }
+  const raw = loadStorageJSON('qa_llm_cfg', {});
+  return { ...LLM_DEFAULT_CFG, ...(raw && typeof raw === 'object' ? raw : {}) };
 }
-function saveLlmCfg(cfg) { try { localStorage.setItem('qa_llm_cfg', JSON.stringify(cfg)); } catch {} }
+function saveLlmCfg(cfg) { saveStorageJSON('qa_llm_cfg', cfg); }
 Object.assign(window, { LLM_DEFAULT_CFG, LLM_PROVIDERS, loadLlmCfg, saveLlmCfg });
 
 export { Icon, PulseLogo, MethodBadge, StatusPill, Spinner, MiniCheck, Dropdown, fmtBytesShared, highlightJson, FieldRow, SecretInput };

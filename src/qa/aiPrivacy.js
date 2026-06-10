@@ -7,6 +7,7 @@
 import './setup.js';
 import { snippetAround, headerVal } from './evidence.js';
 import { TRIAGE_CATEGORIES } from './triageConstants.js';
+import { loadJSON, saveJSON } from './storage.js';
 
 export const PRIVACY_DEFAULT_CFG = {
   mode: 'redacted',            // 'full' | 'redacted' | 'local'
@@ -17,14 +18,12 @@ export const PRIVACY_DEFAULT_CFG = {
 };
 
 export function loadPrivacyCfg() {
-  try {
-    const raw = JSON.parse(localStorage.getItem('qa_ai_privacy') || '{}');
-    return { ...PRIVACY_DEFAULT_CFG, ...(raw && typeof raw === 'object' ? raw : {}) };
-  } catch { return { ...PRIVACY_DEFAULT_CFG }; }
+  const raw = loadJSON('qa_ai_privacy', {});
+  return { ...PRIVACY_DEFAULT_CFG, ...(raw && typeof raw === 'object' ? raw : {}) };
 }
 
 export function savePrivacyCfg(cfg) {
-  try { localStorage.setItem('qa_ai_privacy', JSON.stringify({ ...PRIVACY_DEFAULT_CFG, ...cfg })); } catch {}
+  saveJSON('qa_ai_privacy', { ...PRIVACY_DEFAULT_CFG, ...cfg });
 }
 
 const CLOUD_HOSTS = /(^|\.)(openai\.com|anthropic\.com|azure\.com|googleapis\.com|cohere\.ai|amazonaws\.com|mistral\.ai)$/i;

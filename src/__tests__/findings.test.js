@@ -1,7 +1,7 @@
 // src/__tests__/findings.test.js
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  FP_VERSION, LIFECYCLE_KEY, SNAPSHOTS_KEY,
+  FP_VERSION, LIFECYCLE_KEY,
   ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
   snapshotOf, scopeHashOf, diffRuns, gateCount,
   loadLifecycle, saveLifecycle, upsertRecord,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { I18nContext } from './i18nContext.js';
+import { loadString, saveString } from './storage.js';
 
 const FALLBACK_LOCALE = 'en-US';
 const STORAGE_KEY = 'qa_locale';
@@ -371,6 +372,9 @@ const dict = {
     'toast.cookieStored': 'Cookie stored',
     'toast.cookieSaved': '{name} saved to jar for {domain}',
     'toast.viewJar': 'View jar',
+    'toast.storageFailTitle': 'Local save failed',
+    'toast.storageFailBody': 'Could not persist {key} — recent changes may be lost. Free up local storage space.',
+    'toast.dismiss': 'Dismiss',
   },
   'zh-TW': {
     'route.home': '首頁',
@@ -738,6 +742,9 @@ const dict = {
     'toast.cookieStored': 'Cookie 已儲存',
     'toast.cookieSaved': '{name} 已存入 {domain} 的 jar',
     'toast.viewJar': '查看 jar',
+    'toast.storageFailTitle': '本機儲存失敗',
+    'toast.storageFailBody': '無法寫入 {key}——最近的變更可能遺失，請清出本機儲存空間。',
+    'toast.dismiss': '關閉',
   },
 };
 
@@ -1587,14 +1594,22 @@ function normalizeLocale(value) {
 }
 
 function initialLocale() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return normalizeLocale(stored);
-  } catch {}
+  const stored = loadString(STORAGE_KEY, '');
+  if (stored) return normalizeLocale(stored);
   if (typeof navigator !== 'undefined') {
     return normalizeLocale(navigator.language || (navigator.languages && navigator.languages[0]));
   }
   return FALLBACK_LOCALE;
+}
+
+// 缺 key 不再無聲：dev 模式下每個缺少的 key 警告一次，避免翻譯破洞上線才發現。
+const _warnedMissingKeys = new Set();
+function warnMissingKey(key) {
+  if (_warnedMissingKeys.has(key)) return;
+  _warnedMissingKeys.add(key);
+  try {
+    if (import.meta.env && import.meta.env.DEV) console.warn(`i18n: missing key "${key}"`);
+  } catch { /* import.meta 不可用（非 vite 環境）— 略過 */ }
 }
 
 function formatMessage(template, vars) {
@@ -1608,7 +1623,7 @@ export function I18nProvider({ children }) {
   const setLocale = React.useCallback((next) => {
     const normalized = normalizeLocale(next);
     setLocaleState(normalized);
-    try { localStorage.setItem(STORAGE_KEY, normalized); } catch {}
+    saveString(STORAGE_KEY, normalized);
   }, []);
   React.useEffect(() => {
     if (typeof document !== 'undefined') document.documentElement.lang = locale;
@@ -1616,7 +1631,11 @@ export function I18nProvider({ children }) {
   const value = React.useMemo(() => ({
     locale,
     setLocale,
-    t: (key, vars) => formatMessage((dict[locale] && dict[locale][key]) || dict[FALLBACK_LOCALE][key] || key, vars),
+    t: (key, vars) => {
+      const template = (dict[locale] && dict[locale][key]) || dict[FALLBACK_LOCALE][key];
+      if (template == null) warnMissingKey(key);
+      return formatMessage(template == null ? key : template, vars);
+    },
   }), [locale, setLocale]);
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

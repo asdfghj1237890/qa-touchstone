@@ -1,5 +1,6 @@
 # QA Touchstone
 
+[![CI](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#架構)
 [![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#架構)
@@ -10,10 +11,13 @@
 
 [English](README.md)
 
-QA Touchstone 是一個本機優先的桌面 API QA 工作台。它把
-Postman 相容 API client（REST 與 GraphQL）、collection 真實執行、背景 monitors、k6 效能測試、
-安全測試（RBAC、物件授權、速率限制）與 AI 分流、AI 測試案例產生、
-AI response review，以及可匯出的 API 文件整合在同一個 Tauri app 裡。
+QA Touchstone 是一個本機優先、**為 CI 做 API 安全測試**的桌面工具：
+對真實 API 執行身分 × 端點的 RBAC 矩陣、BOLA/IDOR 物件授權測試與速率限制
+濫用檢查，跨執行管理 findings 並與 baseline 比對，再匯出 **SARIF / JUnit /
+HTML / JSON** 產物供 pipeline 把關。圍繞這個核心，它也提供完整的支援工作台
+——Postman 相容 API client（REST 與 GraphQL）、collection 真實執行、背景
+monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API 文件——整合在
+同一個 Tauri app 裡。
 
 ## 畫面截圖
 
@@ -81,9 +85,12 @@ AI response review，以及可匯出的 API 文件整合在同一個 Tauri app �
   也能針對單筆 API response 對照既有 assertions 做 review；並可隨時掃描單筆
   response 找出敏感資料外洩（PII、secrets、內部或 debug 欄位）。
 - **可設定的 AI 供應商（Configurable AI provider）**：所有 AI 功能（測試產生、
-  response review、敏感資料掃描、安全分流）都跑在你選的供應商上——內建 Claude
-  （免 API key）、OpenAI，或自訂 / 企業自管（on-prem）的 OpenAI 相容 endpoint
-  ——憑證只留在本機。
+  response review、敏感資料掃描、安全分流）都跑在你選的供應商上——OpenAI，
+  或自訂 / 企業自管（on-prem）的 OpenAI 相容 endpoint——憑證只留在本機。
+  AI 功能是可選的：未設定供應商時，測試產生會 fallback 到內建的 heuristic
+  引擎，其餘功能完全可用。（「內建 Claude 免 key」供應商只在 UI 跑在
+  claude.ai Artifacts 沙箱內時可用——**桌面版安裝檔中無法使用**；設定頁會
+  即時顯示其可用狀態。）
 - **AI 隱私模式（AI privacy mode）**：所有 AI 呼叫都經過單一 egress chokepoint，
   且預設遮蔽。三段模式——`full context`、`redacted`（預設）、`local only`
   ——決定哪些資料離開裝置。`redacted` 在送出前於本機遮蔽 URL（去 host）、回應內容
@@ -254,7 +261,10 @@ Runtime configuration 儲存在本機。常見產生檔案包含：
 
 - `config.json`：application settings
 - `postman_collections_cache.json`：cached collection metadata
-- `api_credential_configs.json`：可重複使用的 API credential profile metadata
+- `user_data.json`：關鍵工作區資料的磁碟鏡像（安全 findings 生命週期、
+  baseline、效能歷史、monitors）。所有讀寫經過單一儲存層
+  （`src/qa/storage.js`），webview 快取被清掉也能還原，寫入失敗會浮出
+  提示而非無聲吞掉。機密（LLM API key）刻意排除在鏡像之外。
 
 LLM settings 儲存在 browser localStorage。AI 隱私模式預設遮蔽：prompt 會在本機
 遮蔽、並於送出前顯示預覽,才送到你選擇的 provider;`local only` 模式只允許自管

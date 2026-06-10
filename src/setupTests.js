@@ -154,7 +154,7 @@ if (typeof global.document === 'undefined') {
   global.document.dispatchEvent = global.document.dispatchEvent || vi.fn();
   
   // If document exists but doesn't have configurable hidden property, try to add it
-  if (!global.document.hasOwnProperty('hidden') || !Object.getOwnPropertyDescriptor(global.document, 'hidden')?.configurable) {
+  if (!Object.prototype.hasOwnProperty.call(global.document, 'hidden') || !Object.getOwnPropertyDescriptor(global.document, 'hidden')?.configurable) {
     try {
       Object.defineProperty(global.document, 'hidden', {
         value: false,
@@ -166,7 +166,7 @@ if (typeof global.document === 'undefined') {
     }
   }
   
-  if (!global.document.hasOwnProperty('visibilityState') || !Object.getOwnPropertyDescriptor(global.document, 'visibilityState')?.configurable) {
+  if (!Object.prototype.hasOwnProperty.call(global.document, 'visibilityState') || !Object.getOwnPropertyDescriptor(global.document, 'visibilityState')?.configurable) {
     try {
       Object.defineProperty(global.document, 'visibilityState', {
         value: 'visible',
@@ -188,38 +188,6 @@ if (typeof global.process === 'undefined') {
     }
   };
 }
-
-// Mock Electron API with proper cleanup tracking
-const createMockElectronAPI = () => ({
-  getFlashPathData: vi.fn().mockResolvedValue({
-    current_used_paths: {},
-    saved_paths: [],
-    certificate_folder_path: ''
-  }),
-  updateFlashPathData: vi.fn().mockResolvedValue({ success: true }),
-  selectFile: vi.fn().mockResolvedValue(null),
-  selectDirectory: vi.fn().mockResolvedValue(null),
-  onConfigUpdated: vi.fn(),
-  removeConfigListener: vi.fn(),
-  runCommandWithRealTimeOutput: vi.fn().mockRejectedValue(new Error('not ported')),
-  runProgramWithRealTimeOutput: vi.fn().mockRejectedValue(new Error('not ported')),
-  runK6WithRealTimeOutput: vi.fn().mockResolvedValue(0),
-  stopCommand: vi.fn().mockResolvedValue(),
-  loadConfig: vi.fn().mockResolvedValue({}),
-  saveConfig: vi.fn().mockResolvedValue({ success: true }),
-  getSelectedCertificate: vi.fn().mockResolvedValue(null),
-  scanCredentials: vi.fn().mockResolvedValue([]),
-  loadUserData: vi.fn().mockResolvedValue({}),
-  saveUserData: vi.fn().mockResolvedValue({ success: true }),
-  readDirectory: vi.fn().mockResolvedValue([]),
-  readFileContent: vi.fn().mockResolvedValue(''),
-  findHexFile: vi.fn().mockResolvedValue(''),
-  getCredentialsPath: vi.fn().mockResolvedValue(''),
-  closeWindow: vi.fn(),
-  quitApp: vi.fn(),
-  minimizeWindow: vi.fn(),
-  maximizeWindow: vi.fn()
-});
 
 // Global cleanup tracking
 const timeouts = new Set();
@@ -275,9 +243,6 @@ global.window.removeEventListener = (event, handler, options) => {
 
 // Setup and cleanup for each test
 beforeEach(() => {
-  // Reset window.electronAPI for each test
-  global.window.electronAPI = createMockElectronAPI();
-
   // Reset the shared in-memory localStorage so no state bleeds between tests
   // (the shim above is a single instance for the worker). No-op for files that
   // reinstall their own storage in beforeEach.
@@ -324,13 +289,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Mock CSS imports for tests - simplified approach with identity-obj-proxy handling most cases
-// Only mock the specific problematic CSS file
-vi.mock('@mui/x-data-grid/esm/index.css', () => ({
-  default: {}
-}));
-
-// Mock any other CSS files that might cause issues
+// Mock CSS imports for tests
 vi.mock('*.css', () => ({
   default: {}
 }));

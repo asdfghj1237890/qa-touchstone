@@ -95,14 +95,14 @@ function qaRunAssertions(list, resp) { return (list || []).filter(a => a.on !== 
 function qaParseAssertion(str) {
   const s = String(str).trim();
   let m;
-  if (m = s.match(/status\s*(==|=|!=|<=|>=|<|>)?\s*(\d{3})/i)) {
+  if ((m = s.match(/status\s*(==|=|!=|<=|>=|<|>)?\s*(\d{3})/i))) {
     const op = { '!=': 'neq', '<': 'lt', '<=': 'lt', '>': 'gt', '>=': 'gt' }[m[1]] || 'eq';
     return { type: 'status', op, value: +m[2], on: true };
   }
   if (/is\s+(an?\s+)?array/i.test(s)) return { type: 'bodyArray', on: true };
-  if (m = s.match(/(?:has|includes?|contains?)\s*"([^"]+)"/i)) return { type: 'bodyHas', path: m[1], on: true };
-  if (m = s.match(/time\s*(<=|<)\s*(\d+)/i)) return { type: 'time', op: 'lt', value: +m[2], on: true };
-  if (m = s.match(/header\s*"([^"]+)"/i)) return { type: 'header', name: m[1], op: 'exists', on: true };
+  if ((m = s.match(/(?:has|includes?|contains?)\s*"([^"]+)"/i))) return { type: 'bodyHas', path: m[1], on: true };
+  if ((m = s.match(/time\s*(<=|<)\s*(\d+)/i))) return { type: 'time', op: 'lt', value: +m[2], on: true };
+  if ((m = s.match(/header\s*"([^"]+)"/i))) return { type: 'header', name: m[1], op: 'exists', on: true };
   return { type: 'info', text: s, on: true };
 }
 

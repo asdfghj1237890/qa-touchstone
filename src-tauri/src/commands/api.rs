@@ -227,6 +227,12 @@ pub async fn execute_postman_request(
     // is disabled so we can manually follow each 30x hop and collect every
     // Set-Cookie along the way (browsers + Postman do the same).
     let verify = ssl_verify.unwrap_or(true);
+    if !verify {
+        // 審計線索：停用憑證驗證等於接受 MITM 風險，每次發生都留下紀錄
+        // （只記 host，不記完整 URL / query，避免把敏感參數寫進 log）。
+        let host = parsed.host_str().unwrap_or("<unknown>");
+        log::warn!("TLS verification DISABLED for this request (host: {host})");
+    }
     let client_builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60))

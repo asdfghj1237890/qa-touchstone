@@ -80,9 +80,6 @@ Clients that exceed 5000 requests per hour will receive a 429 rate-limit respons
 The service should respond within 200 ms under normal load.`;
 
 const METHODS_RE = /\b(GET|POST|PUT|PATCH|DELETE)\b/i;
-const STATUS_WORDS = [
-  [/\b(20[01]|2\d\d)\b/, null], // captured directly
-];
 
 function classify(text) {
   const t = text.toLowerCase();
@@ -108,7 +105,7 @@ function inferStatus(text) {
 function inferMethodPath(steps, title) {
   const joined = steps.join(' ') + ' ' + title;
   const mm = joined.match(METHODS_RE);
-  const pm = joined.match(/\s(\/[\w\/{}\-\?=&.]+)/);
+  const pm = joined.match(/\s(\/[\w/{}\-?=&.]+)/);
   let method = mm ? mm[1].toUpperCase() : null;
   if (!method) {
     const t = (title + ' ' + joined).toLowerCase();
@@ -272,7 +269,7 @@ function CaseCard({ c, index, onAdd }) {
           </div>
           <div className="tg-steps">
             {c.steps.map((s, i) => {
-              const kw = (s.match(/^(Given|When|Then|And|But)/i) || [, ''])[1];
+              const kw = (s.match(/^(Given|When|Then|And|But)/i) || ['', ''])[1];
               return <div key={i} className="tg-step"><span className="tg-step-kw">{kw}</span><span>{s.replace(/^(Given|When|Then|And|But)\s*/i, '')}</span></div>;
             })}
           </div>

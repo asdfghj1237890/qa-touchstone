@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import App from '../App.jsx';
 
@@ -112,7 +112,8 @@ describe('App (redesign shell)', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     fireEvent.click(screen.getByText('English (US)').closest('button'));
-    fireEvent.click(screen.getByRole('button', { name: '繁體中文' }));
+    // Dropdown 選項現在是 ARIA listbox/option（鍵盤可達），不再是裸 button。
+    fireEvent.click(screen.getByRole('option', { name: '繁體中文' }));
     expect(document.documentElement.lang).toBe('zh-TW');
     expect(document.querySelector('.qa-titlebar-route').textContent).toBe('設定');
     expect(screen.getByRole('button', { name: '首頁' })).toBeInTheDocument();

@@ -1,4 +1,3 @@
-import React from 'react';
 import './setup.js';
 
 // ── QA Touchstone — export a collection to Postman v2.1 collection JSON ─────
@@ -25,7 +24,7 @@ function pmUrlObject(baseUrl, path, params) {
   return obj;
 }
 
-function pmAuth(authType, det) {
+function pmAuth(authType, _det) {
   switch (authType) {
     case 'bearer': return { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}', type: 'string' }] };
     case 'basic': return { type: 'basic', basic: [{ key: 'username', value: '{{username}}' }, { key: 'password', value: '{{password}}' }] };

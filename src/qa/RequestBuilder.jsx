@@ -121,7 +121,7 @@ function cookieHostLabel(env, varMap, t) {
   }
 }
 
-function OptionsEditor({ req, env, sslVerify, setSslVerify, localVars, setLocalVars, varMap, cookies, collectionId, onOpenSettings }) {
+function OptionsEditor({ env, sslVerify, setSslVerify, localVars, setLocalVars, varMap, cookies, onOpenSettings }) {
   const { t } = useI18n();
   const hostLabel = cookieHostLabel(env, varMap, t);
   return (

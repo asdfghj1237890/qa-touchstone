@@ -1,7 +1,7 @@
 import React from 'react';
 import './setup.js';
-import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo, highlightJson } from './components.jsx';
-import { exportCollection } from './ExportData.jsx';
+import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo } from './components.jsx';
+import './ExportData.jsx';
 import { ImportModal } from './ImportData.jsx';
 import { useI18n } from './useI18n.js';
 
@@ -105,7 +105,7 @@ function CollectionRow({ req, active, onClick }) {
   );
 }
 
-function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, onSelectHistory, onImport, dataVersion }) {
+function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, onSelectHistory, onImport }) {
   const { t } = useI18n();
   const { COLLECTIONS, ENVIRONMENTS } = window.QA;
   // Default to the first collection open; everything else collapsed. Avoids
@@ -156,7 +156,8 @@ function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, 
               <Icon name="download" size={14} /> {t('sidebar.import')}
             </button>
             <div className="qa-side-exportwrap">
-              <button className="qa-side-import qa-side-iconbtn" title={t('sidebar.exportTitle')} onClick={() => setExportMenu(m => !m)}>
+              <button className="qa-side-import qa-side-iconbtn" title={t('sidebar.exportTitle')} aria-label={t('sidebar.exportTitle')}
+                      aria-expanded={exportMenu} onClick={() => setExportMenu(m => !m)}>
                 <Icon name="upload" size={14} />
               </button>
               {exportMenu && (

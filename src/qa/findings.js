@@ -4,6 +4,7 @@
 // localStorage persistence for findings management. UI lives in FindingsPanel.
 import './setup.js';
 import { SEVERITY_ORDER, normalizePath } from './oracles.js';
+import { loadJSON, saveJSON } from './storage.js';
 
 export const FP_VERSION = 1;
 export const LIFECYCLE_KEY = 'qa_security_lifecycle';
@@ -116,12 +117,10 @@ export function gateCount(items, lifecycle, diff) {
   return n;
 }
 
-function readJSON(key) {
-  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
-}
-function writeJSON(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch { /* storage unavailable — non-fatal */ }
-}
+// 統一儲存層：解析失敗回 null；寫入失敗 console.error + qa-storage-error 事件，
+// 並（Tauri 環境）鏡像到磁碟 user_data.json。
+const readJSON = (key) => loadJSON(key, null);
+const writeJSON = (key, val) => saveJSON(key, val);
 
 const BLANK_RECORD = () => ({
   suppressed: false, suppressReason: '', status: 'open', owner: '', note: '',

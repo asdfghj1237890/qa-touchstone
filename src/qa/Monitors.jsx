@@ -176,7 +176,6 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }) {
 
 function MonitorsPage({
   env,
-  setRoute,
   vars,
   cookies = [],
   sslVerify = true,

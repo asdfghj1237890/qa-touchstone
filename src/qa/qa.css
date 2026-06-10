@@ -7,7 +7,8 @@
   .qa-app {
     --bg:#15181c; --bg-1:#1a1e23; --bg-2:#21262d; --bg-3:#2a3037;
     --border:#272d34; --border-2:#39424b;
-    --text:#e6edf3; --text-dim:#97a3ae; --text-faint:#626d77;
+    /* --text-faint 自 #626d77 提亮：對 --bg 的對比 3.5:1 → 4.9:1（WCAG AA）。 */
+    --text:#e6edf3; --text-dim:#97a3ae; --text-faint:#7d8893;
     --accent:#4d9fff; --accent-soft:#4d9fff22; --accent-line:#4d9fff55; --accent-contrast:#05121f;
     --radius:8px; --radius-lg:12px;
     --row:38px; --gap:12px; --pad:18px; --fs:13.5px; --ctrl:38px;
@@ -24,6 +25,8 @@
   }
   .qa-app button { font-family: inherit; color: inherit; }
   .qa-app input, .qa-app textarea, .qa-app select { font-family: inherit; color: var(--text); }
+  /* 鍵盤焦點一律可見（滑鼠點擊不觸發 :focus-visible，不影響視覺）。 */
+  .qa-app :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .qa-app ::placeholder { color: var(--text-faint); }
   .qa-app kbd {
     font-family: var(--font-mono); font-size: 0.85em; background: var(--bg-3);

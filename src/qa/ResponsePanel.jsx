@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Icon, Spinner, StatusPill, highlightJson } from './components.jsx';
+import { Icon, Spinner, StatusPill } from './components.jsx';
 import { qaAiSend } from './llm.js';
 import { useI18n } from './useI18n.js';
 
@@ -10,7 +10,7 @@ const { useState: useStateRP, useEffect: useEffectRP, useRef: useRefRP } = React
 function syntaxHighlight(json) {
   json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return json.replace(
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g,
     (m) => {
       let cls = 'qa-j-num';
       if (/^"/.test(m)) cls = /:$/.test(m) ? 'qa-j-key' : 'qa-j-str';
@@ -130,7 +130,7 @@ function reqReportHtml(req, env, response, t) {
 </div></body></html>`;
 }
 
-function ResponsePanel({ state, response, req, env, varMap, testList }) {
+function ResponsePanel({ state, response, req, env, testList }) {
   const { t } = useI18n();
   // state: 'empty' | 'loading' | 'done'
   const [tab, setTab] = useStateRP('body');

@@ -25,6 +25,8 @@ import { useI18n } from './qa/useI18n.js';
 import { PromptPreviewHost } from './qa/PromptPreview.jsx';
 import api from './api/index.js';
 import { loadAiPolicy } from './qa/aiPolicy.js';
+import { loadJSON, saveJSON, loadString, saveString, STORAGE_ERROR_EVENT } from './qa/storage.js';
+import { ErrorBoundary } from './qa/ErrorBoundary.jsx';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
 
@@ -85,18 +87,15 @@ function hostOf(url) {
 }
 // cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
 function loadInitialMonitors() {
-  try {
-    const raw = localStorage.getItem(MONITOR_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed)) return parsed.map(m => normalizeMonitor(m));
-  } catch {}
+  const parsed = loadJSON(MONITOR_STORAGE_KEY, null);
+  if (Array.isArray(parsed)) return parsed.map(m => normalizeMonitor(m));
   return window.QA.MONITORS.map(m => normalizeMonitor(m));
 }
 
 function AppShell() {
   const { t } = useI18n();
   const rootRef = useRefApp(null);
-  const [accent, setAccent] = useStateApp(() => { try { return localStorage.getItem('qa_accent') || 'auto'; } catch { return 'auto'; } });
+  const [accent, setAccent] = useStateApp(() => loadString('qa_accent', 'auto') || 'auto');
 
   const [route, setRoute] = useStateApp('home');
   const [settingsTab, setSettingsTab] = useStateApp('appearance');
@@ -112,6 +111,7 @@ function AppShell() {
   const [history, setHistory] = useStateApp(window.QA.SEED_HISTORY.map(h => ({ ...h })));
   const [dataVersion, setDataVersion] = useStateApp(0); // bumps when collections are imported
   const [cookieToast, setCookieToast] = useStateApp(null); // {name, domain} captured from Set-Cookie
+  const [storageToast, setStorageToast] = useStateApp(null); // {key, message} from qa-storage-error
   const [oauthTokens, setOauthTokens] = useStateApp({}); // { [reqId]: { token, type, expiresAt, scope } }
   const [logoFlash, setLogoFlash] = useStateApp(0); // bumps on a successful response to flash the brand mark
   const [perfRunning, setPerfRunning] = useStateApp(false); // true while a performance test is in flight
@@ -160,7 +160,7 @@ function AppShell() {
   // Apply theme whenever the accent changes; persist it.
   useEffectApp(() => {
     window.QATheme.applyTheme(rootRef.current, { direction: 'graphite', accent, density: 'comfortable', uiFont: 'mono' });
-    try { localStorage.setItem('qa_accent', accent); } catch {}
+    saveString('qa_accent', accent);
   }, [accent]);
 
   useEffectApp(() => { monitorsRef.current = monitors; }, [monitors]);
@@ -170,8 +170,15 @@ function AppShell() {
   }, [env, vars, cookies, sslVerify, tests, oauthTokens]);
 
   useEffectApp(() => {
-    try { localStorage.setItem(MONITOR_STORAGE_KEY, JSON.stringify(monitors)); } catch {}
+    saveJSON(MONITOR_STORAGE_KEY, monitors);
   }, [monitors]);
+
+  // 本機儲存寫入失敗（quota 滿等）不再無聲：顯示 toast 告知使用者。
+  useEffectApp(() => {
+    const onStorageError = (e) => setStorageToast(e.detail || { key: '', message: '' });
+    window.addEventListener(STORAGE_ERROR_EVENT, onStorageError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
+  }, []);
 
   useEffectApp(() => {
     const tick = () => {
@@ -203,7 +210,6 @@ function AppShell() {
   const reqIsAbsolute = /^https?:\/\//i.test(reqUrlForHost);
   const envBaseSub = window.qaSubstitute ? window.qaSubstitute(env.baseUrl || '', activeMap) : (env.baseUrl || '');
   const reqUrlForCookie = reqIsAbsolute ? reqUrlForHost : (envBaseSub + reqUrlForHost);
-  const reqHost = hostOf(reqUrlForCookie);
   // RFC 6265 §5.4: cookies with longer paths must precede shorter-path ones
   // in the Cookie header. Many servers read the first occurrence of a name,
   // so without this sort our /admin cookie would lose to / when both match.
@@ -392,6 +398,18 @@ function AppShell() {
           <span className="qa-toast-cta">{t('toast.viewJar')}</span>
         </div>
       )}
+
+      {/* 本機儲存失敗 toast（點擊關閉） */}
+      {storageToast && (
+        <div className="qa-toast" role="alert" onClick={() => setStorageToast(null)}>
+          <Icon name="shield" size={15} />
+          <div className="qa-toast-text">
+            <strong>{t('toast.storageFailTitle')}</strong>
+            <span>{t('toast.storageFailBody', { key: storageToast.key || '?' })}</span>
+          </div>
+          <span className="qa-toast-cta">{t('toast.dismiss')}</span>
+        </div>
+      )}
       <PromptPreviewHost />
     </div>
   );
@@ -399,9 +417,11 @@ function AppShell() {
 
 function App() {
   return (
-    <I18nProvider>
-      <AppShell />
-    </I18nProvider>
+    <ErrorBoundary>
+      <I18nProvider>
+        <AppShell />
+      </I18nProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import './setup.js';
-import { Dropdown, Icon, highlightJson } from './components.jsx';
+import { Dropdown, Icon } from './components.jsx';
 import { useI18n } from './useI18n.js';
 
 // ── QA Touchstone — auto-generated API documentation from a collection ─────
@@ -14,7 +14,6 @@ function DocRequest({ r, env, onOpenRequest }) {
   const det = window.QA.REQUEST_DETAILS[r.id] || {};
   const resp = window.QA.RESPONSES[r.id];
   const params = (det.params || []).filter(p => p.key);
-  const headers = (det.headers || []);
   return (
     <div className="doc-req" id={'doc-' + r.id}>
       <div className="doc-req-head">

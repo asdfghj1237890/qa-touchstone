@@ -6,19 +6,6 @@ use tauri::{AppHandle, Emitter};
 
 const CONFIG_FILE: &str = "config.json";
 
-fn default_visible_pages() -> Value {
-    json!({
-        "credentials": true,
-        "flashNordic": true,
-        "flashSilabs": true,
-        "flashEFD": true,
-        "flashRFD": true,
-        "tab6": true,
-        "apiTest": true,
-        "tab8": false
-    })
-}
-
 #[derive(Serialize)]
 pub struct CommandResult {
     pub success: bool,
@@ -44,26 +31,10 @@ pub(crate) fn load_config_raw(app: &AppHandle) -> Value {
     }
 }
 
-/// 將 visiblePages 與預設合併（缺的補預設）。
-fn merge_visible_pages(config: &mut Value) {
-    let defaults = default_visible_pages();
-    let obj = config.as_object_mut().unwrap();
-    let merged = match obj.get("visiblePages").and_then(|v| v.as_object()) {
-        Some(existing) => {
-            let mut m = defaults.as_object().unwrap().clone();
-            for (k, val) in existing { m.insert(k.clone(), val.clone()); }
-            Value::Object(m)
-        }
-        None => defaults,
-    };
-    obj.insert("visiblePages".into(), merged);
-}
-
 #[tauri::command]
 pub fn load_config(app: AppHandle) -> Value {
     let mut config = load_config_raw(&app);
     if !config.is_object() { config = json!({}); }
-    merge_visible_pages(&mut config);
     config
 }
 
@@ -84,23 +55,6 @@ pub fn save_config(app: AppHandle, config: Value) -> CommandResult {
     }
     // 廣播給所有視窗（對齊 Electron 的 config-updated）
     let _ = app.emit(crate::events::CONFIG_UPDATED, merged);
-    CommandResult::ok()
-}
-
-#[tauri::command]
-pub fn save_visible_pages(app: AppHandle, visible_pages: Value) -> CommandResult {
-    save_config(app, json!({ "visiblePages": visible_pages }))
-}
-
-#[tauri::command]
-pub fn load_visible_pages(app: AppHandle) -> Value {
-    let config = load_config(app);
-    config.get("visiblePages").cloned().unwrap_or_else(default_visible_pages)
-}
-
-#[tauri::command]
-pub fn clear_caches() -> CommandResult {
-    // 本移植不使用記憶體快取，無需清除。
     CommandResult::ok()
 }
 
@@ -137,23 +91,6 @@ pub fn set_api_credential_configs(app: AppHandle, api_configs: Value) -> Command
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn merge_fills_missing_visible_pages() {
-        let mut c = json!({ "visiblePages": { "tab8": true } });
-        merge_visible_pages(&mut c);
-        let vp = &c["visiblePages"];
-        assert_eq!(vp["tab8"], true);        // 保留既有
-        assert_eq!(vp["credentials"], true); // 補預設
-        assert_eq!(vp["flashSilabs"], true);
-    }
-
-    #[test]
-    fn merge_uses_defaults_when_absent() {
-        let mut c = json!({ "credentials": "/x" });
-        merge_visible_pages(&mut c);
-        assert_eq!(c["visiblePages"]["tab8"], false);
-    }
 
     #[test]
     fn api_configs_migrates_singular_when_array_empty() {

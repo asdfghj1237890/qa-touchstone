@@ -9,7 +9,7 @@ vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ close: vi.
 const openMock = vi.fn();
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openMock(...a) }));
 
-import { api, NotPortedError } from './index.js';
+import { api } from './index.js';
 
 describe('api module', () => {
   beforeEach(() => {
@@ -24,22 +24,33 @@ describe('api module', () => {
     expect(invokeMock).toHaveBeenCalledWith('get_platform');
   });
 
-  it('未移植方法回傳 rejected promise（NotPortedError），不可同步 throw', async () => {
-    const p = api.scanCredentials('/x');
-    expect(typeof p.then).toBe('function');
-    await expect(p).rejects.toBeInstanceOf(NotPortedError);
-  });
-
-  it('暴露所有 preload 的事件訂閱方法（避免呼叫到 undefined 而崩潰）', () => {
+  it('暴露所有事件訂閱方法（避免呼叫到 undefined 而崩潰）', () => {
     for (const name of [
       'onConfigUpdated', 'removeConfigListener', 'onConfigLoaded',
       'processCommandOutput', 'removeCommandOutputListener',
       'onPostmanCollectionsUpdated', 'removePostmanCollectionsUpdatedListener',
-      'onSerialProgress', 'removeSerialProgressListener',
-      'onSerialDataReceived', 'removeSerialDataListener',
-      'onSerialError', 'removeSerialErrorListener',
     ]) {
       expect(typeof api[name], `${name} 應為 function`).toBe('function');
+    }
+  });
+
+  it('已下線的 Electron 遺留方法不再暴露（serial / network / flash / certs / fsops legacy）', () => {
+    for (const name of [
+      'listSerialPorts', 'configureSerialPort', 'openSerialPort', 'closeSerialPort',
+      'sendSerialData', 'startSerialListening', 'sendFileSerial', 'receiveFileSerial',
+      'onSerialProgress', 'onSerialDataReceived', 'onSerialError',
+      'testSshConnection', 'scanNetworkDevices',
+      'updateFlashPathData', 'getFlashPathData',
+      'scanCertificates', 'getCertificatesPath', 'getSelectedCertificate',
+      'readDirectory', 'readFileContent', 'findHexFile',
+      'runCommandWithRealTimeOutput', 'runProgramWithRealTimeOutput',
+      'scanCredentials', 'getCredentialsPath', 'getSelectedCredential',
+      'openSettings', 'closeWindow',
+      'saveVisiblePages', 'loadVisiblePages', 'clearCaches',
+      'saveFilterModel', 'loadFilterModel', 'saveSelectionModel', 'loadSelectionModel',
+      'saveApiTestState', 'loadApiTestState',
+    ]) {
+      expect(api[name], `${name} 應已移除`).toBeUndefined();
     }
   });
 
@@ -68,9 +79,9 @@ describe('api module', () => {
     expect(unlisten).toHaveBeenCalledTimes(2);
   });
 
-  it('loadConfig 轉呼 invoke load_config（已移植，不再 NotPorted）', async () => {
-    invokeMock.mockResolvedValue({ visiblePages: {} });
-    await expect(api.loadConfig()).resolves.toEqual({ visiblePages: {} });
+  it('loadConfig 轉呼 invoke load_config', async () => {
+    invokeMock.mockResolvedValue({ theme: 'dark' });
+    await expect(api.loadConfig()).resolves.toEqual({ theme: 'dark' });
     expect(invokeMock).toHaveBeenCalledWith('load_config');
   });
 
@@ -86,40 +97,18 @@ describe('api module', () => {
     expect(openMock).toHaveBeenCalledWith({ directory: true, multiple: false });
   });
 
-  it('readFileContent 轉呼 invoke read_file_content', async () => {
-    invokeMock.mockResolvedValue('file contents');
-    await expect(api.readFileContent('/a/b.txt')).resolves.toBe('file contents');
-    expect(invokeMock).toHaveBeenCalledWith('read_file_content', { filePath: '/a/b.txt' });
-  });
-
-  it('scanCertificates 轉呼 invoke scan_certificates 帶 certificatesPath', async () => {
-    invokeMock.mockResolvedValue([{ id: 'X1' }]);
-    await expect(api.scanCertificates('/certs')).resolves.toEqual([{ id: 'X1' }]);
-    expect(invokeMock).toHaveBeenCalledWith('scan_certificates', { certificatesPath: '/certs' });
-  });
-
-  it('getSelectedCertificate 轉呼 invoke get_selected_certificate', async () => {
-    invokeMock.mockResolvedValue({ id: 'X1', certificateid: 'AAAA' });
-    await expect(api.getSelectedCertificate()).resolves.toEqual({ id: 'X1', certificateid: 'AAAA' });
-    expect(invokeMock).toHaveBeenCalledWith('get_selected_certificate');
-  });
-
-  it('updateFlashPathData 轉呼 invoke update_flash_path_data 帶 newData', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-    await api.updateFlashPathData({ path_type: 'nordic', saved_paths: [] });
-    expect(invokeMock).toHaveBeenCalledWith('update_flash_path_data', { newData: { path_type: 'nordic', saved_paths: [] } });
-  });
-
-  it('getFlashPathData 轉呼 invoke get_flash_path_data 帶 pathType', async () => {
-    invokeMock.mockResolvedValue({ certificate_folder_path: '', current_used_paths: {}, saved_paths: [] });
-    await api.getFlashPathData('silabs');
-    expect(invokeMock).toHaveBeenCalledWith('get_flash_path_data', { pathType: 'silabs' });
-  });
-
   it('setApiCredentialConfigs 轉呼 invoke set_api_credential_configs 帶 apiConfigs', async () => {
     invokeMock.mockResolvedValue({ success: true });
     await api.setApiCredentialConfigs([{ id: 'a' }]);
     expect(invokeMock).toHaveBeenCalledWith('set_api_credential_configs', { apiConfigs: [{ id: 'a' }] });
+  });
+
+  it('loadUserData / saveUserData 轉呼對應 invoke', async () => {
+    invokeMock.mockResolvedValue({ success: true });
+    await api.saveUserData({ k: 'v' });
+    expect(invokeMock).toHaveBeenCalledWith('save_user_data', { userData: { k: 'v' } });
+    await api.loadUserData();
+    expect(invokeMock).toHaveBeenCalledWith('load_user_data');
   });
 
   it('stopCommand 轉呼 invoke stop_command', async () => {
@@ -151,12 +140,6 @@ describe('api module', () => {
     const cb = vi.fn((d) => { captured = d; });
     await api.runK6WithRealTimeOutput(['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'], null, cb);
     expect(captured).toBe('line1');
-  });
-
-  it('舊的任意命令 bridge 已停用為 NotPortedError', async () => {
-    await expect(api.runCommandWithRealTimeOutput('echo hi', null, vi.fn())).rejects.toBeInstanceOf(NotPortedError);
-    await expect(api.runProgramWithRealTimeOutput('/bin/echo', ['hi'], null, vi.fn())).rejects.toBeInstanceOf(NotPortedError);
-    expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it('getPostmanCollectionPath 轉呼 invoke get_postman_collection_path', async () => {
@@ -192,57 +175,5 @@ describe('api module', () => {
     };
     await api.executePostmanRequest(details);
     expect(invokeMock).toHaveBeenCalledWith('execute_postman_request', details);
-  });
-
-  it('listSerialPorts 轉呼 invoke list_serial_ports', async () => {
-    invokeMock.mockResolvedValue([{ path: 'COM7', manufacturer: 'Acme' }]);
-    await expect(api.listSerialPorts()).resolves.toEqual([{ path: 'COM7', manufacturer: 'Acme' }]);
-    expect(invokeMock).toHaveBeenCalledWith('list_serial_ports');
-  });
-
-  it('configureSerialPort 帶 config', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-    await api.configureSerialPort({ port: 'COM3', baudRate: 9600 });
-    expect(invokeMock).toHaveBeenCalledWith('configure_serial_port', { config: { port: 'COM3', baudRate: 9600 } });
-  });
-
-  it('openSerialPort 帶 portPath', async () => {
-    invokeMock.mockResolvedValue({ success: true, port: 'COM3' });
-    await api.openSerialPort('COM3');
-    expect(invokeMock).toHaveBeenCalledWith('open_serial_port', { portPath: 'COM3' });
-  });
-
-  it('closeSerialPort / sendSerialData / startSerialListening 轉呼對應 invoke', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-    await api.closeSerialPort();
-    expect(invokeMock).toHaveBeenCalledWith('close_serial_port');
-    await api.sendSerialData('AT\r');
-    expect(invokeMock).toHaveBeenCalledWith('send_serial_data', { data: 'AT\r' });
-    await api.startSerialListening();
-    expect(invokeMock).toHaveBeenCalledWith('start_serial_listening');
-  });
-
-  it('sendFileSerial 帶 filePath/destPath', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-    await api.sendFileSerial('/a/f.txt', '/dev/dest');
-    expect(invokeMock).toHaveBeenCalledWith('send_file_serial', { filePath: '/a/f.txt', destPath: '/dev/dest' });
-  });
-
-  it('receiveFileSerial 帶 savePath/remotePath', async () => {
-    invokeMock.mockResolvedValue({ success: true });
-    await api.receiveFileSerial('/local/save', '/remote/f.bin');
-    expect(invokeMock).toHaveBeenCalledWith('receive_file_serial', { savePath: '/local/save', remotePath: '/remote/f.bin' });
-  });
-
-  it('testSshConnection 帶 params', async () => {
-    invokeMock.mockResolvedValue({ success: true, hostname: 'h' });
-    await api.testSshConnection({ ip: '1.2.3.4', username: 'root' });
-    expect(invokeMock).toHaveBeenCalledWith('test_ssh_connection', { ip: '1.2.3.4', username: 'root' });
-  });
-
-  it('scanNetworkDevices 帶 manualSubnet', async () => {
-    invokeMock.mockResolvedValue([{ ip: '192.168.1.220', hostname: 'ring-x' }]);
-    await expect(api.scanNetworkDevices('192.168.1')).resolves.toEqual([{ ip: '192.168.1.220', hostname: 'ring-x' }]);
-    expect(invokeMock).toHaveBeenCalledWith('scan_network_devices', { manualSubnet: '192.168.1' });
   });
 });

@@ -36,35 +36,3 @@ pub fn load_user_data(app: AppHandle) -> Value {
     }
 }
 
-#[tauri::command]
-pub fn save_filter_model(app: AppHandle, filter_model: Value) -> CommandResult {
-    save_blob(&app, "filter_model.json", &filter_model)
-}
-
-#[tauri::command]
-pub fn load_filter_model(app: AppHandle) -> Value {
-    load_blob_or_null(&app, "filter_model.json")
-}
-
-#[tauri::command]
-pub fn save_selection_model(app: AppHandle, selection_model: Value) -> CommandResult {
-    save_blob(&app, "selection_model.json", &selection_model)
-}
-
-#[tauri::command]
-pub fn load_selection_model(app: AppHandle) -> Value {
-    load_blob_or_null(&app, "selection_model.json")
-}
-
-#[tauri::command]
-pub fn save_api_test_state(app: AppHandle, state: Value) -> CommandResult {
-    if !state.is_object() {
-        return CommandResult::err_pub("Invalid state data".into());
-    }
-    save_blob(&app, "api_test_state.json", &state)
-}
-
-#[tauri::command]
-pub fn load_api_test_state(app: AppHandle) -> Value {
-    load_blob_or_null(&app, "api_test_state.json")
-}

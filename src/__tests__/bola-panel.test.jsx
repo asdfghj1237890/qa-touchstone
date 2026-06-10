@@ -232,7 +232,6 @@ describe('BolaPanel — setup automation', () => {
     const runBolaBola = {
       tests: [{ id: 'tn1', reqId: 'r2', method: 'GET', path: '/orders/123', idLocation: { kind: 'path', index: 1 }, idValues: { alice: '100', bob: '200' } }],
     };
-    let callCount = 0;
     // Count each canned response lookup by patching the response store via a flag
     // set on each response object access.  We use a simple counter reset here.
     const origExec = window.QA.RESPONSES['r2'];

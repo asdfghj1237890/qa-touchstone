@@ -1,13 +1,9 @@
 pub mod ai_policy;
 pub mod api;
-pub mod certs;
 pub mod config;
-pub mod flash;
 pub mod fsops;
-pub mod network;
 pub mod postman;
 pub mod process;
-pub mod serial;
 pub mod store;
 pub mod system;
 pub mod window;

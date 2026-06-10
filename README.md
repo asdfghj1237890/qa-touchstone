@@ -1,5 +1,6 @@
 # QA Touchstone
 
+[![CI](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-companion/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#architecture)
 [![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#architecture)
@@ -10,12 +11,14 @@
 
 [繁體中文](README.zh-TW.md)
 
-QA Touchstone is a local-first desktop workspace for API QA. It combines a
-Postman-compatible API client (REST and GraphQL), live collection execution,
-background monitors,
-k6 performance testing, security testing (RBAC, object-authz, and rate-limit)
-with AI triage, AI-assisted test generation, AI response review, and
-exportable API documentation in one Tauri app.
+QA Touchstone is a local-first desktop tool for **API security testing in CI**:
+run an identity × endpoint RBAC matrix, BOLA/IDOR object-authorization tests,
+and rate-limit abuse checks against your real API, manage findings across runs
+with baseline diffs, and export **SARIF / JUnit / HTML / JSON** artifacts your
+pipeline can gate on. Around that core it ships the full supporting workbench —
+a Postman-compatible API client (REST and GraphQL), live collection execution,
+background monitors, k6 performance testing, AI-assisted test generation and
+triage, and exportable API documentation — in one Tauri app.
 
 ## Screenshots
 
@@ -92,9 +95,13 @@ The current public-facing scope is API testing only:
   or debug fields).
 - **Configurable AI provider**: every AI feature (test generation, response
   review, sensitive-data scan, and security triage) runs on a provider you
-  choose — built-in Claude with no API key, OpenAI, or a custom / self-managed
-  (enterprise on-prem) OpenAI-compatible endpoint — with credentials kept on the
-  local machine.
+  choose — OpenAI, or a custom / self-managed (enterprise on-prem)
+  OpenAI-compatible endpoint — with credentials kept on the local machine.
+  AI features are optional: without a configured provider, test generation
+  falls back to a built-in heuristic engine and the rest of the app works
+  fully. (A keyless built-in Claude provider exists but only functions when
+  the UI runs inside a claude.ai Artifacts sandbox — it is **not available in
+  the desktop builds**; the Settings page shows its live availability.)
 - **AI privacy mode**: all AI calls pass through one egress chokepoint that is
   redacted-by-default. Three modes — `full context`, `redacted` (default), and
   `local only` — control what leaves the machine. `redacted` masks URLs (host
@@ -270,7 +277,11 @@ Runtime configuration is stored locally. Common generated files include:
 
 - `config.json` for application settings
 - `postman_collections_cache.json` for cached collection metadata
-- `api_credential_configs.json` for reusable API credential profile metadata
+- `user_data.json` — disk mirror of critical workspace data (security findings
+  lifecycle, baselines, perf history, monitors). The app reads/writes these via
+  a single storage layer (`src/qa/storage.js`) that survives a cleared webview
+  cache and surfaces write failures instead of swallowing them. Secrets (LLM
+  API keys) are deliberately excluded from the mirror.
 
 LLM settings are stored in browser localStorage. AI privacy mode is
 redacted-by-default: prompts are masked locally and shown in a preview before
