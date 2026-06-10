@@ -654,11 +654,14 @@
   .pf-d-good { color: oklch(0.78 0.14 150); }
   .pf-d-bad { color: oklch(0.73 0.16 22); }
 
-  .pf-history { margin-top: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  /* 不用 overflow:hidden 裁圓角——否則會把匯出下拉選單一起夾掉。改由最後一列
+     自行補上底部圓角，下拉選單（position:absolute）才能完整溢出顯示。 */
+  .pf-history { margin-top: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); }
   .pf-history-head { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 12px; }
   .pf-history-head > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
   .pf-run-row { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
-  .pf-run-row:last-child { border-bottom: none; }
+  .pf-run-row:last-child { border-bottom: none; border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg); }
+  .pf-run-row:last-child .pf-run-main { border-bottom-right-radius: var(--radius-lg); }
   .pf-run-row[data-active="1"] { background: var(--accent-soft); }
   .pf-run-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; padding: 9px 14px; background: none;
     border: none; cursor: pointer; text-align: left; color: var(--text-dim); font-family: inherit; transition: background .12s; }
