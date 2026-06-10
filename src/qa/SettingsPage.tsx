@@ -300,18 +300,24 @@ function LlmSettings() {
   const DEF_MODEL: Record<string, string> = { builtin: 'claude-haiku-4-5', openai: 'gpt-5.4-mini', custom: '' };
   const save = (d: Partial<ReturnType<NonNullable<Window['loadLlmCfg']>>>) => { const n = { ...cfg, ...d }; setCfg(n); window.saveLlmCfg!(n); };
   const setProvider = (v: string) => save({ provider: v, model: DEF_MODEL[v] });
-  const builtin = cfg.provider === 'builtin';
   const claudeOk = !!(window.claude && window.claude.complete);
-  const providerOptions = window.LLM_PROVIDERS.map((p: any) => ({
-    ...p,
-    label: t(`settings.llm.provider.${p.value}`),
-  }));
+  // 內建 Claude 需 window.claude（僅 claude.ai Artifacts 沙箱注入）；桌面版偵測
+  // 不到就不在下拉顯示它，避免提供一個必然失敗的選項。
+  const providerOptions = window.LLM_PROVIDERS
+    .filter((p: any) => p.value !== 'builtin' || claudeOk)
+    .map((p: any) => ({ ...p, label: t(`settings.llm.provider.${p.value}`) }));
+  // 若設定恰好停在已隱藏的 builtin，介面改顯示第一個可用 provider（使用者實際
+  // 選取時才寫入；未選前其餘流程沿用既有的 heuristic fallback）。
+  const shownProvider = providerOptions.some((o: any) => o.value === cfg.provider)
+    ? cfg.provider
+    : (providerOptions[0]?.value ?? cfg.provider);
+  const builtin = shownProvider === 'builtin';
   return (
     <div className="qa-set-grid qa-set-grid--api">
       <section className="qa-panel">
         <div className="qa-panel-head"><span><Icon name="sparkle" size={14} /> {t('settings.llm.provider')}</span></div>
         <div className="qa-set-body">
-          <FieldRow label={t('settings.llm.providerLabel')}><Dropdown value={cfg.provider} options={providerOptions} onChange={setProvider} /></FieldRow>
+          <FieldRow label={t('settings.llm.providerLabel')}><Dropdown value={shownProvider} options={providerOptions} onChange={setProvider} /></FieldRow>
           {!builtin && (
             <>
               <FieldRow label={t('settings.llm.model')}>

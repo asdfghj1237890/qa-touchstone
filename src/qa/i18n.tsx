@@ -1067,7 +1067,7 @@ const EN_DICT_2 = {
   'settings.api.type.aws': 'AWS SigV4',
   'settings.api.type.bearer': 'Bearer',
   'settings.api.type.basic': 'Basic',
-  'settings.llm.provider.builtin': 'Claude (built-in, no key)',
+  'settings.llm.provider.builtin': 'Claude (built-in · claude.ai Artifacts only)',
   'settings.llm.provider.openai': 'OpenAI',
   'settings.llm.provider.custom': 'Custom (OpenAI-compatible)',
 
@@ -1457,7 +1457,7 @@ Object.assign(dict['zh-TW'], {
   'settings.api.type.aws': 'AWS SigV4',
   'settings.api.type.bearer': 'Bearer',
   'settings.api.type.basic': 'Basic',
-  'settings.llm.provider.builtin': 'Claude（內建，不需 key）',
+  'settings.llm.provider.builtin': 'Claude（內建 · 僅 claude.ai Artifacts）',
   'settings.llm.provider.openai': 'OpenAI',
   'settings.llm.provider.custom': 'Custom（OpenAI-compatible）',
 
