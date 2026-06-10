@@ -82,12 +82,39 @@ describe('k6parse.feed + snapshot', () => {
     feed(st, mkLine('2026-05-30T00:00:01.200Z', 300, 404));
     feed(st, mkLine('2026-05-30T00:00:03.900Z', 500, 500));
     const snap = snapshot(st, slo);
-    expect(snap.latSeries).toEqual([150, 300, 0, 500]); // avg per bin
+    // 中位數 per bin（此資料每桶 ≤2 筆，median 與 avg 在此恰相同）
+    expect(snap.latSeries).toEqual([150, 300, 0, 500]);
     expect(snap.rpsSeries).toEqual([2, 1, 0, 1]);
     expect(snap.dist).toEqual({ ok: 2, c4: 1, c5: 1, net: 0 });
     expect(snap.m.sent).toBe(4);
     // err% = 2/4 = 50%
     expect(snap.m.err).toBe(50);
+  });
+
+  it('plots the per-bin MEDIAN, so a slow tail outlier does not spike the bucket', () => {
+    // 同一桶（bin 0, 0–1000ms）灌入三筆快 + 一筆 7s 慢尾巴。
+    // 平均 = (100+100+100+7000)/4 = 1825；中位數（內插）= 100。
+    const st = makeState(1000, 1);
+    feed(st, mkLine('2026-05-30T00:00:00.000Z', 100, 200));
+    feed(st, mkLine('2026-05-30T00:00:00.100Z', 100, 200));
+    feed(st, mkLine('2026-05-30T00:00:00.200Z', 100, 200));
+    feed(st, mkLine('2026-05-30T00:00:00.300Z', 7000, 200));
+    const snap = snapshot(st, slo);
+    expect(snap.latSeries[0]).toBe(100); // median, 不是 1825 的平均
+  });
+
+  it('bins by request START time, so a slow request finishing past the window is not clamped into the last bin', () => {
+    // 視窗 = 4 桶 × 1000ms = 4000ms。
+    // 先一筆 t=0 起跑（定 t0），再一筆在 1500ms 發出、耗時 3000ms → 4500ms 才
+    // 完成（超出視窗）。舊行為：按完成時間 clamp 進最後一桶(idx 3)；新行為：
+    // 按開始時間(1500ms) 落在 bin 1，末端不再被灌爆。
+    const st = makeState(1000, 4);
+    feed(st, mkLine('2026-05-30T00:00:00.000Z', 50, 200));   // start 0 → bin 0
+    feed(st, mkLine('2026-05-30T00:00:04.500Z', 3000, 200)); // start 1500 → bin 1
+    const snap = snapshot(st, slo);
+    expect(snap.latSeries[1]).toBe(3000); // 歸到開始時點 bin 1
+    expect(snap.latSeries[3]).toBe(0);    // 最後一桶不再被尾巴灌爆
+    expect(snap.m.sent).toBe(2);          // 兩筆都仍計入全域統計
   });
 
   it('ignores non-Point lines and bad JSON', () => {

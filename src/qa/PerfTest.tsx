@@ -513,7 +513,7 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
     let lastFlushMs = 0;
     const flush = () => {
       setLive(snapshot(state, slo));
-      const lastFilled = state.bins.reduce((lo, b, i) => (b.count > 0 ? i + 1 : lo), 0);
+      const lastFilled = state.bins.reduce((lo, b, i) => (b.lat.length > 0 ? i + 1 : lo), 0);
       setProgress(Math.min(1, lastFilled / N_POINTS));
     };
     const onChunk = (chunk: unknown) => {
@@ -781,7 +781,7 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
                     <button className="pf-run-main" onClick={() => !running && setViewIdx(i)}>
                       <span className="pf-run-pass" data-pass={r.pass ? '1' : '0'}>{r.pass ? t('common.pass') : t('common.fail')}</span>
                       <span className="pf-run-type">{r.typeLabel}</span>
-                      <span className="qa-meta">{r.maxVus} VUs</span>
+                      <span className="qa-meta pf-run-vus">{r.maxVus} VUs</span>
                       <span className="pf-run-metric">p95 <strong>{r.m.p95}</strong>ms</span>
                       <span className="pf-run-metric">{t('perf.errShort')} <strong>{r.m.err}</strong>%</span>
                       <span className="pf-run-ts qa-meta">{r.ts}</span>
