@@ -136,7 +136,7 @@ export interface MethodBadgeProps {
 
 function MethodBadge({ method, size = 'md' }: MethodBadgeProps) {
   const color = window.QATheme.methodColor(method);
-  const fs = size === 'sm' ? '10px' : size === 'lg' ? '12px' : '11px';
+  const fs = size === 'sm' ? '11px' : size === 'lg' ? '13px' : '12.5px';
   return (
     <span style={{
       color, fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: fs,
@@ -158,7 +158,7 @@ function StatusPill({ code, text, big }: StatusPillProps) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       color, fontFamily: 'var(--font-mono)', fontWeight: 700,
-      fontSize: big ? '14px' : '12px',
+      fontSize: big ? '14px' : '13px',
     }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
       {code}{text ? ` ${text}` : ''}
