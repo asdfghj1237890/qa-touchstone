@@ -47,3 +47,20 @@ declare global {
     qaParseDataFile?: (text: string | null | undefined, filename?: string | null) => { rows: any[] | null; columns: string[]; error: string; format: 'json' | 'csv' | null };
   }
 }
+
+// ── 追加宣告（append-only）：src/processShim.ts 的 process polyfill ──────────
+// 部分相依套件會讀 process.env.NODE_ENV；shim 只在瀏覽器掛上最小形狀。
+declare global {
+  interface Window {
+    process?: { env: { NODE_ENV: string } };
+  }
+}
+
+// ── 追加宣告（append-only）：src/qa/components.jsx 掛上 window 的 LLM 設定 ───
+// SettingsPage.tsx（LlmSettings）讀取；components 轉 .tsx 前先從寬宣告（any）。
+declare global {
+  interface Window {
+    LLM_DEFAULT_CFG?: any;
+    LLM_PROVIDERS?: any;
+  }
+}

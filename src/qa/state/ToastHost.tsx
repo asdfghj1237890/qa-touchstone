@@ -1,10 +1,7 @@
 import React from 'react';
-import { Icon as IconUntyped } from '../components';
+import { Icon } from '../components';
 import { useI18n } from '../useI18n';
 import { STORAGE_ERROR_EVENT } from '../storage';
-
-// components.jsx 尚未轉 TS，推導出的 props 全為必填；先以型別別名橋接。
-const Icon = IconUntyped as unknown as (props: { name: string; size?: number }) => React.JSX.Element;
 
 // ── QA Touchstone — 事件驅動 Toast 層 ────────────────────────────────────────
 // 訂閱兩種 window 事件並自行管理顯示狀態，發送方（send 流程 / storage 層）

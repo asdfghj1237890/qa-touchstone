@@ -76,6 +76,6 @@ export default [
     },
   },
   {
-    ignores: ['src/**/*.d.ts'],
+    ignores: ['src/**/*.d.ts', 'src/qa/psl.data.ts'],
   },
 ];

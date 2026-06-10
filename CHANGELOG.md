@@ -6,6 +6,25 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ## [Unreleased]
 
 ### Security
+- **Full Public Suffix List** for the cookie jar: the hand-rolled ~300-entry
+  suffix set is replaced by the complete publicsuffix.org list (9,919 rules +
+  283 wildcards + 8 exceptions, bundled in `src/qa/psl.data.ts`, refresh via
+  `node scripts/update-psl.mjs`) with a spec-faithful matcher (longest-match,
+  wildcard, and `!`-exception rules) in `src/qa/psl.ts`. Domain-attribute
+  supercookie attempts (`Domain=co.uk`, `Domain=s3.amazonaws.com`, unknown
+  TLDs, …) are now rejected exactly the way browsers do.
+
+### TypeScript
+- The entire frontend is now strict TypeScript: all pure-logic modules
+  (29 files, shared domain types in `src/qa/types.ts`), every UI component
+  (29 .jsx → .tsx), the Tauri bridge (`src/api/index.ts`), and the app entry
+  (`App.tsx` / `index.tsx`). `tsc --noEmit` is a CI gate; `t()` i18n keys are
+  a compile-checked union with IDE autocomplete.
+- AppShell decomposed into typed providers (`src/qa/state/`): Workspace /
+  Request / Monitors contexts + an event-driven ToastHost. `App.tsx` holds
+  4 useState (was 23); RequestBuilder takes 1 prop (was 17).
+
+### Security
 - Removed the entire legacy Electron-era hardware command surface that was
   still exposed to the webview for no reason: serial-port I/O + XMODEM file
   transfer, LAN/SSH device scanning, firmware flash-path management,

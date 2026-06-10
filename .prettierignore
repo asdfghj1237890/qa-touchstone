@@ -4,3 +4,4 @@ src-tauri/target
 src-tauri/gen
 src/__tests__/test-report
 package-lock.json
+src/qa/psl.data.ts
