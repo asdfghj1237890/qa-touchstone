@@ -3,7 +3,7 @@
 All notable changes to QA Touchstone are documented here. Versions follow
 [SemVer](https://semver.org); 0.x releases may contain breaking changes.
 
-## [Unreleased]
+## [0.21.1] — 2026-06-11
 
 ### Fixed
 - **Exports now work in the packaged desktop app.** Every export (perf reports,
@@ -13,10 +13,24 @@ All notable changes to QA Touchstone are documented here. Versions follow
   Tauri-aware helper (`src/qa/download.ts`): a native save dialog plus a
   backend `save_text_file` command in Tauri, with the blob fallback kept for
   browser/dev. Added `dialog:allow-save` capability.
+- **Perf "p50" chart end-spike** removed: the time series binned by request
+  *completion* time and averaged, so slow requests draining after the nominal
+  end clamped into the last bucket and spiked it. Now bins by request *start*
+  time and plots the per-bin median (matching the chart's "p50" label).
+- **k6 no longer flashes a console window** on Windows: the k6 subprocess (and
+  the taskkill on stop) spawn with `CREATE_NO_WINDOW`; piped output is
+  unaffected.
+- **Desktop hides the built-in Claude provider** when `window.claude` is absent
+  (it only works inside a claude.ai Artifacts sandbox); the provider labels no
+  longer claim "no key" where it can't run.
 - Perf run-history export dropdown was clipped by the container's
   `overflow: hidden`; the menu now overflows correctly.
 - Home header and nav rail showed a stale hardcoded version; the displayed
   version is now injected from `package.json` at build time.
+
+### Changed
+- Larger, more legible UI font sizes across the app; bigger perf stat-card
+  labels; perf run-history rows aligned into tabular columns.
 
 ### Performance
 - First paint no longer waits on an `initApi` IPC round-trip that cached
