@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { readFileSync } from 'node:fs';
+
+// 單一版本來源：build/dev/test 都從 package.json 注入 __APP_VERSION__，
+// UI 不再寫死版號（先前 HomePage/Sidebar 寫死 0.20.2，發版時漏改而過時）。
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
   plugins: [
@@ -40,16 +45,7 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
-  },
-  optimizeDeps: {
-    include: [
-      '@mui/material',
-      '@mui/icons-material',
-      '@mui/x-data-grid',
-      '@mui/x-tree-view',
-      '@emotion/react',
-      '@emotion/styled'
-    ]
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   test: {
     environment: 'jsdom',
@@ -70,12 +66,6 @@ export default defineConfig({
       reportOnFailure: true,
       include: ['src/**/*.{js,jsx,ts,tsx}'],
       exclude: ['src/__tests__/**', 'src/setupTests.js']
-    },
-    // Use updated configuration format for Vitest
-    server: {
-      deps: {
-        inline: [/@mui/]
-      }
     },
     // Handle CSS modules properly
     css: true,

@@ -101,7 +101,7 @@ function NavRail({ route, setRoute, busy, flashAt, active }: NavRailProps) {
         ))}
       </div>
       <div className="qa-rail-foot">
-        <div className="qa-rail-ver">0.20</div>
+        <div className="qa-rail-ver">{__APP_VERSION__.split('.').slice(0, 2).join('.')}</div>
       </div>
     </nav>
   );

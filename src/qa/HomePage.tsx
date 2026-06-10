@@ -38,7 +38,7 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
             <h1>QA Touchstone</h1>
             <p>{t('home.subtitle')}</p>
           </div>
-          <span className="qa-chip">v0.20.2</span>
+          <span className="qa-chip">v{__APP_VERSION__}</span>
         </header>
 
         <div className="qa-home-grid">
