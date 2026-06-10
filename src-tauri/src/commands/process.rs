@@ -22,6 +22,13 @@ fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<Str
         // 讓子程序自成 process group（pgid==pid），供 stop_command 砍整 group
         cmd.process_group(0);
     }
+    #[cfg(target_os = "windows")]
+    {
+        // CREATE_NO_WINDOW (0x08000000)：k6.exe 是 console 程式，GUI app 下
+        // spawn 會閃出一個黑色 console 視窗。帶此 flag 隱藏視窗；stdout/stderr
+        // 仍是 pipe，不影響 ndjson 擷取。
+        cmd.creation_flags(0x0800_0000);
+    }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     cmd
 }
@@ -143,9 +150,11 @@ pub async fn run_k6(
 pub(crate) fn kill_tree(pid: u32) {
     #[cfg(target_os = "windows")]
     {
-        // /T 連子程序、/F 強制
+        use std::os::windows::process::CommandExt;
+        // /T 連子程序、/F 強制；CREATE_NO_WINDOW 別讓 taskkill 自己也閃 console
         let _ = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .creation_flags(0x0800_0000)
             .output();
     }
     #[cfg(not(target_os = "windows"))]
