@@ -38,6 +38,12 @@ jobs:
       - name: Run frontend tests (vitest)
         run: npm test
 
+      # Tauri's build script validates the bundle resources declared in
+      # tauri.windows.conf.json (resources/k6.exe), so materialize k6 before
+      # cargo test or the build.rs fails with "resource path doesn't exist".
+      - name: Fetch bundled k6 binary
+        run: npm run setup:k6
+
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
