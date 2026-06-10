@@ -2,9 +2,9 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { FindingsPanel } from '../qa/FindingsPanel.jsx';
-import { loadLifecycle, fingerprint } from '../qa/findings.js';
+import { I18nProvider } from '../qa/i18n';
+import { FindingsPanel } from '../qa/FindingsPanel';
+import { loadLifecycle, fingerprint } from '../qa/findings';
 
 const union = [
   { engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',

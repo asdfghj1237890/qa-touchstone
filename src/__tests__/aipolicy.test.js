@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getCachedAiPolicy, setCachedAiPolicy } from '../qa/aiPolicy.js';
-import { resolvePolicy } from '../qa/aiPrivacy.js';
+import { getCachedAiPolicy, setCachedAiPolicy } from '../qa/aiPolicy';
+import { resolvePolicy } from '../qa/aiPrivacy';
 
 describe('aiPolicy cache feeds resolvePolicy', () => {
   beforeEach(() => setCachedAiPolicy(null));

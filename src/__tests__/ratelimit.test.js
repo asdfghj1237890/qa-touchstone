@@ -1,9 +1,9 @@
 // src/__tests__/ratelimit.test.js
 import { describe, it, expect } from 'vitest';
-import { THROTTLE_HEADERS, MAX_N, MAX_CONCURRENCY, detectThrottleSignal } from '../qa/ratelimit.js';
-import { classifyRateLimit, rateLimitSeverity } from '../qa/ratelimit.js';
-import { runBurst, summarizeRateLimit, MAX_N as CAP } from '../qa/ratelimit.js';
-import { rlFindingFor } from '../qa/ratelimit.js';
+import { THROTTLE_HEADERS, MAX_N, MAX_CONCURRENCY, detectThrottleSignal } from '../qa/ratelimit';
+import { classifyRateLimit, rateLimitSeverity } from '../qa/ratelimit';
+import { runBurst, summarizeRateLimit, MAX_N as CAP } from '../qa/ratelimit';
+import { rlFindingFor } from '../qa/ratelimit';
 
 describe('constants', () => {
   it('caps and the throttle-header set are exposed', () => {

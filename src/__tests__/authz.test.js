@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { classifyOutcome, verdictFor, DEFAULT_DENY_SET } from '../qa/authz.js';
-import { anonIdentity, defaultExpectation, withDefaults, setColumn, setRow } from '../qa/authz.js';
-import { runMatrix, summarize } from '../qa/authz.js';
-import { loadMatrixConfig, saveMatrixConfig, SECURITY_STORAGE_KEY } from '../qa/authz.js';
+import { classifyOutcome, verdictFor, DEFAULT_DENY_SET } from '../qa/authz';
+import { anonIdentity, defaultExpectation, withDefaults, setColumn, setRow } from '../qa/authz';
+import { runMatrix, summarize } from '../qa/authz';
+import { loadMatrixConfig, saveMatrixConfig, SECURITY_STORAGE_KEY } from '../qa/authz';
 
 describe('classifyOutcome', () => {
   it('2xx is allowed', () => {
@@ -245,7 +245,7 @@ describe('persistence — rateLimit', () => {
   });
 });
 
-import { classifyEndpoint, MUTATING_METHODS, ADMIN_PATH_TOKENS } from '../qa/authz.js';
+import { classifyEndpoint, MUTATING_METHODS, ADMIN_PATH_TOKENS } from '../qa/authz';
 
 describe('classifyEndpoint', () => {
   it('flags mutating methods as write', () => {
@@ -271,7 +271,7 @@ describe('classifyEndpoint', () => {
   });
 });
 
-import { endpointPrivileged } from '../qa/authz.js';
+import { endpointPrivileged } from '../qa/authz';
 
 describe('endpointPrivileged', () => {
   it('uses the heuristic when there is no manual override', () => {

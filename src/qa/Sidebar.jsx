@@ -1,9 +1,11 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo } from './components.jsx';
-import './ExportData.jsx';
-import { ImportModal } from './ImportData.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo } from './components';
+import './ExportData';
+import { ImportModal } from './ImportData';
+import { useI18n } from './useI18n';
+import { useWorkspace } from './state/WorkspaceContext';
+import { useRequest } from './state/RequestContext';
 
 // ── QA Touchstone — nav rail + collections sidebar ─────────────────────────
 const { useState } = React;
@@ -105,8 +107,14 @@ function CollectionRow({ req, active, onClick }) {
   );
 }
 
-function CollectionsPanel({ selectedReq, onSelectRequest, env, setEnv, history, onSelectHistory, onImport }) {
+// Workspace / request 狀態改由 context 提供（8 個 props → 2 個）。
+// onSelectHistory / onImport 仍為 prop：兩者都附帶路由切換（AppShell 職責）。
+function CollectionsPanel({ onSelectHistory, onImport }) {
   const { t } = useI18n();
+  const { env, setEnv } = useWorkspace();
+  const { req, selectRequest: onSelectRequest, history, dataVersion } = useRequest();
+  const selectedReq = req.id;
+  void dataVersion; // 讀取以在 collections 匯入後重新渲染清單
   const { COLLECTIONS, ENVIRONMENTS } = window.QA;
   // Default to the first collection open; everything else collapsed. Avoids
   // hard-coding seed IDs that may not exist after the workspace is reshaped.

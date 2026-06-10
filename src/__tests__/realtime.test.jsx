@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { RealtimePage } from '../qa/Realtime.jsx';
+import { I18nProvider } from '../qa/i18n';
+import { RealtimePage } from '../qa/Realtime';
 
 class MockWebSocket {
   static CONNECTING = 0;

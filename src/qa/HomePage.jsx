@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge, PulseLogo } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon, MethodBadge, PulseLogo } from './components';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — Home dashboard ─────────────────────────────────────────
 function HomePage({ setRoute, history, onOpenRequest, env }) {

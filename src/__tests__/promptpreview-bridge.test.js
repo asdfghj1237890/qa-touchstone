@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { requestPromptApproval, __registerHost, __addSessionSkip, __resetPreviewState } from '../qa/PromptPreview.jsx';
+import { requestPromptApproval, __registerHost, __addSessionSkip, __resetPreviewState } from '../qa/PromptPreview';
 
 const meta = { site: 'testgen', mode: 'redacted', destination: { provider: 'openai' } };
 

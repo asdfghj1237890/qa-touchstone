@@ -1,11 +1,11 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, MiniCheck } from './components.jsx';
-import { FieldRow, KVTable, SecretInput } from './RequestBuilder.jsx';
-import { useI18n } from './useI18n.js';
-import { LOCALES } from './i18nOptions.js';
-import { loadPrivacyCfg, savePrivacyCfg, resolvePolicy, classifyDestination } from './aiPrivacy.js';
-import { getCachedAiPolicy } from './aiPolicy.js';
+import './setup';
+import { Dropdown, Icon, MiniCheck } from './components';
+import { FieldRow, KVTable, SecretInput } from './RequestBuilder';
+import { useI18n } from './useI18n';
+import { LOCALES } from './i18nOptions';
+import { loadPrivacyCfg, savePrivacyCfg, resolvePolicy, classifyDestination } from './aiPrivacy';
+import { getCachedAiPolicy } from './aiPolicy';
 
 // ── QA Touchstone — Settings (Environment + API credentials) ───────────────
 const { useState: useStateST } = React;

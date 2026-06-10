@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import App from '../App.jsx';
+import App from '../App';
 
 // The redesigned QA Touchstone is a single-window app with a left nav rail and
 // nine routes. Outside Tauri the request executor falls back to canned

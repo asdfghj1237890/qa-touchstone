@@ -3,7 +3,7 @@ import {
   loadJSON, saveJSON, loadString, saveString,
   initStorageMirror, flushMirror, MIRRORED_KEYS,
   STORAGE_ERROR_EVENT, _resetStorageMirrorForTests,
-} from '../qa/storage.js';
+} from '../qa/storage';
 
 describe('qaStorage — JSON 存取', () => {
   beforeEach(() => { localStorage.clear(); _resetStorageMirrorForTests(); });

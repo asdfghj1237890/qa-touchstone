@@ -1,9 +1,9 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, Spinner } from './components.jsx';
-import { FieldRow } from './RequestBuilder.jsx';
-import { qaRunSavedRequest } from './sendRequest.js';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon, Spinner } from './components';
+import { FieldRow } from './RequestBuilder';
+import { qaRunSavedRequest } from './sendRequest';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — Monitors: scheduled collection runs ────────────────────
 const { useState: useStateMON, useRef: useRefMON, useEffect: useEffMON } = React;

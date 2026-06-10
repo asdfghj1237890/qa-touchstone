@@ -1,6 +1,6 @@
 import React from 'react';
-import { I18nContext } from './i18nContext.js';
-import { loadString, saveString } from './storage.js';
+import { I18nContext } from './i18nContext';
+import { loadString, saveString } from './storage';
 
 const FALLBACK_LOCALE = 'en-US';
 const STORAGE_KEY = 'qa_locale';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cookieMatches } from '../qa/cookies.js';
+import { cookieMatches } from '../qa/cookies';
 
 // Sane defaults for a stored cookie — tests override fields they care about.
 const ck = (overrides = {}) => ({

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { qaParseImport } from '../qa/ImportData.jsx';
-import { buildReq } from '../qa/buildReq.js';
-import { buildPayload } from '../qa/executor.js';
+import { qaParseImport } from '../qa/ImportData';
+import { buildReq } from '../qa/buildReq';
+import { buildPayload } from '../qa/executor';
 
 // Multi-host imported collections (e.g. the public-apis demo) carry absolute
 // request URLs. The importer must keep them whole, and the executor must run

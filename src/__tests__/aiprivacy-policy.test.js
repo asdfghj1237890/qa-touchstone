@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePolicy, assertEgressAllowed, EgressBlockedError, classifyDestination } from '../qa/aiPrivacy.js';
+import { resolvePolicy, assertEgressAllowed, EgressBlockedError, classifyDestination } from '../qa/aiPrivacy';
 
 const cfg = (m, extra = {}) => ({ mode: m, lockdown: false, selfManagedAttested: false, customFieldNames: [], customPatterns: [], ...extra });
 

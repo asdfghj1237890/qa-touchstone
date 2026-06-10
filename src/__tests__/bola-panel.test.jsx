@@ -1,9 +1,9 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BolaPanel } from '../qa/BolaPanel.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { runBola } from '../qa/bola.js';
+import { BolaPanel } from '../qa/BolaPanel';
+import { I18nProvider } from '../qa/i18n';
+import { runBola } from '../qa/bola';
 
 function ControlledBola(props) {
   const [results, setResults] = React.useState({});

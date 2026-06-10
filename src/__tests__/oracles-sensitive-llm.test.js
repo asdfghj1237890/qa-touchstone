@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { scanSensitiveLLM } from '../qa/oracles.js';
+import { scanSensitiveLLM } from '../qa/oracles';
 
 beforeEach(() => { localStorage.clear(); localStorage.setItem('qa_llm_cfg', JSON.stringify({ provider: 'openai', model: 'm', key: 'k', baseUrl: '' })); });
 

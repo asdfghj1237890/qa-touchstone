@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { qaAiSend } from '../qa/llm.js';
-import { setCachedAiPolicy } from '../qa/aiPolicy.js';
+import { qaAiSend } from '../qa/llm';
+import { setCachedAiPolicy } from '../qa/aiPolicy';
 
 const ALLOW_AI = { externalAllowed: true, locked: false };
 

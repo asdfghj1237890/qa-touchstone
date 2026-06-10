@@ -1,32 +1,34 @@
-// ── QA Touchstone — app shell, routing, send flow ──────────────────────────
-// Ported from the Claude Design redesign. The send flow is wired to the real
-// Tauri HTTP backend via executeRequest (with a canned-response fallback).
+// ── QA Touchstone — app shell + routing ─────────────────────────────────────
+// 重構後的薄殼：workspace（env/vars/cookies/...）、request/send 流程、
+// monitors 排程、toast 都已抽到 src/qa/state/ 的型別化 provider。
+// AppShell 只剩 UI 殼層狀態：route、settings 分頁、accent、perf 執行旗標。
+// 有「直接渲染測試」鎖定 props 介面的元件（SecurityPage / PerfTest /
+// MonitorsPage / ResponsePanel / RateLimitPanel 等）仍由這裡以 props 餵值。
 import React from 'react';
-import './qa/setup.js';
-import { Icon } from './qa/components.jsx';
-import { NavRail, CollectionsPanel } from './qa/Sidebar.jsx';
-import { RequestBuilder } from './qa/RequestBuilder.jsx';
-import { ResponsePanel } from './qa/ResponsePanel.jsx';
-import { HomePage } from './qa/HomePage.jsx';
-import { SettingsPage } from './qa/SettingsPage.jsx';
-import { PerfTest } from './qa/PerfTest.jsx';
-import { RealtimePage } from './qa/Realtime.jsx';
-import { Runner } from './qa/Runner.jsx';
-import { SecurityPage } from './qa/Security.jsx';
-import { DocsPage } from './qa/Docs.jsx';
-import { cookieMatches } from './qa/cookies.js';
-import { MONITOR_SCHEDULER_INTERVAL_MS, MONITOR_STORAGE_KEY, MonitorsPage, nextMonitorDueAt, normalizeMonitor, runMonitorCollection } from './qa/Monitors.jsx';
-import { TestGen } from './qa/TestGen.jsx';
-import { executeRequest } from './qa/executor.js';
-import { buildReq } from './qa/buildReq.js';
-import { requestOAuthToken } from './qa/oauth.js';
-import { I18nProvider } from './qa/i18n.jsx';
-import { useI18n } from './qa/useI18n.js';
-import { PromptPreviewHost } from './qa/PromptPreview.jsx';
-import api from './api/index.js';
-import { loadAiPolicy } from './qa/aiPolicy.js';
-import { loadJSON, saveJSON, loadString, saveString, STORAGE_ERROR_EVENT } from './qa/storage.js';
-import { ErrorBoundary } from './qa/ErrorBoundary.jsx';
+import './qa/setup';
+import { NavRail, CollectionsPanel } from './qa/Sidebar';
+import { RequestBuilder } from './qa/RequestBuilder';
+import { ResponsePanel } from './qa/ResponsePanel';
+import { HomePage } from './qa/HomePage';
+import { SettingsPage } from './qa/SettingsPage';
+import { PerfTest } from './qa/PerfTest';
+import { RealtimePage } from './qa/Realtime';
+import { Runner } from './qa/Runner';
+import { SecurityPage } from './qa/Security';
+import { DocsPage } from './qa/Docs';
+import { MonitorsPage } from './qa/Monitors';
+import { TestGen } from './qa/TestGen';
+import { I18nProvider } from './qa/i18n';
+import { useI18n } from './qa/useI18n';
+import { PromptPreviewHost } from './qa/PromptPreview';
+import api from './api/index';
+import { loadAiPolicy } from './qa/aiPolicy';
+import { loadString, saveString } from './qa/storage';
+import { ErrorBoundary } from './qa/ErrorBoundary';
+import { WorkspaceProvider, useWorkspace } from './qa/state/WorkspaceContext';
+import { RequestProvider, useRequest } from './qa/state/RequestContext';
+import { MonitorsProvider, useMonitors } from './qa/state/MonitorsContext';
+import { ToastHost } from './qa/state/ToastHost';
 
 const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = React;
 
@@ -74,85 +76,20 @@ function WindowControls() {
 
 const ROUTE_KEYS = { home: 'route.home', api: 'route.api', realtime: 'route.realtime', runner: 'route.runner', perf: 'route.perf', testgen: 'route.testgen', docs: 'route.docs', monitors: 'route.monitors', settings: 'route.settings', security: 'route.security' };
 
-// Which collection owns a given request id (for collection-scoped variables).
-function collectionOf(reqId) {
-  for (const c of window.QA.COLLECTIONS) {
-    for (const f of c.folders) if (f.requests.some(r => r.id === reqId)) return c.id;
-  }
-  return null;
-}
-// Best-effort host from an env base URL, for matching cookies to a request.
-function hostOf(url) {
-  try { return new URL(url).hostname; } catch { return (url || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0]; }
-}
-// cookieMatches lives in ./qa/cookies.js so it can be unit-tested.
-function loadInitialMonitors() {
-  const parsed = loadJSON(MONITOR_STORAGE_KEY, null);
-  if (Array.isArray(parsed)) return parsed.map(m => normalizeMonitor(m));
-  return window.QA.MONITORS.map(m => normalizeMonitor(m));
-}
-
 function AppShell() {
   const { t } = useI18n();
   const rootRef = useRefApp(null);
   const [accent, setAccent] = useStateApp(() => loadString('qa_accent', 'auto') || 'auto');
-
   const [route, setRoute] = useStateApp('home');
   const [settingsTab, setSettingsTab] = useStateApp('appearance');
-  const [env, setEnv] = useStateApp(window.QA.ENVIRONMENTS[0]);
-  const [vars, setVars] = useStateApp(() => JSON.parse(JSON.stringify(window.QA.VARIABLES)));
-  const [localVars, setLocalVars] = useStateApp({}); // { [reqId]: [{key,value,on}] }
-  const [cookies, setCookies] = useStateApp(() => window.QA.COOKIES.map(c => ({ ...c })));
-  const [sslVerify, setSslVerify] = useStateApp(true);
-  const [tests, setTests] = useStateApp({});
-  const [req, setReq] = useStateApp(() => buildReq(null));
-  const [respState, setRespState] = useStateApp('empty'); // empty | loading | done
-  const [response, setResponse] = useStateApp(null);
-  const [history, setHistory] = useStateApp(window.QA.SEED_HISTORY.map(h => ({ ...h })));
-  const [dataVersion, setDataVersion] = useStateApp(0); // bumps when collections are imported
-  const [cookieToast, setCookieToast] = useStateApp(null); // {name, domain} captured from Set-Cookie
-  const [storageToast, setStorageToast] = useStateApp(null); // {key, message} from qa-storage-error
-  const [oauthTokens, setOauthTokens] = useStateApp({}); // { [reqId]: { token, type, expiresAt, scope } }
-  const [logoFlash, setLogoFlash] = useStateApp(0); // bumps on a successful response to flash the brand mark
   const [perfRunning, setPerfRunning] = useStateApp(false); // true while a performance test is in flight
-  const [monitors, setMonitors] = useStateApp(loadInitialMonitors);
-  const [monitorRunning, setMonitorRunning] = useStateApp(null);
-  const sendSeq = useRefApp(0);
-  const monitorsRef = useRefApp(monitors);
-  const monitorCtxRef = useRefApp({});
-  const monitorRunningRef = useRefApp(null);
 
-  const runMonitorById = (id, trigger = 'manual') => {
-    if (monitorRunningRef.current) return;
-    const mon = monitorsRef.current.find(m => m.id === id);
-    if (!mon) return;
-    monitorRunningRef.current = id;
-    setMonitorRunning(id);
-    (async () => {
-      try {
-        const run = await runMonitorCollection(mon, { ...monitorCtxRef.current, trigger });
-        const now = Date.now();
-        setMonitors(ms => ms.map(m => {
-          if (m.id !== id) return m;
-          const nextDueAt = m.enabled ? nextMonitorDueAt(m.cadence, now) : null;
-          return run
-            ? { ...m, nextDueAt, nextRun: '', runs: [run, ...(m.runs || [])].slice(0, 20) }
-            : { ...m, nextDueAt, nextRun: '' };
-        }));
-      } finally {
-        if (monitorRunningRef.current === id) monitorRunningRef.current = null;
-        setMonitorRunning(null);
-      }
-    })();
-  };
-
-  const toggleMonitor = (id) => setMonitors(ms => ms.map(m => {
-    if (m.id !== id) return m;
-    const enabled = !m.enabled;
-    return { ...m, enabled, nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null, nextRun: enabled ? '' : 'paused' };
-  }));
-
-  const createMonitor = (mon) => setMonitors(ms => [normalizeMonitor(mon), ...ms]);
+  const { env, vars, setVars, cookies, setCookies, sslVerify, setSslVerify, tests, oauthTokens } = useWorkspace();
+  const {
+    req, respState, response, history, logoFlash, activeMap,
+    selectRequest, importCollection, addTestsForCase,
+  } = useRequest();
+  const { monitors, setMonitors, monitorRunning, runMonitorById, toggleMonitor, createMonitor } = useMonitors();
 
   // Resolve backend AI policy once at boot; failures are harmless (web/dev fallback).
   useEffectApp(() => { loadAiPolicy().catch(() => {}); }, []);
@@ -163,173 +100,9 @@ function AppShell() {
     saveString('qa_accent', accent);
   }, [accent]);
 
-  useEffectApp(() => { monitorsRef.current = monitors; }, [monitors]);
-
-  useEffectApp(() => {
-    monitorCtxRef.current = { env, vars, cookies, sslVerify, tests, oauthTokens };
-  }, [env, vars, cookies, sslVerify, tests, oauthTokens]);
-
-  useEffectApp(() => {
-    saveJSON(MONITOR_STORAGE_KEY, monitors);
-  }, [monitors]);
-
-  // 本機儲存寫入失敗（quota 滿等）不再無聲：顯示 toast 告知使用者。
-  useEffectApp(() => {
-    const onStorageError = (e) => setStorageToast(e.detail || { key: '', message: '' });
-    window.addEventListener(STORAGE_ERROR_EVENT, onStorageError);
-    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
-  }, []);
-
-  useEffectApp(() => {
-    const tick = () => {
-      if (monitorRunningRef.current) return;
-      const now = Date.now();
-      const due = monitorsRef.current.find(m => m.enabled && Number(m.nextDueAt) <= now);
-      if (due) runMonitorById(due.id, 'schedule');
-    };
-    tick();
-    const timer = setInterval(tick, MONITOR_SCHEDULER_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, []);
-
   const openSettings = (tab = 'appearance') => { setSettingsTab(tab); setRoute('settings'); };
-
-  const collectionId = collectionOf(req.id);
-  const localList = localVars[req.id] || [];
-  const localObj = {};
-  localList.forEach(v => { if (v.on !== false && v.key) localObj[v.key] = v.value; });
-  const activeMap = window.qaVarMap(vars, env.label, collectionId, localObj);
-  const setLocalForReq = (list) => setLocalVars(m => ({ ...m, [req.id]: list }));
-  // Cookie selection: build the URL the request will actually hit so the
-  // matcher can apply RFC 6265's domain/path/Secure rules. env.baseUrl is
-  // substituted the same way the live executor does it — otherwise a
-  // baseUrl like `{{apiHost}}` would never produce a parseable URL and we
-  // would silently send no cookies on requests that the executor still
-  // delivers successfully.
-  const reqUrlForHost = window.qaSubstitute ? window.qaSubstitute(req.url || '', activeMap) : (req.url || '');
-  const reqIsAbsolute = /^https?:\/\//i.test(reqUrlForHost);
-  const envBaseSub = window.qaSubstitute ? window.qaSubstitute(env.baseUrl || '', activeMap) : (env.baseUrl || '');
-  const reqUrlForCookie = reqIsAbsolute ? reqUrlForHost : (envBaseSub + reqUrlForHost);
-  // RFC 6265 §5.4: cookies with longer paths must precede shorter-path ones
-  // in the Cookie header. Many servers read the first occurrence of a name,
-  // so without this sort our /admin cookie would lose to / when both match.
-  const reqCookies = cookies
-    .filter((c) => cookieMatches(c, reqUrlForCookie))
-    .sort((a, b) => (b.path || '/').length - (a.path || '/').length);
-
-  // Merge generated/structured assertions into a request's tests, matched by method+path.
-  const addTestsForCase = (method, path, assertions) => {
-    const all = window.QA.COLLECTIONS.flatMap(c => c.folders.flatMap(f => f.requests));
-    const base = (path || '').split('?')[0];
-    const match = all.find(r => r.method === method && r.path.split('?')[0] === base);
-    if (!match) return false;
-    setTests(t => ({ ...t, [match.id]: [...(t[match.id] || []), ...assertions] }));
-    return true;
-  };
-
-  const patch = (delta) => setReq(r => ({ ...r, ...delta }));
-
-  const selectRequest = (id) => {
-    setReq(buildReq(id));
-    setRespState('empty');
-    setResponse(null);
-    sendSeq.current++; // invalidate any in-flight send
-  };
-
-  const openFromHistory = (h) => {
-    selectRequest(h.id);
-    setRoute('api');
-  };
-
-  // Merge an imported Postman/OpenAPI collection into the live data set.
-  const importCollection = ({ collection, details, responses }) => {
-    Object.assign(window.QA.REQUEST_DETAILS, details);
-    Object.assign(window.QA.RESPONSES, responses);
-    window.QA.COLLECTIONS.push(collection);
-    setDataVersion(v => v + 1);
-    const first = collection.folders.flatMap(f => f.requests)[0];
-    if (first) { selectRequest(first.id); setRoute('api'); }
-  };
-
-  const send = () => {
-    if (respState === 'loading') return;
-    const seq = ++sendSeq.current;
-    const sentReq = req;
-    setRespState('loading');
-    setResponse(null);
-    executeRequest(sentReq, env, activeMap, { cookies: reqCookies, sslVerify, oauthToken: oauthTokens[sentReq.id] })
-      .then((resp) => {
-        if (seq !== sendSeq.current) return; // a newer send / selection superseded this
-        setResponse(resp);
-        setRespState('done');
-        const now = new Date();
-        const at = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        const pathWithParams = sentReq.url + (sentReq.params.filter(p => p.on && p.key).length
-          ? '?' + sentReq.params.filter(p => p.on && p.key).map(p => `${p.key}=${p.value}`).join('&') : '');
-        setHistory(h => [{ id: sentReq.id, method: sentReq.method, path: pathWithParams, status: resp.status, time: resp.time, at }, ...h].slice(0, 12));
-        if (resp.status >= 200 && resp.status < 400) setLogoFlash(Date.now());
-
-        // Capture Set-Cookie into the jar (auto-managed, like a browser).
-        // Prefer the per-hop `setCookies` array from Rust (each entry carries
-        // the URL of the response that actually set it) so a redirect chain
-        // across hosts scopes each cookie to the correct host/path. Fall
-        // back to the headers['set-cookie'] string when running against the
-        // canned-response dev fallback that has no per-hop metadata.
-        const perHop = Array.isArray(resp.setCookies) ? resp.setCookies : null;
-        const sc = resp.headers && (resp.headers['set-cookie'] || resp.headers['Set-Cookie']);
-        if (perHop && perHop.length) {
-          let firstCk = null;
-          perHop.forEach(({ url, line }) => {
-            if (!line) return;
-            let hopHost = '', hopPath = '/';
-            try { const u = new URL(url || ''); hopHost = u.hostname; hopPath = u.pathname || '/'; }
-            catch { hopHost = hostOf(url || ''); }
-            const ck = window.qaParseSetCookie(line, hopHost, hopPath);
-            if (!ck) return;
-            firstCk = firstCk || ck;
-            setCookies((jar) => window.qaMergeCookie(jar, ck));
-          });
-          if (firstCk) {
-            setCookieToast({ name: firstCk.name, domain: firstCk.domain || '' });
-            setTimeout(() => setCookieToast(null), 4200);
-          }
-        } else if (sc) {
-          // Legacy / canned-response path: no per-hop metadata, derive a
-          // single scope URL the way executor builds the actual request.
-          let fullSentUrl = resp.finalUrl || '';
-          if (!fullSentUrl) {
-            const sentUrlSub = window.qaSubstitute ? window.qaSubstitute(sentReq.url || '', activeMap) : (sentReq.url || '');
-            const sentIsAbsolute = /^https?:\/\//i.test(sentUrlSub);
-            const envBaseSubCap = window.qaSubstitute ? window.qaSubstitute(env.baseUrl || '', activeMap) : (env.baseUrl || '');
-            fullSentUrl = sentIsAbsolute ? sentUrlSub : (envBaseSubCap + sentUrlSub);
-          }
-          let sentHost = '', sentPath = '/';
-          try { const u = new URL(fullSentUrl); sentHost = u.hostname; sentPath = u.pathname || '/'; }
-          catch { sentHost = hostOf(fullSentUrl); }
-          const scList = Array.isArray(sc) ? sc : String(sc).split('\n').map((s) => s.trim()).filter(Boolean);
-          let firstCk = null;
-          scList.forEach((line) => {
-            const ck = window.qaParseSetCookie(line, sentHost, sentPath);
-            if (!ck) return;
-            firstCk = firstCk || ck;
-            setCookies((jar) => window.qaMergeCookie(jar, ck));
-          });
-          if (firstCk) {
-            setCookieToast({ name: firstCk.name, domain: firstCk.domain || sentHost });
-            setTimeout(() => setCookieToast(null), 4200);
-          }
-        }
-      });
-  };
-
-  // OAuth 2.0 — obtain a real token from the configured token endpoint. In
-  // Tauri, route through the Rust HTTP backend to avoid browser CORS limits;
-  // in browser/dev fallback, use fetch directly.
-  const fetchOAuthToken = async (targetReq) => {
-    const token = await requestOAuthToken(targetReq.auth.oauth2, activeMap, { sslVerify, executeRequest });
-    setOauthTokens(t => ({ ...t, [targetReq.id]: token }));
-    return token;
-  };
+  const openFromHistory = (h) => { selectRequest(h.id); setRoute('api'); };
+  const onImportCollection = (payload) => { const first = importCollection(payload); if (first) setRoute('api'); };
 
   return (
     <div className="qa-app" ref={rootRef}>
@@ -367,17 +140,9 @@ function AppShell() {
           {route === 'testgen' && <TestGen openSettings={openSettings} onAddTests={addTestsForCase} />}
           {route === 'api' && (
             <div className="qa-api">
-              <CollectionsPanel selectedReq={req.id} onSelectRequest={selectRequest}
-                                env={env} setEnv={setEnv} history={history} onSelectHistory={openFromHistory}
-                                onImport={importCollection} dataVersion={dataVersion} />
+              <CollectionsPanel onSelectHistory={openFromHistory} onImport={onImportCollection} />
               <div className="qa-api-work">
-                <RequestBuilder req={req} patch={patch} onSend={send} isLoading={respState === 'loading'} env={env}
-                                varMap={activeMap} tests={tests[req.id] || []}
-                                setTests={(list) => setTests(t => ({ ...t, [req.id]: list }))}
-                                collectionId={collectionId} localVars={localList} setLocalVars={setLocalForReq}
-                                cookies={reqCookies} sslVerify={sslVerify} setSslVerify={setSslVerify}
-                                onOpenSettings={openSettings}
-                                oauthToken={oauthTokens[req.id]} onFetchOAuth={() => fetchOAuthToken(req)} />
+                <RequestBuilder onOpenSettings={openSettings} />
                 <div className="qa-split" />
                 <ResponsePanel state={respState} response={response} req={req} env={env}
                                varMap={activeMap} testList={tests[req.id] || []} />
@@ -387,29 +152,7 @@ function AppShell() {
         </div>
       </div>
 
-      {/* Set-Cookie capture toast */}
-      {cookieToast && (
-        <div className="qa-toast" onClick={() => { setCookieToast(null); openSettings('cookies'); }}>
-          <Icon name="globe" size={15} />
-          <div className="qa-toast-text">
-            <strong>{t('toast.cookieStored')}</strong>
-            <span>{t('toast.cookieSaved', { name: cookieToast.name, domain: cookieToast.domain })}</span>
-          </div>
-          <span className="qa-toast-cta">{t('toast.viewJar')}</span>
-        </div>
-      )}
-
-      {/* 本機儲存失敗 toast（點擊關閉） */}
-      {storageToast && (
-        <div className="qa-toast" role="alert" onClick={() => setStorageToast(null)}>
-          <Icon name="shield" size={15} />
-          <div className="qa-toast-text">
-            <strong>{t('toast.storageFailTitle')}</strong>
-            <span>{t('toast.storageFailBody', { key: storageToast.key || '?' })}</span>
-          </div>
-          <span className="qa-toast-cta">{t('toast.dismiss')}</span>
-        </div>
-      )}
+      <ToastHost onOpenCookieJar={() => openSettings('cookies')} />
       <PromptPreviewHost />
     </div>
   );
@@ -419,7 +162,13 @@ function App() {
   return (
     <ErrorBoundary>
       <I18nProvider>
-        <AppShell />
+        <WorkspaceProvider>
+          <RequestProvider>
+            <MonitorsProvider>
+              <AppShell />
+            </MonitorsProvider>
+          </RequestProvider>
+        </WorkspaceProvider>
       </I18nProvider>
     </ErrorBoundary>
   );

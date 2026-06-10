@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildScrubber, redactText, PRIVACY_DEFAULT_CFG } from '../qa/aiPrivacy.js';
+import { buildScrubber, redactText, PRIVACY_DEFAULT_CFG } from '../qa/aiPrivacy';
 
 const s = buildScrubber(PRIVACY_DEFAULT_CFG);
 

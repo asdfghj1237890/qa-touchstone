@@ -1,10 +1,12 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, MiniCheck, Spinner, FieldRow, SecretInput } from './components.jsx';
-import { AuthEditor } from './AuthEditor.jsx';
-import { CodeModal } from './CodeGen.jsx';
-import { GraphQLEditor } from './GraphQL.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon, MiniCheck, Spinner, FieldRow, SecretInput } from './components';
+import { AuthEditor } from './AuthEditor';
+import { CodeModal } from './CodeGen';
+import { GraphQLEditor } from './GraphQL';
+import { useI18n } from './useI18n';
+import { useWorkspace } from './state/WorkspaceContext';
+import { useRequest } from './state/RequestContext';
 
 // ── QA Touchstone — request builder ────────────────────────────────────────
 const { useState: useStateRB } = React;
@@ -166,10 +168,21 @@ function OptionsEditor({ env, sslVerify, setSslVerify, localVars, setLocalVars, 
   );
 }
 
-function RequestBuilder({ req, patch, onSend, isLoading, env, varMap, tests, setTests,
-                          collectionId, localVars, setLocalVars, cookies, sslVerify, setSslVerify, onOpenSettings,
-                          oauthToken, onFetchOAuth }) {
+// Workspace / request 狀態改由 context 提供（原本 17 個 props → 1 個）。
+// onOpenSettings 仍為 prop：路由切換是 AppShell 的職責。
+function RequestBuilder({ onOpenSettings }) {
   const { t } = useI18n();
+  const { env, sslVerify, setSslVerify, tests: allTests, setTests: setAllTests, oauthTokens } = useWorkspace();
+  const {
+    req, patch, send: onSend, respState, activeMap: varMap,
+    collectionId, localList: localVars, setLocalForReq: setLocalVars,
+    reqCookies: cookies, fetchOAuthToken,
+  } = useRequest();
+  const isLoading = respState === 'loading';
+  const tests = allTests[req.id] || [];
+  const setTests = (list) => setAllTests((t2) => ({ ...t2, [req.id]: list }));
+  const oauthToken = oauthTokens[req.id];
+  const onFetchOAuth = () => fetchOAuthToken(req);
   const [tab, setTab] = useStateRB('params');
   const [methodOpen, setMethodOpen] = useStateRB(false);
   const [codeOpen, setCodeOpen] = useStateRB(false);

@@ -1,6 +1,6 @@
 // src/__tests__/security-suite.test.js
 import { describe, it, expect } from 'vitest';
-import { normalizeMatrix, normalizeBola, normalizeRateLimit, runSuite } from '../qa/securitySuite.js';
+import { normalizeMatrix, normalizeBola, normalizeRateLimit, runSuite } from '../qa/securitySuite';
 
 describe('normalizeMatrix', () => {
   it('flattens cell findings into union items with ruleId + matrix location', () => {

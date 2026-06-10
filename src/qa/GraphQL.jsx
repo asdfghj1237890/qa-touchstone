@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Icon } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon } from './components';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — GraphQL editor + schema explorer (mock introspection) ──
 const { useState: useStateGQ } = React;

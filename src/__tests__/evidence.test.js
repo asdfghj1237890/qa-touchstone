@@ -1,6 +1,6 @@
 // src/__tests__/evidence.test.js
 import { describe, it, expect } from 'vitest';
-import { leafToken, tokenizePath, snippetAround, SNIPPET_KEYS, REDACTED } from '../qa/evidence.js';
+import { leafToken, tokenizePath, snippetAround, SNIPPET_KEYS, REDACTED } from '../qa/evidence';
 
 describe('leafToken', () => {
   it('emits a type token carrying no value characters', () => {
@@ -48,7 +48,7 @@ describe('snippetAround', () => {
   });
 });
 
-import { redactUrl, redactHeaders } from '../qa/evidence.js';
+import { redactUrl, redactHeaders } from '../qa/evidence';
 
 describe('redactUrl', () => {
   it('keeps path + query keys, masks query values', () => {
@@ -94,8 +94,8 @@ describe('redactUrl / redactHeaders leak-path regressions', () => {
   });
 });
 
-import { buildEvidenceArtifact, buildEvidenceMap, embedEvidence } from '../qa/evidence.js';
-import { fingerprint } from '../qa/findings.js';
+import { buildEvidenceArtifact, buildEvidenceMap, embedEvidence } from '../qa/evidence';
+import { fingerprint } from '../qa/findings';
 
 describe('buildEvidenceArtifact', () => {
   it('builds request + response with a masked snippet for a body finding', () => {

@@ -1,8 +1,8 @@
 import React from 'react';
-import './setup.js';
-import { Icon } from './components.jsx';
-import { qaParseImport } from './import-parser.js';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon } from './components';
+import { qaParseImport } from './import-parser';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — import Postman v2.1 collections & OpenAPI/Swagger specs ─
 // Parsing logic lives in ./import-parser.js so setup.js can auto-load the

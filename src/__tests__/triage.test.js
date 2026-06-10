@@ -1,6 +1,6 @@
 // src/__tests__/triage.test.js
 import { describe, it, expect } from 'vitest';
-import { normalizeFindings, buildTriageInput, TRIAGE_CAP, parseTriage, runTriage } from '../qa/triage.js';
+import { normalizeFindings, buildTriageInput, TRIAGE_CAP, parseTriage, runTriage } from '../qa/triage';
 
 const f = (severity, over = {}) => ({ severity, oracle: 'schema', title: 'T', path: 'a.b', evidence: 'e', ...over });
 

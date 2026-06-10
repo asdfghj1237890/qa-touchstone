@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge, MiniCheck } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon, MethodBadge, MiniCheck } from './components';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — code snippet generator (cURL / Python / JS / HTTPie) ────
 const { useState: useStateCG } = React;

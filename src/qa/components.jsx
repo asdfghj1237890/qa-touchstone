@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { useI18n } from './useI18n.js';
-import { loadJSON as loadStorageJSON, saveJSON as saveStorageJSON } from './storage.js';
+import './setup';
+import { useI18n } from './useI18n';
+import { loadJSON as loadStorageJSON, saveJSON as saveStorageJSON } from './storage';
 
 // ── QA Touchstone — icons + shared atoms ───────────────────────────────────
 // Simple stroke icons (Lucide-style 24x24 paths) and small shared components.

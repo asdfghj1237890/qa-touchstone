@@ -6,7 +6,7 @@ import {
   snapshotOf, scopeHashOf, diffRuns, gateCount,
   loadLifecycle, saveLifecycle, upsertRecord,
   loadSnapshots, saveSnapshots, recordRun, pinBaseline,
-} from '../qa/findings.js';
+} from '../qa/findings';
 
 const matrixF = (over = {}) => ({
   engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
@@ -88,7 +88,7 @@ describe('fnv1a', () => {
   });
 });
 
-import { effectiveSeverity } from '../qa/findings.js';
+import { effectiveSeverity } from '../qa/findings';
 
 describe('effectiveSeverity', () => {
   it('returns the finding severity when no override', () => {

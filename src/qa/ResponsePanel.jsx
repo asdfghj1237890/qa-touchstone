@@ -1,8 +1,8 @@
 import React from 'react';
-import './setup.js';
-import { Icon, Spinner, StatusPill } from './components.jsx';
-import { qaAiSend } from './llm.js';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon, Spinner, StatusPill } from './components';
+import { qaAiSend } from './llm';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — response panel (hero: send → response animates in) ─────
 const { useState: useStateRP, useEffect: useEffectRP, useRef: useRefRP } = React;

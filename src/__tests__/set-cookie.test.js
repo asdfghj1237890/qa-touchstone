@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { qaParseSetCookie, qaMergeCookie, qaCookieDefaultPath } from '../qa/engine.js';
+import { qaParseSetCookie, qaMergeCookie, qaCookieDefaultPath } from '../qa/engine';
 
 describe('qaCookieDefaultPath', () => {
   it('returns / for root or pathless input', () => {

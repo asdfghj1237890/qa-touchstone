@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactBody, looksSecret } from '../qa/aiPrivacy.js';
+import { redactBody, looksSecret } from '../qa/aiPrivacy';
 
 describe('redactBody', () => {
   it('tokenizes JSON values but keeps keys', () => {

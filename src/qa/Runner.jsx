@@ -1,8 +1,8 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
-import { qaRunSavedRequest } from './sendRequest.js';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon, MethodBadge, MiniCheck } from './components';
+import { qaRunSavedRequest } from './sendRequest';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — Collection Runner (batch run + data iteration) ─────────
 const { useState: useRN, useRef: useRefRN, useEffect: useEffRN } = React;

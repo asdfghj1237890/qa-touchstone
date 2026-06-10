@@ -3,15 +3,15 @@
 // attacker×owner pass via the injected runner, and shows the result grid +
 // findings. Pure engine lives in bola.js.
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge } from './components.jsx';
-import { useI18n } from './useI18n.js';
-import { qaRunSavedRequest } from './sendRequest.js';
-import { buildReq } from './buildReq.js';
-import { applyIdLocation, runBola, summarizeBola } from './bola.js';
-import { normalizeBola } from './securitySuite.js';
-import { detectIdLocation, extractIdCandidates, applyPreset } from './bolaSetup.js';
-import { SEVERITY_ORDER } from './oracles.js';
+import './setup';
+import { Icon, MethodBadge } from './components';
+import { useI18n } from './useI18n';
+import { qaRunSavedRequest } from './sendRequest';
+import { buildReq } from './buildReq';
+import { applyIdLocation, runBola, summarizeBola } from './bola';
+import { normalizeBola } from './securitySuite';
+import { detectIdLocation, extractIdCandidates, applyPreset } from './bolaSetup';
+import { SEVERITY_ORDER } from './oracles';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 // Summary chip labels: the four attack verdicts reuse `bola.verdict.*`; `total`

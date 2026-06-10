@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
 export default [
   {
@@ -21,8 +22,10 @@ export default [
       'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
+  // TypeScript：tseslint recommended（僅作用於 ts/tsx）。
+  ...tseslint.configs.recommended.map((cfg) => ({ ...cfg, files: ['src/**/*.{ts,tsx}'] })),
   {
-    files: ['src/**/*.{js,jsx}'],
+    files: ['src/**/*.{js,jsx,ts,tsx}'],
     plugins: { react, 'react-hooks': reactHooks },
     languageOptions: {
       ecmaVersion: 2023,
@@ -61,5 +64,18 @@ export default [
     languageOptions: {
       globals: { ...globals.node },
     },
+  },
+  // 放在最後：ts/tsx 用 @typescript-eslint 版 unused-vars，關掉 core 版
+  // （否則上方 js block 的 core 規則會打在型別宣告上）。
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
+      '@typescript-eslint/no-explicit-any': 'off', // window 橋接過渡期允許 any
+    },
+  },
+  {
+    ignores: ['src/**/*.d.ts'],
   },
 ];

@@ -3,10 +3,10 @@
 // prioritized/clustered view over the union of engine findings and never
 // mutates them. Pure logic lives in triage.js.
 import React from 'react';
-import './setup.js';
-import { Icon } from './components.jsx';
-import { useI18n } from './useI18n.js';
-import { runTriage } from './triage.js';
+import './setup';
+import { Icon } from './components';
+import { useI18n } from './useI18n';
+import { runTriage } from './triage';
 
 const { useState: useS } = React;
 const PRIO_LABEL = { p1: 'security.triage.p1', p2: 'security.triage.p2', p3: 'security.triage.p3' };

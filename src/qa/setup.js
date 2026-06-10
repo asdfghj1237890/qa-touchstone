@@ -1,8 +1,8 @@
 // Populate window.QA / window.QATheme / window.qa* mirrors used across the ported modules.
-import './data.js';
-import './engine.js';
-import './theme.js';
-import { qaParseImport } from './import-parser.js';
+import './data';
+import './engine';
+import './theme';
+import { qaParseImport } from './import-parser';
 import demoCollectionRaw from '../../demo/public-apis.postman_collection.json?raw';
 
 // Auto-load the bundled public-apis Postman collection so a fresh launch

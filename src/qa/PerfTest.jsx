@@ -1,12 +1,12 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, MethodBadge, MiniCheck } from './components.jsx';
-import api from '../api/index.js';
-import { buildScript } from './k6gen.js';
-import { makeState, feed, snapshot } from './k6parse.js';
-import { useI18n } from './useI18n.js';
-import { downloadFile } from './download.js';
-import { loadJSON, saveJSON } from './storage.js';
+import './setup';
+import { Dropdown, Icon, MethodBadge, MiniCheck } from './components';
+import api from '../api/index';
+import { buildScript } from './k6gen';
+import { makeState, feed, snapshot } from './k6parse';
+import { useI18n } from './useI18n';
+import { downloadFile } from './download';
+import { loadJSON, saveJSON } from './storage';
 
 // ── QA Touchstone — Performance / Load / Stress (SLO · stages · history) ────
 const { useState: usePF, useRef: useRefPF, useEffect: useEffPF } = React;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { redactUrlForAI } from '../qa/aiPrivacy.js';
-import { redactUrl } from '../qa/evidence.js';
+import { redactUrlForAI } from '../qa/aiPrivacy';
+import { redactUrl } from '../qa/evidence';
 
 describe('redactUrlForAI', () => {
   it('strips scheme+host, masks query values, keeps query keys', () => {

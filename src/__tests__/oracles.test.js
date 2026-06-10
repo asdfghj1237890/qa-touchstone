@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SEVERITY_ORDER, redact, worstSeverity } from '../qa/oracles.js';
+import { SEVERITY_ORDER, redact, worstSeverity } from '../qa/oracles';
 
 describe('SEVERITY_ORDER', () => {
   it('ranks info < low < medium < high < critical', () => {
@@ -26,7 +26,7 @@ describe('worstSeverity', () => {
   });
 });
 
-import { scanSensitive, DEFAULT_ORACLE_CONFIG } from '../qa/oracles.js';
+import { scanSensitive, DEFAULT_ORACLE_CONFIG } from '../qa/oracles';
 
 const resp = (body, headers = {}) => ({ status: 200, body, headers });
 
@@ -114,7 +114,7 @@ describe('scanSensitive — deep nesting (depth guard)', () => {
   });
 });
 
-import { inferContract, checkSchema } from '../qa/oracles.js';
+import { inferContract, checkSchema } from '../qa/oracles';
 
 describe('inferContract', () => {
   it('records normalized field paths and types, array indices collapsed', () => {
@@ -147,7 +147,7 @@ describe('checkSchema', () => {
   });
 });
 
-import { runOracles, summarizeFindings } from '../qa/oracles.js';
+import { runOracles, summarizeFindings } from '../qa/oracles';
 
 describe('runOracles', () => {
   const baseline = inferContract({ id: 1 });   // body has only `id`
@@ -189,7 +189,7 @@ describe('summarizeFindings', () => {
   });
 });
 
-import { scanSensitiveLLM } from '../qa/oracles.js';
+import { scanSensitiveLLM } from '../qa/oracles';
 
 describe('ruleId on findings', () => {
   it('sensitive findings carry the rule id', () => {

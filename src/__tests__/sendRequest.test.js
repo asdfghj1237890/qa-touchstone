@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { qaRunSavedRequest } from '../qa/sendRequest.js';
-import { buildReq } from '../qa/buildReq.js';
-import api from '../api/index.js';
+import { qaRunSavedRequest } from '../qa/sendRequest';
+import { buildReq } from '../qa/buildReq';
+import api from '../api/index';
 
 // Outside Tauri, executeRequest falls back to window.QA.RESPONSES[req.id].
 // Seed a collection + canned response and confirm the helper returns it.

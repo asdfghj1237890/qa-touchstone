@@ -2,9 +2,9 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { RateLimitPanel } from '../qa/RateLimitPanel.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from '../qa/ratelimit.js';
+import { RateLimitPanel } from '../qa/RateLimitPanel';
+import { I18nProvider } from '../qa/i18n';
+import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from '../qa/ratelimit';
 
 function ControlledRL(props) {
   const [results, setResults] = React.useState({});

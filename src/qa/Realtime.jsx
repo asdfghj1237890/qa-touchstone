@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Icon, Spinner } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon, Spinner } from './components';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — Realtime client: WebSocket + Server-Sent Events ────────
 const { useState: useStateRT, useRef: useRefRT, useEffect: useEffectRT } = React;

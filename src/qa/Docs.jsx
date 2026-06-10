@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon } from './components';
+import { useI18n } from './useI18n';
 
 // ── QA Touchstone — auto-generated API documentation from a collection ─────
 const { useState: useStateDOC } = React;

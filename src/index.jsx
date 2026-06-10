@@ -2,9 +2,9 @@ import './processShim';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './qa/qa.css';
-import App from './App.jsx';
+import App from './App';
 import api, { initApi } from './api';
-import { initStorageMirror } from './qa/storage.js';
+import { initStorageMirror } from './qa/storage';
 
 const container = document.getElementById('root');
 const root = createRoot(container);

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PRIVACY_DEFAULT_CFG, loadPrivacyCfg, savePrivacyCfg } from '../qa/aiPrivacy.js';
+import { PRIVACY_DEFAULT_CFG, loadPrivacyCfg, savePrivacyCfg } from '../qa/aiPrivacy';
 
 describe('privacy config', () => {
   beforeEach(() => localStorage.clear());

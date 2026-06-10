@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Runner } from '../qa/Runner.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
+import { Runner } from '../qa/Runner';
+import { I18nProvider } from '../qa/i18n';
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };

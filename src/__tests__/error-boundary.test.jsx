@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { ErrorBoundary } from '../qa/ErrorBoundary.jsx';
+import { ErrorBoundary } from '../qa/ErrorBoundary';
 
 function Bomb() {
   throw new Error('kaboom');

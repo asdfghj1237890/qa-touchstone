@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { PrivacySettings } from '../qa/SettingsPage.jsx';
-import { loadPrivacyCfg } from '../qa/aiPrivacy.js';
+import { I18nProvider } from '../qa/i18n';
+import { PrivacySettings } from '../qa/SettingsPage';
+import { loadPrivacyCfg } from '../qa/aiPrivacy';
 
 beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());

@@ -1,8 +1,8 @@
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge, Spinner } from './components.jsx';
-import { qaAiSend } from './llm.js';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Icon, MethodBadge, Spinner } from './components';
+import { qaAiSend } from './llm';
+import { useI18n } from './useI18n';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // ── QA Touchstone — Test case generation (spec / BDD → cases) ──────────────

@@ -3,7 +3,7 @@ import {
   buildOAuthTokenRequest,
   exchangeOAuthTokenWithFetch,
   parseOAuthTokenResponse,
-} from '../qa/oauth.js';
+} from '../qa/oauth';
 
 describe('OAuth token helpers', () => {
   afterEach(() => {

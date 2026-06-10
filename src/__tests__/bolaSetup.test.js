@@ -1,6 +1,6 @@
 // src/__tests__/bolaSetup.test.js
 import { describe, it, expect } from 'vitest';
-import { detectIdLocation, extractIdCandidates, applyPreset, syntheticIdFor } from '../qa/bolaSetup.js';
+import { detectIdLocation, extractIdCandidates, applyPreset, syntheticIdFor } from '../qa/bolaSetup';
 
 const req = (over = {}) => ({ method: 'GET', url: '/users/42/orders', params: [], body: '', ...over });
 

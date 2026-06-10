@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyDestination } from '../qa/aiPrivacy.js';
+import { classifyDestination } from '../qa/aiPrivacy';
 
 describe('classifyDestination', () => {
   it('builtin and openai are cloud', () => {

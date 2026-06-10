@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redactOpenApi } from '../qa/aiPrivacy.js';
+import { redactOpenApi } from '../qa/aiPrivacy';
 
 const SPEC = JSON.stringify({
   servers: [{ url: 'https://prod.acme.com/v1' }],

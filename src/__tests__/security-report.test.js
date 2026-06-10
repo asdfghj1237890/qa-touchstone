@@ -1,6 +1,6 @@
 // src/__tests__/security-report.test.js
 import { describe, it, expect } from 'vitest';
-import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit, reportToSarif, sevToSarifLevel } from '../qa/securityReport.js';
+import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit, reportToSarif, sevToSarifLevel } from '../qa/securityReport';
 
 const item = (over = {}) => ({
   fp: 'fp1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt',

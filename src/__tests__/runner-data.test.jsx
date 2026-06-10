@@ -6,12 +6,12 @@ const { runMock } = vi.hoisted(() => ({
   runMock: vi.fn(),
 }));
 
-vi.mock('../qa/sendRequest.js', () => ({
+vi.mock('../qa/sendRequest', () => ({
   qaRunSavedRequest: (...args) => runMock(...args),
 }));
 
-import { Runner } from '../qa/Runner.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
+import { Runner } from '../qa/Runner';
+import { I18nProvider } from '../qa/i18n';
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };

@@ -1,4 +1,4 @@
-import './setup.js';
+import './setup';
 
 // ── QA Touchstone — export a collection to Postman v2.1 collection JSON ─────
 

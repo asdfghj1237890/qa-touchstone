@@ -2,8 +2,8 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { SuiteRunBar } from '../qa/SuiteRunBar.jsx';
+import { I18nProvider } from '../qa/i18n';
+import { SuiteRunBar } from '../qa/SuiteRunBar';
 
 afterEach(() => cleanup());
 const wrap = (ui) => render(<I18nProvider>{ui}</I18nProvider>);

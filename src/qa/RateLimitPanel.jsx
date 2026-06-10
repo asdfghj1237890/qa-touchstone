@@ -4,15 +4,15 @@
 // injected runner, and shows the stats card + verdict + findings. Pure engine
 // (detect/classify/severity/burst/summarize) lives in ratelimit.js.
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge } from './components.jsx';
-import { useI18n } from './useI18n.js';
-import { qaRunSavedRequest } from './sendRequest.js';
+import './setup';
+import { Icon, MethodBadge } from './components';
+import { useI18n } from './useI18n';
+import { qaRunSavedRequest } from './sendRequest';
 import {
   runBurst, detectThrottleSignal, classifyRateLimit,
   rlFindingFor, summarizeRateLimit, MAX_N, MAX_CONCURRENCY,
-} from './ratelimit.js';
-import { normalizeRateLimit } from './securitySuite.js';
+} from './ratelimit';
+import { normalizeRateLimit } from './securitySuite';
 
 const { useState: useS, useEffect: useE, useMemo, useRef } = React;
 const VLABEL = { pass: 'rl.verdict.pass', vuln: 'rl.verdict.vuln', inconclusive: 'rl.verdict.inconclusive' };

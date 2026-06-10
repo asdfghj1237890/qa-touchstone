@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { qaCallLLM } from '../qa/llm.js';
-import { setCachedAiPolicy } from '../qa/aiPolicy.js';
+import { qaCallLLM } from '../qa/llm';
+import { setCachedAiPolicy } from '../qa/aiPolicy';
 
 describe('qaCallLLM provider dispatch', () => {
   beforeEach(() => {

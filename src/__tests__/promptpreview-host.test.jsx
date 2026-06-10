@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { PromptPreviewHost, requestPromptApproval, __resetPreviewState } from '../qa/PromptPreview.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
+import { PromptPreviewHost, requestPromptApproval, __resetPreviewState } from '../qa/PromptPreview';
+import { I18nProvider } from '../qa/i18n';
 
 const meta = { site: 'testgen', mode: 'redacted', destination: { provider: 'openai', label: 'OpenAI', isCloud: true } };
 const wrap = () => render(<I18nProvider><PromptPreviewHost /></I18nProvider>);

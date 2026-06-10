@@ -1,8 +1,8 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { SecurityPage } from '../qa/Security.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
+import { SecurityPage } from '../qa/Security';
+import { I18nProvider } from '../qa/i18n';
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };
@@ -194,7 +194,7 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // Trigger the full suite via the temporary page-level button.
     fireEvent.click(screen.getByText('Run full security suite'));
 
-    const { loadSnapshots } = await import('../qa/findings.js');
+    const { loadSnapshots } = await import('../qa/findings');
     await waitFor(() => expect(loadSnapshots().lastRun).not.toBeNull(), { timeout: 4000 });
     expect(loadSnapshots().lastRun.status).toBe('complete');
   });
@@ -220,7 +220,7 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     // snapshots.lastRun is set (canExport={!!snapshots.lastRun}).
     await waitFor(() => expect(screen.getByText('Export report ▾')).toBeInTheDocument(), { timeout: 4000 });
 
-    const { loadSnapshots } = await import('../qa/findings.js');
+    const { loadSnapshots } = await import('../qa/findings');
 
     // Opt-in proof, part 1: BEFORE saving, the persisted run has findings but NONE
     // carry an evidenceArtifact (persistence is opt-in, never automatic).
@@ -259,7 +259,7 @@ describe('SecurityPage — matrix runs on the canned path', () => {
     await waitFor(() => expect(screen.getByText(/200.*VULN/)).toBeInTheDocument(), { timeout: 4000 });
 
     // The matrix is no longer a snapshot boundary — only a completed suite run records.
-    const { loadSnapshots } = await import('../qa/findings.js');
+    const { loadSnapshots } = await import('../qa/findings');
     expect(loadSnapshots().lastRun).toBeNull();
   });
 });

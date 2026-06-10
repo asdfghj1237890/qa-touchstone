@@ -1,35 +1,35 @@
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge, loadLlmCfg } from './components.jsx';
-import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed } from './aiPrivacy.js';
-import { getCachedAiPolicy } from './aiPolicy.js';
-import { AuthEditor } from './AuthEditor.jsx';
-import { useI18n } from './useI18n.js';
-import { qaRunSavedRequest } from './sendRequest.js';
-import { executeRequest } from './executor.js';
-import { requestOAuthToken } from './oauth.js';
+import './setup';
+import { Icon, MethodBadge, loadLlmCfg } from './components';
+import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed } from './aiPrivacy';
+import { getCachedAiPolicy } from './aiPolicy';
+import { AuthEditor } from './AuthEditor';
+import { useI18n } from './useI18n';
+import { qaRunSavedRequest } from './sendRequest';
+import { executeRequest } from './executor';
+import { requestOAuthToken } from './oauth';
 import {
   anonIdentity, withDefaults, setColumn, setRow, runMatrix, summarize,
   loadMatrixConfig, saveMatrixConfig, DEFAULT_DENY_SET, endpointPrivileged,
-} from './authz.js';
+} from './authz';
 import {
   runOracles, inferContract, summarizeFindings, scanSensitiveLLM, worstSeverity,
   SEVERITY_ORDER, DEFAULT_ORACLE_CONFIG,
-} from './oracles.js';
-import { BolaPanel } from './BolaPanel.jsx';
-import { runBola, applyIdLocation } from './bola.js';
-import { RateLimitPanel } from './RateLimitPanel.jsx';
-import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit.js';
-import { TriagePanel } from './TriagePanel.jsx';
-import { FindingsPanel } from './FindingsPanel.jsx';
-import { SuiteRunBar } from './SuiteRunBar.jsx';
-import { runSuite, normalizeMatrix } from './securitySuite.js';
+} from './oracles';
+import { BolaPanel } from './BolaPanel';
+import { runBola, applyIdLocation } from './bola';
+import { RateLimitPanel } from './RateLimitPanel';
+import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit';
+import { TriagePanel } from './TriagePanel';
+import { FindingsPanel } from './FindingsPanel';
+import { SuiteRunBar } from './SuiteRunBar';
+import { runSuite, normalizeMatrix } from './securitySuite';
 import {
   loadLifecycle, loadSnapshots, saveSnapshots, snapshotOf, scopeHashOf, recordRun, pinBaseline,
-} from './findings.js';
-import { buildReport, reportToJson, reportToHtml, reportToJUnit, reportToSarif } from './securityReport.js';
-import { buildEvidenceMap, embedEvidence } from './evidence.js';
-import { downloadFile } from './download.js';
+} from './findings';
+import { buildReport, reportToJson, reportToHtml, reportToJUnit, reportToSarif } from './securityReport';
+import { buildEvidenceMap, embedEvidence } from './evidence';
+import { downloadFile } from './download';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS = ['allow', 'deny', 'skip'];

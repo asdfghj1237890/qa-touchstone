@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildScript } from '../qa/k6gen.js';
-import { makeState, feed, snapshot } from '../qa/k6parse.js';
+import { buildScript } from '../qa/k6gen';
+import { makeState, feed, snapshot } from '../qa/k6parse';
 
 describe('k6gen.buildScript', () => {
   const stages = [{ d: 8, t: 10 }, { d: 30, t: 10 }, { d: 4, t: 0 }];

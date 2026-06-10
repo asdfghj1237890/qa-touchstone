@@ -1,7 +1,7 @@
 import React from 'react';
-import './setup.js';
-import { Dropdown, Icon, Spinner, FieldRow, SecretInput } from './components.jsx';
-import { useI18n } from './useI18n.js';
+import './setup';
+import { Dropdown, Icon, Spinner, FieldRow, SecretInput } from './components';
+import { useI18n } from './useI18n';
 
 const { useState: useStateAE } = React;
 

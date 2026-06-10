@@ -1,6 +1,6 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
-import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola, negativeControlFailed } from '../qa/bola.js';
+import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola, negativeControlFailed } from '../qa/bola';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 

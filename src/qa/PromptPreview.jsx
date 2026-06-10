@@ -1,8 +1,8 @@
 // src/qa/PromptPreview.jsx
 // ── QA Touchstone — prompt preview host + imperative approval bridge ────────
-import './setup.js';
+import './setup';
 import React from 'react';
-import { useI18n } from './useI18n.js';
+import { useI18n } from './useI18n';
 
 let _host = null;                 // single mounted host callback
 const _skip = new Set();          // session-scoped skip keys (memory only)

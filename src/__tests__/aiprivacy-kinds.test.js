@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AI_KINDS, buildScrubber, PRIVACY_DEFAULT_CFG } from '../qa/aiPrivacy.js';
+import { AI_KINDS, buildScrubber, PRIVACY_DEFAULT_CFG } from '../qa/aiPrivacy';
 
 const ctxR = { scrubber: buildScrubber(PRIVACY_DEFAULT_CFG), mode: 'redacted' };
 const ctxF = { scrubber: buildScrubber(PRIVACY_DEFAULT_CFG), mode: 'full' };

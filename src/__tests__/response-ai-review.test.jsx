@@ -1,12 +1,12 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ResponsePanel } from '../qa/ResponsePanel.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
-import { setCachedAiPolicy } from '../qa/aiPolicy.js';
+import { ResponsePanel } from '../qa/ResponsePanel';
+import { I18nProvider } from '../qa/i18n';
+import { setCachedAiPolicy } from '../qa/aiPolicy';
 
 // Auto-approve the prompt preview so qaAiSend proceeds to the transport.
-vi.mock('../qa/PromptPreview.jsx', () => ({
+vi.mock('../qa/PromptPreview', () => ({
   requestPromptApproval: vi.fn(() => Promise.resolve(true)),
   PromptPreviewHost: () => null,
 }));

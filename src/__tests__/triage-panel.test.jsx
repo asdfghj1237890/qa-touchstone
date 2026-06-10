@@ -2,8 +2,8 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { TriagePanel } from '../qa/TriagePanel.jsx';
-import { I18nProvider } from '../qa/i18n.jsx';
+import { TriagePanel } from '../qa/TriagePanel';
+import { I18nProvider } from '../qa/i18n';
 
 const union = [{ engine: 'bola', severity: 'critical', oracle: 'object-authz', title: 'IDOR', path: 'GET /o/{id}', evidence: 'alice→bob', ref: { testId: 't' } }];
 const triageResult = { headline: '1 worth a look', total: 1, dropped: 0, items: [

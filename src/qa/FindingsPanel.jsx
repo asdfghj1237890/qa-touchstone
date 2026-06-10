@@ -1,13 +1,13 @@
 // src/qa/FindingsPanel.jsx
 import React from 'react';
-import './setup.js';
-import { Icon, MethodBadge } from './components.jsx';
-import { useI18n } from './useI18n.js';
-import { SEVERITY_ORDER } from './oracles.js';
+import './setup';
+import { Icon, MethodBadge } from './components';
+import { useI18n } from './useI18n';
+import { SEVERITY_ORDER } from './oracles';
 import {
   fingerprint, ruleIdOf, locationLabel, effectiveSeverity, snapshotOf, diffRuns, gateCount,
   loadLifecycle, saveLifecycle, upsertRecord, loadSnapshots, STATUSES,
-} from './findings.js';
+} from './findings';
 
 const { useState: useS, useMemo, useCallback } = React;
 const PRESENCE_ORDER = { new: 0, carried: 1, resolved: 2 };

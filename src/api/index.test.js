@@ -9,7 +9,7 @@ vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ close: vi.
 const openMock = vi.fn();
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openMock(...a) }));
 
-import { api } from './index.js';
+import { api } from './index';
 
 describe('api module', () => {
   beforeEach(() => {
