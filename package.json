@@ -13,6 +13,7 @@
     "pretauri:build": "node scripts/setup-k6.mjs --release",
     "tauri:build": "tauri build",
     "icons": "node scripts/gen-icons.mjs && tauri icon src-tauri/icons/source.png && node scripts/gen-favicon.mjs",
+    "package:portable": "node scripts/package-portable.mjs",
     "build": "vite build",
     "serve": "vite preview",
     "lint": "eslint .",
