@@ -27,11 +27,15 @@ function die(msg) {
 if (!existsSync(releaseDir)) die(`找不到 ${releaseDir}；請先執行 \`npm run tauri:build\``);
 if (!existsSync(k6)) die(`找不到 ${k6}；請先執行 \`npm run setup:k6:release\``);
 
-// 找 release exe（排除 NSIS 安裝檔 *setup*）。
-const exe = readdirSync(releaseDir)
+// 找 release exe（排除 NSIS 安裝檔 *setup*）。取「最新修改」的那個——
+// target/release 可能殘留改名前的舊 exe（如 qa-companion.exe），字母序會選到
+// 過期檔，按 mtime 才保證打包到本次 build 的產物。
+const candidates = readdirSync(releaseDir)
   .filter((f) => f.toLowerCase().endsWith('.exe') && !/setup/i.test(f))
-  .map((f) => path.join(releaseDir, f))[0];
-if (!exe) die(`${releaseDir} 下找不到 portable exe（請先 \`npm run tauri:build\`）`);
+  .map((f) => path.join(releaseDir, f));
+if (!candidates.length) die(`${releaseDir} 下找不到 portable exe（請先 \`npm run tauri:build\`）`);
+const exe = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+console.log(`portable: 使用 ${path.basename(exe)}（最新修改：${statSync(exe).mtime.toISOString()}）`);
 
 const dist = path.join(root, 'dist');
 const stageRoot = path.join(dist, 'QA Touchstone');
