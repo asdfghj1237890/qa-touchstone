@@ -2,7 +2,8 @@
 //! executePostmanRequest / STS AssumeRole；本階段先以 AWS 官方向量驗證。
 #![allow(dead_code)]
 
-use hmac::{Hmac, Mac};
+// hmac 0.13 / digest 0.11：`new_from_slice` 由 KeyInit 提供（0.12 時在 Mac 上）。
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
