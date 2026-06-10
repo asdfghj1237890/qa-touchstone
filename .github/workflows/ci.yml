@@ -1,8 +1,17 @@
 name: ci
 
 # Test gate: every push / PR runs the full frontend suite, Rust unit tests,
-# and a dependency audit. The release workflow reuses the same gate so no
+# and dependency audits. The release workflow reuses the same gate so no
 # release can ship without green tests.
+#
+# 供應鏈防禦：
+#   - 所有 third-party actions 一律 pin 到 commit SHA（防 tag 被移動指向惡意
+#     版本）；旁邊的註解標示對應的版本 tag，Dependabot（github-actions
+#     ecosystem）會自動提 PR 更新。
+#   - npm ci 帶 --ignore-scripts：CI 上不執行任何套件的 install script
+#     （esbuild / @tauri-apps/cli / resvg 都改用 optionalDependencies 平台
+#     套件散布二進位，不需要 postinstall；本機開發同樣以 allow-scripts 攔截）。
+#   - cargo audit 對 Rust 依賴樹做 RustSec 已知漏洞檢查。
 on:
   push:
     branches: [master, main]
@@ -16,16 +25,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
@@ -43,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Install Tauri system dependencies
         run: |
@@ -51,12 +60,29 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
 
       - name: Cache Rust build
-        uses: swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
 
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@fd2f5e3d644b484055ebf4268f474c565f148f25 # v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit Rust dependencies (RustSec)
+        working-directory: src-tauri
+        run: cargo audit

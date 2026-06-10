@@ -1,0 +1,30 @@
+# Dependabot：三個生態系的依賴更新 PR（安全更新即時、版本更新每週彙整）。
+# workflows 內的 actions 已 pin 到 commit SHA —— github-actions ecosystem
+# 會自動提 PR 把 SHA 推進到新版本（並更新旁邊的版本註解）。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
