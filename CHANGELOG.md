@@ -3,7 +3,7 @@
 All notable changes to QA Touchstone are documented here. Versions follow
 [SemVer](https://semver.org); 0.x releases may contain breaking changes.
 
-## [Unreleased]
+## [0.21.0] — 2026-06-10
 
 ### Security
 - **Full Public Suffix List** for the cookie jar: the hand-rolled ~300-entry
