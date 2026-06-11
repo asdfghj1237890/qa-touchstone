@@ -3,6 +3,11 @@
 All notable changes to QA Touchstone are documented here. Versions follow
 [SemVer](https://semver.org); 0.x releases may contain breaking changes.
 
+## [Unreleased]
+
+### Changed
+- **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
+
 ## [0.22.0] — 2026-06-11
 
 ### Security

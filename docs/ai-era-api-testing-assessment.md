@@ -12,6 +12,14 @@
 > fuzzing 與 schema conformance scan。同期另完成：移除遺留攻擊面、版本化磁碟
 > 鏡像儲存層、完整 Public Suffix List cookie 防護、前端全面 TypeScript 化。
 
+> **更新 2026-06-11（v0.22.0）：** 上一段的「仍未做」再清掉一批——**fuzzing**
+> （5xx／stack-trace 洩漏／payload 反射偵測，`src/qa/fuzz.ts`）、**JSON-Schema/
+> OpenAPI conformance 驗證**（`schemaConformance.ts`）與自動推導的 **BFLA**
+> （OWASP API5，`bfla.ts`）已以純函式引擎出貨：完整單元測試、SARIF 規則中繼
+> 資料已備妥於報告層，UI 整合為下一步。同版亦強化既有 oracles（RBAC soft-deny
+> 偵測、BOLA 誤判防護、rate-limit 強度分級 none/weak/strong），並將 AWS secret
+> key 移入 OS keychain。路線圖第 5 項僅剩批次 AI 審查與新引擎的 UI 接線。
+
 ## 框架：AI 時代，API 測試拆成兩半
 
 1. **機械勞動**（AI 會吃掉的）：照 spec 產測試案例、邊界值、組 request、寫 assertion 樣板、比對回應、產報表。
@@ -37,7 +45,7 @@
 | **Collection Runner 不打網路** | `src/qa/Runner.jsx:57` | 批次斷言對著罐頭 `window.QA.RESPONSES` 評估，不是真實 API。匯入 collection 的回應是 `synthResponse`（永遠 200/201 `{ok:true}`），所以「status==200」永遠綠燈，與真實後端無關。**規模化驗證該發生的地方跑在假資料上。** |
 | **Monitors 是模擬的** | `src/qa/Monitors.jsx` | `Math.random() < 0.25` 假裝 pass/fail，沒有真的排程跑 collection。 |
 | **AI 只用在「出題」、沒用在「批改」** | — | 模型負責生案例，但沒有拿來判斷「這個 200 語意上對不對」、從回應反推斷言、或抓異常。AI 被放在容易的那一半。 |
-| ~~**幾乎沒有 authz / 安全測試**~~（2026-06-10 已不成立） | `src/qa/Security.tsx`、`authz.ts`、`bola.ts`、`ratelimit.ts`、`securitySuite.ts`、`securityReport.ts` | 已建成完整安全測試套件：RBAC 矩陣、BOLA/IDOR、rate-limit、findings lifecycle、SARIF/JUnit 匯出。仍缺 fuzzing 與 schema conformance scan。 |
+| ~~**幾乎沒有 authz / 安全測試**~~（2026-06-10 已不成立） | `src/qa/Security.tsx`、`authz.ts`、`bola.ts`、`ratelimit.ts`、`securitySuite.ts`、`securityReport.ts` | 已建成完整安全測試套件：RBAC 矩陣、BOLA/IDOR、rate-limit、findings lifecycle、SARIF/JUnit 匯出。fuzzing、schema conformance 與 BFLA 引擎已於 v0.22.0 出貨（`fuzz.ts`、`schemaConformance.ts`、`bfla.ts`，待 UI 整合）。 |
 
 ## 一句話評
 
@@ -49,6 +57,7 @@
 2. ✅ **AI 當 oracle** — ResponsePanel 加「AI review」：把 request + 回應 + 既有斷言丟給模型判斷，複用 `qa/llm.js`。**已完成 2026-05-31。**
 3. ✅ **Monitors 接真實 Runner** — 「Run now」真的跑（真實請求 + 斷言）取代亂數。背景排程 cadence 仍為後續工作。**已完成 2026-05-31。**
 4. ✅ **authz/BOLA matrix** 已完成（RBAC 矩陣 + BOLA/IDOR + rate-limit + findings lifecycle + SARIF/JUnit/HTML/JSON CI artifacts；現為產品核心）。背景 cadence 排程亦已完成（app 開啟時 enabled monitors 依 cadence 執行）。
-5. ⬜ **（後續）批次 AI 審查、fuzzing、schema conformance scan、BFLA。**
+5. 🔶 **fuzzing、schema conformance scan、BFLA** — 純函式引擎已於 v0.22.0 出貨（完整單元測試 + SARIF 規則中繼資料），UI 整合待做。
+6. ⬜ **（後續）批次 AI 審查。**
 
 > 進度：1、2、3 於 2026-05-31 完成（spec：[real-execution-and-ai-oracle](superpowers/specs/2026-05-31-real-execution-and-ai-oracle-design.md)，plan：[同名 plan](superpowers/plans/2026-05-31-real-execution-and-ai-oracle.md)）。共用層 `buildReq.js` / `sendRequest.js` / `llm.js`。

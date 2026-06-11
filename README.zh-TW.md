@@ -3,7 +3,7 @@
 [![CI](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#架構)
-[![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#架構)
+[![Frontend: React 19](https://img.shields.io/badge/frontend-React%2019-61DAFB.svg)](#架構)
 [![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)](#架構)
 [![Build: Vite](https://img.shields.io/badge/build-Vite-646CFF.svg)](#開發)
 [![Tests: Vitest](https://img.shields.io/badge/tests-Vitest-6E9F18.svg)](#開發)
@@ -61,11 +61,20 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   iteration，並用 live responses 計算 assertions。
 - **安全測試（Security testing）**：執行身分 × 端點的 RBAC 矩陣——同一批已存
   requests 用多個身分各送一次——可逐格設定 allow/deny 預期、可調的拒絕狀態碼集合，
-  並以 response oracles 標示敏感資料外洩與 schema 偏移。物件層級授權（BOLA/IDOR）
+  並以 response oracles 標示敏感資料外洩與 schema 偏移。矩陣 oracle 會看 body：
+  回 200 但內文實際拒絕（`{"error":"Access denied"}`）會被判定為 denied，而不是
+  誤報的 vuln。物件層級授權（BOLA/IDOR）
   測試在不同身分間替換物件 id，支援自動偵測 id 位置、可重用的跨租戶 presets，以及
-  避免誤判的 negative control。速率限制 / 濫用測試在確認關卡後送出有上限的 request bursts。
+  避免誤判的 negative control（物件 id 回顯只在「像身分」的 key 上才算數，且
+  control 改用獨立的結構 oracle 評分）。速率限制 / 濫用測試在確認關卡後送出有上限的
+  request bursts，並依「第一個 429 出現前放行了幾個 request」把防護分級為
+  none / weak / strong。
   單一 **執行完整安全掃描（Run full security suite）** 會把三個引擎當成一次已記錄的
   執行依序跑完——速率限制放最後，避免其 bursts 影響矩陣與 BOLA 的結果。
+  另有三個新引擎——JSON-Schema/OpenAPI **conformance** 驗證、輸入 **fuzzing**
+  （偵測 5xx、stack-trace 洩漏、payload 反射）與自動推導的 **BFLA**（OWASP API5）
+  掃描——以純函式、完整單元測試的模組形式出貨，SARIF 規則中繼資料已備妥於報告層；
+  UI 整合是下一步。
 - **AI 安全分流（AI security triage）**：把整批掃描（矩陣 + 物件授權 + 速率限制）
   濃縮成一份簡短、依優先序分類的清單——先看哪幾個、哪些像真的問題、哪些可能是誤判
   ——僅供參考，不會更動底層 findings。
@@ -77,7 +86,9 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   `strict` 完全不含佐證、`redacted` 保留短遮罩值、`evidence` 再附上一份結構保留、
   **預設遮掩（mask-by-default）** 的 request/response 摘要以定位每筆發現——除了發現本身那一個
   葉節點外，其餘值一律型別化，確保 token、cookie、PII 永不外洩。該佐證摘要為即時生成，
-  僅在明確選擇時才落地進該次執行。
+  僅在明確選擇時才落地進該次執行。SARIF 輸出已可直接餵 code scanning：每條 rule
+  帶名稱、完整描述、`helpUri`、CWE/OWASP tags 與 GitHub `security-severity`
+  分數，每筆 result 附 `physicalLocation`。
 - **Monitors**：可手動觸發真實 collection checks；啟用後也會在 app
   執行期間依照設定的 cadence 自動執行。
 - **Performance testing**：產生並執行 k6 performance、load、stress tests，
@@ -136,6 +147,7 @@ flowchart LR
   Executor --> Cookies["Local Cookie Jar"]
   Executor --> Rust["Rust Tauri Commands"]
   Rust --> APIs["Target APIs"]
+  Rust --> Keychain["OS keychain（AWS secret keys）"]
 
   Perf --> K6["Bundled k6"]
   K6 --> APIs
@@ -150,26 +162,32 @@ flowchart LR
   UI --> Storage
 ```
 
-- **Frontend**：React 18 + Vite，**100% TypeScript**（strict）。Workspace、
+- **Frontend**：React 19 + Vite，**100% TypeScript**（strict）。Workspace、
   request/send、monitor 狀態都放在型別化的 React context provider
   （`src/qa/state/`）；共用領域型別在 `src/qa/types.ts`。
 - **Desktop shell**：Tauri 2
 - **Backend commands**：Rust——request execution（reqwest + 手動跟隨 redirect、
-  AWS SigV4）、k6 子程序執行器、temp-file 輔助、本機 config/data 持久化。
-  暴露給 renderer 的指令面刻意維持最小（無 shell、無任意檔案或網路存取）。
-- **Storage**：單一版本化儲存層（`src/qa/storage.ts`）透過 Rust 後端把關鍵
+  AWS SigV4，並內建 SSRF 防護：擋下對雲端 metadata 位址的簽名請求）、k6 子程序
+  執行器、temp-file 輔助、本機 config/data 持久化、OS keychain 機密儲存
+  （`keyring`），以及由原生儲存對話框餵路徑的文字檔儲存指令。暴露給 renderer
+  的指令面刻意維持最小（無 shell、無任意網路存取）；停用 TLS 驗證需要 renderer
+  明確確認，且會留下稽核紀錄。
+- **Storage**：單一版本化儲存層（`src/qa/storage.ts`，讀取時自動 migrate 舊資料
+  形狀）透過 Rust 後端把關鍵
   工作區資料鏡像到磁碟；cookie jar 套用完整 Public Suffix List（`src/qa/psl.ts`）。
 - **Performance engine**：k6，會 materialize 到 `src-tauri/resources/`
 - **Tests + checks**：Vitest + Testing Library 與 Rust unit tests，CI 連同
-  `tsc --noEmit`、ESLint、`npm audit` 一起把關。
+  `tsc --noEmit`、ESLint、`npm audit`、`cargo audit` 一起把關；workflow
+  actions 全數釘在 commit SHA。
 
 ## 專案狀態
 
 持續維護中。前端已全面 strict TypeScript；每次 push 都會跑 ESLint、
 `tsc --noEmit`、Vitest 測試、`npm audit` 與 Rust unit tests，且 release
 流程在這些未通過前不會 build 安裝檔。逐版歷史見
-[CHANGELOG.md](CHANGELOG.md)（近期工作：移除遺留攻擊面、版本化磁碟鏡像
-儲存層、完整 Public Suffix List cookie 防護、TypeScript 遷移）。
+[CHANGELOG.md](CHANGELOG.md)（近期工作：OS keychain 憑證儲存、強化
+RBAC/BOLA/rate-limit oracles、三個新安全引擎——conformance、fuzzing、
+BFLA——更完整的 SARIF，以及 React 19 升級）。
 
 ## 需求
 
@@ -268,9 +286,15 @@ Runtime configuration 儲存在本機。常見產生檔案包含：
 - `config.json`：application settings
 - `postman_collections_cache.json`：cached collection metadata
 - `user_data.json`：關鍵工作區資料的磁碟鏡像（安全 findings 生命週期、
-  baseline、效能歷史、monitors）。所有讀寫經過單一儲存層
-  （`src/qa/storage.js`），webview 快取被清掉也能還原，寫入失敗會浮出
+  baseline、效能歷史、monitors）。所有讀寫經過單一版本化儲存層
+  （`src/qa/storage.ts`），webview 快取被清掉也能還原，舊資料形狀會在讀取時
+  自動 migrate，寫入失敗會浮出
   提示而非無聲吞掉。機密（LLM API key）刻意排除在鏡像之外。
+
+手動輸入的 AWS secret access key 不會存進 `config.json`：它存放在 OS keychain
+（Windows Credential Manager／macOS Keychain／Linux Secret Service），以
+credential profile id 為 key。舊設定中的 inline secret 讀取時仍然有效，方便
+平順遷移。
 
 LLM settings 儲存在 browser localStorage。AI 隱私模式預設遮蔽：prompt 會在本機
 遮蔽、並於送出前顯示預覽,才送到你選擇的 provider;`local only` 模式只允許自管
@@ -292,6 +316,8 @@ machine-specific paths。
 macOS build 會在 `src-tauri/target/release/bundle/dmg/` 產生 `.dmg`。
 Windows build 會同時產生 NSIS installer（`-x64-setup.exe`）與一個免安裝的
 portable ZIP（`-x64-portable.zip`，內含執行檔與旁邊的 `resources/k6.exe`）。
+本機要組 portable ZIP 可執行 `npm run package:portable`，輸出到 `dist/`
+（與 release workflow 同一套步驟）。
 macOS k6 binary 會 bundle 到 app 的
 `Contents/Resources/resources/k6`，所以 Performance testing 不需要額外安裝
 system k6。
@@ -316,7 +342,7 @@ xattr -dr com.apple.quarantine "/Applications/QA Touchstone.app"
   [k6 Binary](#k6-binary) 與 [Packaging Notes](#packaging-notes)）。它以獨立執行檔
   的方式被 app 呼叫，並未連結進 QA Touchstone 本體。感謝 Grafana Labs 團隊與
   k6 contributors。
-- 以 [Tauri](https://tauri.app)、[React](https://react.dev)、[MUI](https://mui.com) 打造。
+- 以 [Tauri](https://tauri.app) 與 [React](https://react.dev) 打造。
 
 各商標與專案名稱歸其各自所有者所有。
 

@@ -3,7 +3,7 @@
 [![CI](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml/badge.svg)](https://github.com/asdfghj1237890/qa-touchstone/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Desktop: Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-24C8DB.svg)](#architecture)
-[![Frontend: React 18](https://img.shields.io/badge/frontend-React%2018-61DAFB.svg)](#architecture)
+[![Frontend: React 19](https://img.shields.io/badge/frontend-React%2019-61DAFB.svg)](#architecture)
 [![Language: TypeScript](https://img.shields.io/badge/language-TypeScript-3178C6.svg)](#architecture)
 [![Build: Vite](https://img.shields.io/badge/build-Vite-646CFF.svg)](#development)
 [![Tests: Vitest](https://img.shields.io/badge/tests-Vitest-6E9F18.svg)](#development)
@@ -64,12 +64,22 @@ The current public-facing scope is API testing only:
 - **Security testing**: run an identity × endpoint RBAC matrix — the same saved
   requests sent under multiple identities — with per-cell allow/deny expectations,
   a configurable deny-status set, and response oracles that flag sensitive-data
-  exposure and schema drift. Object-level authorization (BOLA/IDOR) testing swaps
+  exposure and schema drift. The matrix oracle is body-aware: a 200 that denies
+  in-band (`{"error":"Access denied"}`) is classified as denied, not a false vuln.
+  Object-level authorization (BOLA/IDOR) testing swaps
   object ids across identities with auto-detected id locations, reusable
-  cross-tenant presets, and a negative control that suppresses false positives.
-  Rate-limit / abuse testing fires bounded request bursts behind a confirm gate.
+  cross-tenant presets, and a negative control that suppresses false positives
+  (id echoes only count at identity-like keys, and the control is scored by an
+  independent structural oracle). Rate-limit / abuse testing fires bounded
+  request bursts behind a confirm gate and grades protection none / weak /
+  strong by how many requests slip through before the first 429.
   A single **Run full security suite** executes all three engines as one recorded
   run — rate-limit last, so its bursts don't skew the matrix and BOLA results.
+  Three further engines — JSON-Schema/OpenAPI **conformance** validation, input
+  **fuzzing** (5xx, stack-trace-leak, and reflected-payload detection), and an
+  auto-derived **BFLA** (OWASP API5) scan — ship as pure, fully unit-tested
+  modules with SARIF rule metadata already in the report layer; UI integration
+  is the next step.
 - **AI security triage**: condense a whole scan (matrix + object-authz + rate-limit)
   into a short, prioritized, categorized shortlist — what to look at first, what
   looks like a real issue, and what's likely a false positive — advisory only,
@@ -85,7 +95,10 @@ The current public-facing scope is API testing only:
   structure-preserving, **mask-by-default** request/response summary that locates
   each finding while guaranteeing tokens, cookies, and PII never leak (every leaf
   is type-tokenized except the finding itself). The evidence summary is generated
-  on demand and only persisted into a run on explicit opt-in.
+  on demand and only persisted into a run on explicit opt-in. SARIF output is
+  code-scanning-ready: rules carry names, descriptions, `helpUri`, CWE/OWASP
+  tags, and a GitHub `security-severity` score, and each result carries a
+  `physicalLocation`.
 - **Monitors**: run live checks manually or let enabled monitors execute on
   their configured cadence while the app is running.
 - **Performance testing**: generate and run k6 performance, load, and stress
@@ -150,6 +163,7 @@ flowchart LR
   Executor --> Cookies["Local Cookie Jar"]
   Executor --> Rust["Rust Tauri Commands"]
   Rust --> APIs["Target APIs"]
+  Rust --> Keychain["OS keychain (AWS secret keys)"]
 
   Perf --> K6["Bundled k6"]
   K6 --> APIs
@@ -164,29 +178,35 @@ flowchart LR
   UI --> Storage
 ```
 
-- **Frontend**: React 18 + Vite, **100% TypeScript** (strict). Workspace,
+- **Frontend**: React 19 + Vite, **100% TypeScript** (strict). Workspace,
   request/send, and monitor state live in typed React context providers
   (`src/qa/state/`); shared domain types in `src/qa/types.ts`.
 - **Desktop shell**: Tauri 2
 - **Backend commands**: Rust — request execution (reqwest + manual redirect
-  following, AWS SigV4), the k6 process runner, temp-file helpers, and local
-  config/data persistence. The renderer's command surface is intentionally
-  minimal (no shell, no arbitrary file or network access).
-- **Storage**: a single versioned layer (`src/qa/storage.ts`) mirrors critical
-  workspace data to disk via the Rust backend; the cookie jar enforces the full
-  Public Suffix List (`src/qa/psl.ts`).
+  following, AWS SigV4, and an SSRF guard that blocks signed requests to
+  cloud-metadata addresses), the k6 process runner, temp-file helpers, local
+  config/data persistence, OS-keychain secret storage (`keyring`), and a
+  text-file save command fed by the native save dialog. The renderer's command
+  surface is intentionally minimal (no shell, no arbitrary network access), and
+  disabling TLS verification requires an explicit renderer confirmation and is
+  audit-logged.
+- **Storage**: a single versioned layer (`src/qa/storage.ts`) with on-read
+  migrations mirrors critical workspace data to disk via the Rust backend; the
+  cookie jar enforces the full Public Suffix List (`src/qa/psl.ts`).
 - **Performance engine**: k6, materialized into `src-tauri/resources/`
 - **Tests + checks**: Vitest + Testing Library and Rust unit tests, gated in CI
-  alongside `tsc --noEmit`, ESLint, and `npm audit`.
+  alongside `tsc --noEmit`, ESLint, `npm audit`, and `cargo audit`, with
+  workflow actions pinned to commit SHAs.
 
 ## Project Status
 
 Actively maintained. The frontend is fully strict TypeScript; every push runs
 ESLint, `tsc --noEmit`, the Vitest suite, `npm audit`, and Rust unit tests, and
 the release pipeline refuses to build installers unless those pass. See
-[CHANGELOG.md](CHANGELOG.md) for the per-release history (recent work: legacy
-attack-surface removal, a versioned disk-mirrored storage layer, the full
-Public Suffix List cookie guard, and the TypeScript migration).
+[CHANGELOG.md](CHANGELOG.md) for the per-release history (recent work:
+OS-keychain credential storage, hardened RBAC/BOLA/rate-limit oracles, three
+new security engines — conformance, fuzzing, BFLA — richer SARIF, and the
+React 19 upgrade).
 
 ## Requirements
 
@@ -286,9 +306,15 @@ Runtime configuration is stored locally. Common generated files include:
 - `postman_collections_cache.json` for cached collection metadata
 - `user_data.json` — disk mirror of critical workspace data (security findings
   lifecycle, baselines, perf history, monitors). The app reads/writes these via
-  a single storage layer (`src/qa/storage.js`) that survives a cleared webview
-  cache and surfaces write failures instead of swallowing them. Secrets (LLM
-  API keys) are deliberately excluded from the mirror.
+  a single versioned storage layer (`src/qa/storage.ts`) that survives a cleared
+  webview cache, migrates older data shapes on read, and surfaces write failures
+  instead of swallowing them. Secrets (LLM API keys) are deliberately excluded
+  from the mirror.
+
+Manual AWS secret access keys are not stored in `config.json`: they live in the
+OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret
+Service), keyed by credential-profile id. A legacy inline secret is still
+honored on read so older configs keep working.
 
 LLM settings are stored in browser localStorage. AI privacy mode is
 redacted-by-default: prompts are masked locally and shown in a preview before
@@ -312,7 +338,9 @@ when you explicitly opt in.
 macOS builds produce a `.dmg` under
 `src-tauri/target/release/bundle/dmg/`. Windows builds produce both an NSIS
 installer (`-x64-setup.exe`) and a no-install portable ZIP (`-x64-portable.zip`)
-that holds the executable next to its bundled `resources/k6.exe`. The macOS k6
+that holds the executable next to its bundled `resources/k6.exe`. Run
+`npm run package:portable` to assemble that portable ZIP locally into `dist/`
+(same steps as the release workflow). The macOS k6
 binary is bundled into the app at
 `Contents/Resources/resources/k6`, so Performance testing works without a
 system k6 install.
@@ -339,8 +367,7 @@ For wider distribution, sign and notarize the build.
   [Packaging Notes](#packaging-notes)). It runs as a separate executable invoked
   by the app — it is not linked into QA Touchstone. Thanks to the Grafana Labs
   team and the k6 contributors.
-- Built with [Tauri](https://tauri.app), [React](https://react.dev), and
-  [MUI](https://mui.com).
+- Built with [Tauri](https://tauri.app) and [React](https://react.dev).
 
 Trademarks and project names belong to their respective owners.
 
