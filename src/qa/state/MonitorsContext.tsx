@@ -69,20 +69,35 @@ export function MonitorsProvider({ children }: { children: React.ReactNode }) {
     monitorRunningRef.current = id;
     setMonitorRunning(id);
     (async () => {
+      let run;
       try {
-        const run = await runMonitorCollection(mon, { ...monitorCtxRef.current, trigger });
-        const now = Date.now();
-        setMonitors((ms) => ms.map((m) => {
+        run = await runMonitorCollection(mon, { ...monitorCtxRef.current, trigger });
+      } catch {
+        // Transport/run failure: release the lock but leave nextDueAt unchanged so
+        // the next tick retries (the pre-existing behavior).
+        if (monitorRunningRef.current === id) monitorRunningRef.current = null;
+        setMonitorRunning(null);
+        return;
+      }
+      const now = Date.now();
+      setMonitors((ms) => {
+        const next = ms.map((m) => {
           if (m.id !== id) return m;
           const nextDueAt = m.enabled ? nextMonitorDueAt(m.cadence, now) : null;
           return run
             ? { ...m, nextDueAt, nextRun: '', runs: [run, ...(m.runs || [])].slice(0, 20) }
             : { ...m, nextDueAt, nextRun: '' };
-        }));
-      } finally {
+        });
+        // Advance the scheduler's ref snapshot AND release the run lock atomically
+        // with the committed nextDueAt. Clearing the lock in a separate `finally`
+        // (as before) let a scheduler tick observe "not running" while monitorsRef
+        // still held the pre-run (due) nextDueAt and re-fire the same monitor — a
+        // race React 19's deferred effect flushing made observable.
+        monitorsRef.current = next;
         if (monitorRunningRef.current === id) monitorRunningRef.current = null;
-        setMonitorRunning(null);
-      }
+        return next;
+      });
+      setMonitorRunning(null);
     })();
   };
 
