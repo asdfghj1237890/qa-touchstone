@@ -145,6 +145,8 @@ export type SnapshotItem = {
   title: string;
   evidence: string;
   count: number;
+  /** title+evidence 內容漂移雜湊：身分相同（同 fp）但證據變動時可被偵測。 */
+  dfp: string;
   /** embedEvidence 之後才存在（opt-in 持久化）。 */
   evidenceArtifact?: EvidenceArtifact;
 };
@@ -361,6 +363,7 @@ export type BurstResponse = {
 
 export type ThrottleSignal = { throttled: boolean; saw429: boolean; headerHit: boolean };
 
+export type ThrottleStrength = 'none' | 'weak' | 'strong';
 export type BurstStats = {
   sent: number;
   ok2xx: number;
@@ -372,6 +375,12 @@ export type BurstStats = {
   maxMs: number;
   throttled: boolean;
   headerHit: boolean;
+  /** 第一個 429 在收集序列中的索引；-1 表示整輪沒有 429。 */
+  firstThrottledIndex: number;
+  /** 第一個 429 之前成功（2xx）的請求數——量化「漏過多少」。 */
+  allowedBeforeThrottle: number;
+  /** 節流強度等級：none（全無）/ weak（很晚才擋或只有 header）/ strong（早期就擋）。 */
+  strength: ThrottleStrength;
 };
 
 /** rate-limit 面板 / suite 每個 test 的結果（findings 來源）。 */

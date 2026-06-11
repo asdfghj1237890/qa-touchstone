@@ -6,6 +6,7 @@ mod events;
 mod json_store;
 mod paths;
 mod reqprep;
+mod secrets;
 mod state;
 
 use state::AppState;
@@ -49,6 +50,9 @@ pub fn run() {
             commands::config::save_config,
             commands::config::get_api_credential_configs,
             commands::config::set_api_credential_configs,
+            commands::secrets::set_aws_secret,
+            commands::secrets::has_aws_secret,
+            commands::secrets::delete_aws_secret,
             commands::store::save_user_data,
             commands::store::load_user_data,
             commands::fsops::write_temp_text,

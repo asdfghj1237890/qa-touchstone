@@ -7,7 +7,7 @@
 import './setup';
 import { snippetAround, headerVal } from './evidence';
 import { TRIAGE_CATEGORIES } from './triageConstants';
-import { loadJSON, saveJSON } from './storage';
+import { loadVersioned, saveVersioned, SCHEMA_VERSION_FIELD, type MigrationStep } from './storage';
 
 /** AI Privacy Mode 設定（localStorage `qa_ai_privacy`）。 */
 export interface PrivacyCfg {
@@ -75,13 +75,35 @@ export const PRIVACY_DEFAULT_CFG: PrivacyCfg = {
   customPatterns: [],
 };
 
+export const PRIVACY_CFG_VERSION = 1;
+// v0 (legacy, unversioned) → v1: normalize renamed `mode` values. Earlier builds
+// stored the redaction mode under different names; map them onto the three-mode
+// system so an upgraded user keeps their chosen privacy posture.
+const LEGACY_MODE_ALIASES: Record<string, PrivacyCfg['mode']> = {
+  masked: 'redacted', redact: 'redacted', redacting: 'redacted',
+  off: 'full', none: 'full', open: 'full',
+  localonly: 'local', 'local-only': 'local', loopback: 'local',
+};
+const PRIVACY_MIGRATIONS: MigrationStep[] = [
+  (data) => {
+    const d = { ...(data || {}) };
+    if (typeof d.mode === 'string') {
+      const norm = LEGACY_MODE_ALIASES[d.mode.toLowerCase()];
+      if (norm) d.mode = norm;
+    }
+    return d;
+  },
+];
+
 export function loadPrivacyCfg(): PrivacyCfg {
-  const raw = loadJSON('qa_ai_privacy', {});
-  return { ...PRIVACY_DEFAULT_CFG, ...(raw && typeof raw === 'object' ? raw : {}) };
+  const raw = loadVersioned<Record<string, unknown>>('qa_ai_privacy', PRIVACY_CFG_VERSION, PRIVACY_MIGRATIONS, {});
+  const safe = raw && typeof raw === 'object' ? { ...raw } : {};
+  delete (safe as Record<string, unknown>)[SCHEMA_VERSION_FIELD]; // internal — never surface to consumers
+  return { ...PRIVACY_DEFAULT_CFG, ...safe };
 }
 
 export function savePrivacyCfg(cfg: Partial<PrivacyCfg> | null | undefined): void {
-  saveJSON('qa_ai_privacy', { ...PRIVACY_DEFAULT_CFG, ...cfg });
+  saveVersioned('qa_ai_privacy', PRIVACY_CFG_VERSION, { ...PRIVACY_DEFAULT_CFG, ...cfg });
 }
 
 const CLOUD_HOSTS = /(^|\.)(openai\.com|anthropic\.com|azure\.com|googleapis\.com|cohere\.ai|amazonaws\.com|mistral\.ai)$/i;

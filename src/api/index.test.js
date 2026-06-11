@@ -176,4 +176,31 @@ describe('api module', () => {
     await api.executePostmanRequest(details);
     expect(invokeMock).toHaveBeenCalledWith('execute_postman_request', details);
   });
+
+  // ── AWS secret keychain commands — IPC contract must match the Rust signatures
+  // (commands/secrets.rs): set_aws_secret(id, secret), has_aws_secret(id),
+  // delete_aws_secret(id). A param-name drift here is a silent runtime break.
+  it('setAwsSecret 轉呼 invoke set_aws_secret 帶 id/secret', async () => {
+    invokeMock.mockResolvedValue({ success: true });
+    await api.setAwsSecret('profile-1', 'sk-secret');
+    expect(invokeMock).toHaveBeenCalledWith('set_aws_secret', { id: 'profile-1', secret: 'sk-secret' });
+  });
+
+  it('hasAwsSecret 轉呼 invoke has_aws_secret 帶 id 並回傳 boolean', async () => {
+    invokeMock.mockResolvedValue(true);
+    await expect(api.hasAwsSecret('profile-1')).resolves.toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith('has_aws_secret', { id: 'profile-1' });
+  });
+
+  it('deleteAwsSecret 轉呼 invoke delete_aws_secret 帶 id', async () => {
+    invokeMock.mockResolvedValue({ success: true });
+    await api.deleteAwsSecret('profile-1');
+    expect(invokeMock).toHaveBeenCalledWith('delete_aws_secret', { id: 'profile-1' });
+  });
+
+  it('暴露憑證秘密 keychain 方法', () => {
+    for (const name of ['setAwsSecret', 'hasAwsSecret', 'deleteAwsSecret']) {
+      expect(typeof api[name], `${name} 應為 function`).toBe('function');
+    }
+  });
 });

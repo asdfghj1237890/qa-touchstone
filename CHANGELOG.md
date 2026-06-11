@@ -3,6 +3,68 @@
 All notable changes to QA Touchstone are documented here. Versions follow
 [SemVer](https://semver.org); 0.x releases may contain breaking changes.
 
+## [0.22.0] — 2026-06-11
+
+### Security
+- **AWS secret keys move to the OS keychain.** Manual AWS secret access keys are
+  no longer stored in plaintext in `config.json` — they live in the OS keychain
+  (Windows Credential Manager / macOS Keychain / Linux Secret Service) keyed by
+  credential-profile id (`src-tauri/src/secrets.rs` + `commands/secrets.rs`,
+  `keyring` crate). A legacy inline secret is still honored on read for a smooth
+  migration; resolution prefers the keychain.
+- **Disabling TLS verification now requires explicit confirmation.** A
+  `ssl_verify=false` without the renderer's `sslVerifyConfirmed` flag is rejected
+  by the backend, so an implicit/injected disable can no longer silently strip
+  certificate verification.
+- **SSRF guard for cloud metadata endpoints.** An AWS-signed request to a
+  link-local metadata address (`169.254.169.254`, ECS `169.254.170.2`, IPv6
+  `fd00:ec2::*`, GCP `metadata.google.internal`, Alibaba) is now blocked — it
+  would otherwise sign the user's/instance's credentials into a request that
+  hands back instance-role credentials. Unsigned localhost/private testing is
+  unaffected.
+- **RBAC soft-deny detection.** The matrix oracle is body-aware: a 200 that
+  denies in-band (`{"error":"Access denied"}`, `{"status":"forbidden"}`) is
+  classified as `denied`, removing false `vuln`s on deny-cells and false `pass`es
+  on allow-cells (`src/qa/authz.ts`).
+- **BOLA false-positive hardening.** Object-id echo only counts at an
+  identity-like key (a stray `1` as `page`/`total` no longer matches), and the
+  negative control uses an independent structural oracle instead of re-using the
+  attack content match — breaking the prior circular self-validation
+  (`src/qa/bola.ts`).
+- **Rate-limit strength, not just presence.** Bursts are graded none / weak /
+  strong by how many requests slipped through before the first 429; a single
+  late 429 is reported as weak protection instead of a clean pass
+  (`src/qa/ratelimit.ts`).
+
+### Added
+- **Three new security engines** (pure, fully unit-tested): JSON-Schema/OpenAPI
+  **conformance** validation (`schemaConformance.ts`), input **fuzzing** with
+  5xx / stack-trace-leak / reflected-payload detection (`fuzz.ts`), and an
+  auto-derived **BFLA** (OWASP-API5) scan (`bfla.ts`).
+- **Richer SARIF.** Rules now carry name, descriptions, `helpUri`, default level,
+  CWE/OWASP tags, and a GitHub `security-severity` score; results carry
+  `ruleIndex` and a `physicalLocation` (`src/qa/securityReport.ts`).
+- **Versioned storage with migrations** (`src/qa/storage.ts`) so an older
+  `user_data.json` shape is upgraded on read instead of silently misread.
+- **List virtualization primitive** (`useWindowedList.ts`) plus a render cap on
+  the findings table so very large scans don't thrash the DOM.
+- **Home empty state** for Recent requests — a guiding CTA instead of a blank
+  panel.
+- An ISC **LICENSE** file (the repo claimed ISC without the license text).
+
+### Fixed
+- **Findings fingerprint survives rule renames** via a canonical-id alias
+  registry, and a separate detail hash now surfaces evidence drift on a carried
+  finding without destabilizing the baseline diff (`src/qa/findings.ts`).
+
+### Tests / CI
+- New IPC-contract tests for the keychain commands and an export-routing
+  regression guard for `download.ts` (the v0.21.1 broken-exports class of bug).
+- CI Linux Rust job installs `libdbus-1-dev` + `pkg-config` for the keyring
+  Secret Service backend.
+- Regenerated README screenshots (now "QA Touchstone", current version) and
+  removed stray Electron-era build residue from the working tree.
+
 ## [0.21.1] — 2026-06-11
 
 ### Fixed

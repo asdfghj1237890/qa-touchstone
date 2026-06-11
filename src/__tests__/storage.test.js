@@ -3,6 +3,7 @@ import {
   loadJSON, saveJSON, loadString, saveString,
   initStorageMirror, flushMirror, MIRRORED_KEYS,
   STORAGE_ERROR_EVENT, _resetStorageMirrorForTests,
+  migrateRecord, loadVersioned, saveVersioned, SCHEMA_VERSION_FIELD,
 } from '../qa/storage';
 
 describe('qaStorage — JSON 存取', () => {
@@ -50,6 +51,57 @@ describe('qaStorage — JSON 存取', () => {
   it('saveString / loadString roundtrip', () => {
     expect(saveString('s1', 'ocean')).toBe(true);
     expect(loadString('s1')).toBe('ocean');
+  });
+});
+
+describe('qaStorage — schema 版本 / migration', () => {
+  beforeEach(() => { localStorage.clear(); _resetStorageMirrorForTests(); });
+
+  const bump1 = (d) => ({ ...d, a: (d.a || 0) + 1 });
+  const renameB = (d) => { const { b, ...rest } = d; return { ...rest, c: b }; };
+
+  it('treats unversioned legacy data as v0 and runs every step', () => {
+    const out = migrateRecord({ a: 0, b: 'x' }, 2, [bump1, renameB]);
+    expect(out.a).toBe(1);
+    expect(out.c).toBe('x');
+    expect(out.b).toBeUndefined();
+    expect(out[SCHEMA_VERSION_FIELD]).toBe(2);
+  });
+
+  it('starts from the recorded version and only runs the remaining steps', () => {
+    const out = migrateRecord({ a: 5, b: 'y', [SCHEMA_VERSION_FIELD]: 1 }, 2, [bump1, renameB]);
+    expect(out.a).toBe(5);          // bump1 (step 0) skipped — already at v1
+    expect(out.c).toBe('y');        // renameB (step 1) ran
+    expect(out[SCHEMA_VERSION_FIELD]).toBe(2);
+  });
+
+  it('is a no-op when already at the target version', () => {
+    const out = migrateRecord({ a: 9, [SCHEMA_VERSION_FIELD]: 3 }, 3, [bump1, bump1, bump1]);
+    expect(out.a).toBe(9);
+    expect(out[SCHEMA_VERSION_FIELD]).toBe(3);
+  });
+
+  it('loadVersioned migrates persisted legacy data on read and saveVersioned stamps the version', () => {
+    localStorage.setItem('cfg', JSON.stringify({ a: 0, b: 'z' }));    // legacy, no version
+    const loaded = loadVersioned('cfg', 2, [bump1, renameB], {});
+    expect(loaded).toMatchObject({ a: 1, c: 'z' });
+    expect(loaded[SCHEMA_VERSION_FIELD]).toBe(2);
+
+    saveVersioned('cfg', 2, { a: 1, c: 'z' });
+    expect(JSON.parse(localStorage.getItem('cfg'))[SCHEMA_VERSION_FIELD]).toBe(2);
+  });
+
+  it('loadVersioned returns the fallback when nothing is stored', () => {
+    expect(loadVersioned('absent', 1, [], { default: true })).toEqual({ default: true });
+  });
+
+  it('loadVersioned returns the fallback (not a throw) when a migration step throws', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem('cfg', JSON.stringify({ a: 0 }));
+    const boom = () => { throw new Error('bad migration'); };
+    expect(loadVersioned('cfg', 1, [boom], { safe: true })).toEqual({ safe: true });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 

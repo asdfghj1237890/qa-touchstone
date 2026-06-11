@@ -167,6 +167,54 @@ describe('reportToSarif', () => {
   });
 });
 
+describe('reportToSarif — rule metadata (GitHub code scanning friendliness)', () => {
+  const parse = (model) => JSON.parse(reportToSarif(model));
+  it('every rule carries a name, descriptions, helpUri, default level, and tags', () => {
+    const driver = parse(buildReport(run([item({ ruleId: 'jwt' })]), null, lc(), {})).runs[0].tool.driver;
+    const rule = driver.rules[0];
+    expect(rule.id).toBe('jwt');
+    expect(typeof rule.name).toBe('string');
+    expect(rule.name).not.toContain(' ');                 // SARIF rule name is an opaque token
+    expect(rule.shortDescription.text.length).toBeGreaterThan(0);
+    expect(rule.fullDescription.text.length).toBeGreaterThan(0);
+    expect(rule.helpUri).toMatch(/^https?:\/\//);
+    expect(rule.defaultConfiguration.level).toBe('error'); // jwt is high → error
+    expect(Array.isArray(rule.properties.tags)).toBe(true);
+    expect(rule.properties.tags).toContain('security');
+  });
+  it('attaches a GitHub security-severity score derived from the worst finding severity', () => {
+    const driver = parse(buildReport(run([item({ ruleId: 'object-authz', effectiveSeverity: 'critical' })]), null, lc(), {})).runs[0].tool.driver;
+    const score = Number(driver.rules[0].properties['security-severity']);
+    expect(score).toBeGreaterThanOrEqual(9.0); // critical
+  });
+  it('synthesizes metadata for an unknown rule id without throwing', () => {
+    const driver = parse(buildReport(run([item({ ruleId: 'totally-custom-rule', title: 'Custom thing' })]), null, lc(), {})).runs[0].tool.driver;
+    expect(driver.rules[0].id).toBe('totally-custom-rule');
+    expect(driver.rules[0].name).toBeTruthy();
+    expect(driver.rules[0].shortDescription.text).toBeTruthy();
+  });
+});
+
+describe('reportToSarif — result locations', () => {
+  const parse = (model) => JSON.parse(reportToSarif(model));
+  it('each result has a ruleIndex that resolves back to its rule', () => {
+    const sarif = parse(buildReport(run([item({ fp: 'a', ruleId: 'jwt' }), item({ fp: 'b', ruleId: 'object-authz' })]), null, lc(), {}));
+    const { rules } = sarif.runs[0].tool.driver;
+    for (const r of sarif.runs[0].results) {
+      expect(typeof r.ruleIndex).toBe('number');
+      expect(rules[r.ruleIndex].id).toBe(r.ruleId);
+    }
+  });
+  it('each result carries a physicalLocation with a non-empty artifact uri and a region', () => {
+    const r = parse(buildReport(run([item()]), null, lc(), {})).runs[0].results[0];
+    const phys = r.locations[0].physicalLocation;
+    expect(phys.artifactLocation.uri.length).toBeGreaterThan(0);
+    expect(phys.region.startLine).toBeGreaterThanOrEqual(1);
+    // logicalLocations are still present for tools that prefer them
+    expect(r.locations[0].logicalLocations[0].fullyQualifiedName).toBeTruthy();
+  });
+});
+
 describe('reportToHtml evidence artifact', () => {
   const artifact = {
     engine: 'matrix',

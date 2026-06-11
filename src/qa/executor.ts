@@ -37,6 +37,10 @@ export interface QaPostmanPayload {
   selectedEnvironment: null;
   isFileTransferCollection: boolean;
   sslVerify: boolean;
+  /** Only set (true) when sslVerify is explicitly false — the deliberate UI toggle
+   *  IS the confirmation. The backend rejects a sslVerify=false that lacks it, so an
+   *  implicit/injected disable cannot silently strip TLS verification. */
+  sslVerifyConfirmed?: boolean;
 }
 
 /** executeRequest 的回應形狀（canned / browser fetch / Tauri 三路一致）。 */
@@ -137,7 +141,12 @@ export function buildPayload(req: QaRequest, env: QaExecuteEnv, varMap?: Record<
   }
   // sslVerify defaults true unless the caller explicitly turns it off — keep
   // the wire shape so a missing opts.sslVerify is treated as the safe default.
-  return { requestDetails: { request }, params: {}, apiConfigId: null, selectedProfile: null, selectedEnvironment: null, isFileTransferCollection: false, sslVerify: opts.sslVerify !== false };
+  // When it IS turned off, carry the confirmation flag the backend now requires
+  // (the deliberate toggle, shown with a warning, is the confirmation).
+  const sslVerify = opts.sslVerify !== false;
+  const payload: QaPostmanPayload = { requestDetails: { request }, params: {}, apiConfigId: null, selectedProfile: null, selectedEnvironment: null, isFileTransferCollection: false, sslVerify };
+  if (!sslVerify) payload.sslVerifyConfirmed = true;
+  return payload;
 }
 
 // Canned-response fallback (browser/dev/test), preserving the design's feel.

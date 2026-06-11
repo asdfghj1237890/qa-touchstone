@@ -14,6 +14,10 @@ import type {
 
 const { useState: useS, useMemo, useCallback } = React;
 const PRESENCE_ORDER: Record<Presence, number> = { new: 0, carried: 1, resolved: 2 };
+// Bound the DOM: render at most this many finding rows until the user opts into
+// the full list. A scan can legitimately produce thousands of findings, and a
+// table with thousands of rows (each expandable) janks badly on every re-render.
+export const MAX_VISIBLE_FINDINGS = 300;
 
 /** 顯示列：每個 fingerprint 一列（同 fp 聚合 count）。 */
 interface FindingRow {
@@ -88,6 +92,7 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
   const [showSuppressed, setShowSuppressed] = useS(false);
   const [openFp, setOpenFp] = useS<string | null>(null);
   const [legacyDismissed, setLegacyDismissed] = useS(false);
+  const [showAll, setShowAll] = useS(false);
 
   // Patch a finding's record, persist, and reflect locally. `now` is a real ISO
   // timestamp here (UI side); findings.js stays pure by taking it as an arg.
@@ -103,7 +108,17 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
   const rows = useMemo(() => buildRows(union, lifecycle, diff, baselineItems), [union, lifecycle, diff, baselineItems]);
   const gate = useMemo(() => gateCount(current.items, lifecycle, diff), [current, lifecycle, diff]);
 
-  const visible = rows.filter(r => showSuppressed || !(r.record && r.record.suppressed));
+  const visible = useMemo(
+    () => rows.filter(r => showSuppressed || !(r.record && r.record.suppressed)),
+    [rows, showSuppressed],
+  );
+  // Render only the first MAX_VISIBLE_FINDINGS rows unless the user expands —
+  // bounds the DOM for very large scans. An open detail row stays rendered even
+  // past the cap so expanding then scrolling never hides the editor.
+  const capped = useMemo(
+    () => (showAll ? visible : visible.slice(0, MAX_VISIBLE_FINDINGS)),
+    [visible, showAll],
+  );
 
   return (
     <div className="qa-find">
@@ -141,7 +156,7 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
             <th>{t('findings.col.location')}</th>
           </tr></thead>
           <tbody>
-            {visible.map(r => (
+            {capped.map(r => (
               <React.Fragment key={r.fp}>
                 <tr className={`qa-find-row qa-presence--${r.presence}`} onClick={() => setOpenFp(openFp === r.fp ? null : r.fp)}>
                   <td><span className={`qa-find-presence qa-presence--${r.presence}`}>{t('findings.presence.' + r.presence)}</span></td>
@@ -188,6 +203,16 @@ function FindingsPanel({ union = [], snapshots: snapshotsProp, lifecycle: lifecy
             ))}
           </tbody>
         </table>
+      )}
+
+      {visible.length > MAX_VISIBLE_FINDINGS && (
+        <div className="qa-find-more">
+          <button className="qa-link" onClick={() => setShowAll(s => !s)}>
+            {showAll
+              ? t('findings.showFewer')
+              : t('findings.showAll', { shown: MAX_VISIBLE_FINDINGS, count: visible.length })}
+          </button>
+        </div>
       )}
     </div>
   );

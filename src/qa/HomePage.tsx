@@ -59,14 +59,25 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
               <button className="qa-link" onClick={() => setRoute('api')}>{t('home.viewClient')}</button>
             </div>
             <div className="qa-recent">
-              {history.slice(0, 5).map((h, i) => (
-                <button key={i} className="qa-recent-row" onClick={() => onOpenRequest(h)}>
-                  <MethodBadge method={h.method} size="sm" />
-                  <span className="qa-recent-path">{h.path}</span>
-                  <span className="qa-recent-status" style={{ color: window.QATheme.statusColor(h.status) }}>{h.status}</span>
-                  <span className="qa-recent-time">{h.time}ms</span>
-                </button>
-              ))}
+              {history.length === 0 ? (
+                <div className="qa-recent-empty">
+                  <Icon name="send" size={22} />
+                  <div className="qa-recent-empty-title">{t('home.recent.empty')}</div>
+                  <div className="qa-recent-empty-hint">{t('home.recent.emptyHint')}</div>
+                  <button className="qa-btn qa-btn-primary qa-recent-empty-cta" onClick={() => setRoute('api')}>
+                    {t('home.recent.emptyCta')} <Icon name="chevron" size={13} />
+                  </button>
+                </div>
+              ) : (
+                history.slice(0, 5).map((h, i) => (
+                  <button key={i} className="qa-recent-row" onClick={() => onOpenRequest(h)}>
+                    <MethodBadge method={h.method} size="sm" />
+                    <span className="qa-recent-path">{h.path}</span>
+                    <span className="qa-recent-status" style={{ color: window.QATheme.statusColor(h.status) }}>{h.status}</span>
+                    <span className="qa-recent-time">{h.time}ms</span>
+                  </button>
+                ))
+              )}
             </div>
           </section>
 

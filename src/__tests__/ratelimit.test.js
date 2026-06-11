@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { THROTTLE_HEADERS, MAX_N, MAX_CONCURRENCY, detectThrottleSignal } from '../qa/ratelimit';
 import { classifyRateLimit, rateLimitSeverity } from '../qa/ratelimit';
 import { runBurst, summarizeRateLimit, MAX_N as CAP } from '../qa/ratelimit';
-import { rlFindingFor } from '../qa/ratelimit';
+import { rlFindingFor, analyzeThrottle, rateLimitStrength } from '../qa/ratelimit';
 
 describe('constants', () => {
   it('caps and the throttle-header set are exposed', () => {
@@ -164,9 +164,64 @@ describe('rlFindingFor', () => {
     expect(f).toMatchObject({ oracle: 'rate-limit', title: 'No rate limiting', path: 'GET /x', source: 'rule' });
     expect(['low', 'medium', 'high', 'critical']).toContain(f.severity);
   });
-  it('returns null when throttling is detected (429 present)', () => {
+  it('returns null when throttling is detected early (429 first → strong)', () => {
     const responses = [{ status: 429, headers: {} }, { status: 200, headers: {} }];
     const f = rlFindingFor(test, responses, { sent: 2 }, 'No rate limiting');
     expect(f).toBeNull();
+  });
+});
+
+describe('analyzeThrottle (strength metrics)', () => {
+  const r = (status, headers = {}) => ({ status, headers, timeMs: 1, error: null });
+  it('counts how many 2xx slipped through before the first 429', () => {
+    const responses = [...Array.from({ length: 5 }, () => r(200)), r(429), r(200)];
+    const a = analyzeThrottle(responses);
+    expect(a.saw429).toBe(true);
+    expect(a.allowedBeforeThrottle).toBe(5);
+    expect(a.firstThrottledIndex).toBe(5);
+    expect(a.completed).toBe(7);
+  });
+  it('reports advertised-only when headers present but no 429', () => {
+    const a = analyzeThrottle([r(200, { 'X-RateLimit-Remaining': '3' }), r(200)]);
+    expect(a.saw429).toBe(false);
+    expect(a.headerHit).toBe(true);
+    expect(a.throttled).toBe(true);
+  });
+});
+
+describe('rateLimitStrength', () => {
+  it('none when nothing throttles', () => {
+    expect(rateLimitStrength(analyzeThrottle([{ status: 200, headers: {} }]))).toBe('none');
+  });
+  it('strong when a 429 fires early', () => {
+    expect(rateLimitStrength(analyzeThrottle([{ status: 429, headers: {} }, { status: 200, headers: {} }]))).toBe('strong');
+  });
+  it('weak when the 429 only fires after a large number of requests slip through', () => {
+    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
+    expect(rateLimitStrength(analyzeThrottle(responses))).toBe('weak');
+  });
+  it('weak when protection is only advertised by headers (no enforced 429)', () => {
+    const responses = Array.from({ length: 50 }, () => ({ status: 200, headers: { 'RateLimit-Remaining': '9' } }));
+    expect(rateLimitStrength(analyzeThrottle(responses))).toBe('weak');
+  });
+});
+
+describe('rlFindingFor — weak protection (opt-in weakTitle)', () => {
+  const test = { method: 'POST', path: '/login', sensitivity: 'sensitive' };
+  it('emits a lower-severity advisory when a 429 only fires very late', () => {
+    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
+    const f = rlFindingFor(test, responses, { sent: 200 }, 'No rate limiting', 'Weak rate limiting');
+    expect(f).toMatchObject({ oracle: 'rate-limit', title: 'Weak rate limiting', path: 'POST /login' });
+    expect(['low', 'medium']).toContain(f.severity);            // not high — it does throttle, just late
+    expect(f.evidence).toMatch(/199/);                          // how many slipped through
+  });
+  it('emits a weak advisory for advertised-only protection (headers, no 429)', () => {
+    const responses = Array.from({ length: 40 }, () => ({ status: 200, headers: { 'RateLimit-Remaining': '5' } }));
+    const f = rlFindingFor(test, responses, { sent: 40 }, 'No rate limiting', 'Weak rate limiting');
+    expect(f.title).toBe('Weak rate limiting');
+  });
+  it('stays backward-compatible: no weak finding when weakTitle is omitted', () => {
+    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
+    expect(rlFindingFor(test, responses, { sent: 200 }, 'No rate limiting')).toBeNull();
   });
 });

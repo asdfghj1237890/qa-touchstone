@@ -1,6 +1,7 @@
 // src/__tests__/bola.test.js
 import { describe, it, expect } from 'vitest';
 import { applyIdLocation, matchesOwner, classifyBola, bolaSeverity, runBola, summarizeBola, negativeControlFailed } from '../qa/bola';
+import { isIdentityKey, controlSuggestsIgnoredId } from '../qa/bola';
 
 const baseReq = () => ({ method: 'GET', url: '/users/42/orders', params: [{ key: 'x', value: '1', on: true }], body: '' });
 
@@ -77,13 +78,32 @@ describe('matchesOwner', () => {
   });
 });
 
-describe('matchesOwner — documented over-confirmation', () => {
-  it('id-echo fires on a low-entropy id incidentally present in the attacker body', () => {
-    // INTENDED over-confirmation: the owner id `1` appears in the attacker's own
-    // response as an unrelated `page`/`total`, not as the owner's object. The
-    // heuristic still matches (errs toward a dismissible false "vuln"); a human
-    // adjudicates via the surfaced drawer evidence.
-    expect(matchesOwner({ status: 200, body: { id: 7, page: 1, total: 1 } }, { status: 200, body: { id: 1 } }, 1)).toBe(true);
+describe('isIdentityKey', () => {
+  it('recognizes identity-ish keys', () => {
+    expect(isIdentityKey('id')).toBe(true);
+    expect(isIdentityKey('userId')).toBe(true);
+    expect(isIdentityKey('owner_id')).toBe(true);
+    expect(isIdentityKey('uuid')).toBe(true);
+    expect(isIdentityKey('accountId')).toBe(true);
+  });
+  it('rejects non-identity keys (page/total/count/etc.)', () => {
+    expect(isIdentityKey('page')).toBe(false);
+    expect(isIdentityKey('total')).toBe(false);
+    expect(isIdentityKey('count')).toBe(false);
+    expect(isIdentityKey('name')).toBe(false);
+  });
+});
+
+describe('matchesOwner — id-echo is gated on identity-like keys (FP fix)', () => {
+  it('does NOT match when a low-entropy owner id appears only at non-identity keys', () => {
+    // The owner id `1` appears in the attacker's OWN object as page/total, never as
+    // an identity field, and the attacker object (id:7) is not the owner's (id:1).
+    // Previously this was an (accepted) false positive; now it is correctly false.
+    expect(matchesOwner({ status: 200, body: { id: 7, page: 1, total: 1 } }, { status: 200, body: { id: 1 } }, 1)).toBe(false);
+  });
+  it('still matches when the owner id is echoed at an identity key (real cross-object read)', () => {
+    expect(matchesOwner({ status: 200, body: { id: 1, name: 'Alice' } }, { status: 200, body: { id: 1 } }, 1)).toBe(true);
+    expect(matchesOwner({ status: 200, body: { userId: 1, data: 'x' } }, { status: 200, body: { userId: 1 } }, 1)).toBe(true);
   });
 });
 
@@ -187,6 +207,24 @@ describe('negativeControlFailed', () => {
   it('does not demote on errors / inconclusive statuses', () => {
     expect(negativeControlFailed(null, deny, true)).toBe(false);
     expect(negativeControlFailed(500, deny, true)).toBe(false);
+  });
+});
+
+describe('controlSuggestsIgnoredId — independent of the attack content oracle', () => {
+  const ownerRef = { status: 200, body: { id: '1', owner: 'alice', secret: 'x' } };
+  it('flags an ignored id: a fake id returns the owner object (same shape, owner id present, synthetic absent)', () => {
+    const control = { status: 200, body: { id: '1', owner: 'alice', secret: 'x' } };
+    expect(controlSuggestsIgnoredId(control, ownerRef, '1', '999999999')).toBe(true);
+  });
+  it('does not flag when the fake id yields a different shape (soft-200 empty)', () => {
+    expect(controlSuggestsIgnoredId({ status: 200, body: {} }, ownerRef, '1', '999999999')).toBe(false);
+  });
+  it('does not flag when the synthetic id actually appears (endpoint used the id → scoped)', () => {
+    const control = { status: 200, body: { id: '999999999', owner: 'nobody', secret: 'x' } };
+    expect(controlSuggestsIgnoredId(control, ownerRef, '1', '999999999')).toBe(false);
+  });
+  it('does not flag when the owner reference is empty (nothing to compare)', () => {
+    expect(controlSuggestsIgnoredId({ status: 200, body: {} }, { status: 200, body: {} }, '1', '999999999')).toBe(false);
   });
 });
 

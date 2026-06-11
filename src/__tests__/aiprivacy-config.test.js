@@ -18,4 +18,17 @@ describe('privacy config', () => {
     localStorage.setItem('qa_ai_privacy', '{not json');
     expect(loadPrivacyCfg().mode).toBe('redacted');
   });
+
+  it('migrates a legacy unversioned cfg: renamed mode values are normalized', () => {
+    // An older build persisted mode='masked'; the three-mode system calls it 'redacted'.
+    localStorage.setItem('qa_ai_privacy', JSON.stringify({ mode: 'masked', lockdown: true }));
+    const c = loadPrivacyCfg();
+    expect(c.mode).toBe('redacted');
+    expect(c.lockdown).toBe(true);
+  });
+
+  it('does not leak the internal schema-version field into the returned cfg', () => {
+    savePrivacyCfg({ mode: 'local' });
+    expect(loadPrivacyCfg()).not.toHaveProperty('__schemaVersion');
+  });
 });

@@ -20,6 +20,22 @@ export const STATUSES: FindingStatus[] = ['open', 'acknowledged'];
 // rate-limit findings already have a stable, specific `oracle`, so reuse it.
 export function ruleIdOf(f: FindingLike | null | undefined): string { return (f && (f.ruleId || f.oracle)) || 'unknown'; }
 
+// Rule-rename registry. A finding's ruleId is part of its fingerprint, so a bare
+// rename (`jwt-in-response` → `jwt`) used to break baseline tracking — the same
+// real issue would diff as one finding "resolved" and a new one "appeared". Map
+// every retired id onto its canonical id here and the fingerprint survives the
+// rename. Canonical ids must stay constant forever (that is the whole point).
+export const RULE_ALIASES: Record<string, string> = {
+  'jwt-in-response': 'jwt',
+  'jwt-leakage': 'jwt',
+  'aws-access-key': 'aws-key',
+  'object-authz-bola': 'object-authz',
+};
+export function canonicalRuleId(id: string | null | undefined): string {
+  const raw = id || 'unknown';
+  return RULE_ALIASES[raw] || raw;
+}
+
 // Per-engine identity component (locale-independent — feeds the fingerprint).
 export function locationOf(f: FindingLike | null | undefined): string {
   const r = (f && f.ref) || {};
@@ -49,10 +65,36 @@ export function fnv1a(str: string): string {
 }
 
 // Stable identity. Excludes title (engine wording drifts) and evidence (volatile,
-// may carry secrets). fpMaterial is kept beside the hash for audit/migration.
+// may carry secrets) from the IDENTITY — those live in detailHash instead. Uses
+// the canonical rule id so a documented rename does not fork the finding.
+// fpMaterial is kept beside the hash for audit/migration.
 export function fingerprint(f: FindingLike | null | undefined): { fp: string; fpMaterial: string } {
-  const material = [f && f.engine, ruleIdOf(f), locationOf(f), normalizePath((f && f.path) || '')].join('|');
+  const material = [f && f.engine, canonicalRuleId(ruleIdOf(f)), locationOf(f), normalizePath((f && f.path) || '')].join('|');
   return { fp: fnv1a(material), fpMaterial: material };
+}
+
+// Content-drift hash over the human-facing detail (title + evidence). NOT part of
+// the identity: two runs of the same finding share one `fp` but their `dfp` moves
+// when the evidence changes (a rotated JWT, a different leaked field). diffDetail
+// uses it to surface "same finding, evidence changed" on a carried row — which a
+// pure identity fingerprint deliberately hides.
+export function detailHash(f: FindingLike | null | undefined): string {
+  return fnv1a([(f && f.title) || '', (f && f.evidence) || ''].join(' '));
+}
+
+// Among carried findings (fp present in both runs), the set of fps whose detail
+// hash changed between baseline and current — i.e. the underlying evidence drifted.
+export function diffDetail(
+  currentItems: Array<Pick<SnapshotItem, 'fp' | 'dfp'>> | null | undefined,
+  baselineItems: Array<Pick<SnapshotItem, 'fp' | 'dfp'>> | null | undefined,
+): Set<string> {
+  const baseDfp = new Map<string, string>();
+  for (const it of (baselineItems || [])) baseDfp.set(it.fp, it.dfp);
+  const changed = new Set<string>();
+  for (const it of (currentItems || [])) {
+    if (baseDfp.has(it.fp) && baseDfp.get(it.fp) !== it.dfp) changed.add(it.fp);
+  }
+  return changed;
 }
 
 // Override wins only if it's a recognized severity; otherwise the original.
@@ -87,6 +129,7 @@ export function snapshotOf(
       locationLabel: locationLabel(f),
       title: (f && f.title) || '',
       evidence: (f && f.evidence) || '',
+      dfp: detailHash(f),
       count: 1,
     });
   }

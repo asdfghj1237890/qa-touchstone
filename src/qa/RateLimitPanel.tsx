@@ -90,7 +90,7 @@ function RateLimitPanel({ identities, rateLimit, setRateLimit, onFindings, resul
         signal: controller.signal,
         onProgress: (done, n) => setResults(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
       });
-      const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+      const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'), t('rl.weakFindingTitle'));
       const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
       setResults(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n as number }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
     } finally { setRunning(null); }

@@ -341,7 +341,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
     const { responses, stats } = await runBurst(test, runner, {
       signal, onProgress: (done, n) => setRes(r => ({ ...r, [test.id]: { ...(r[test.id] || {}), progress: { done, n } } })),
     });
-    const finding = rlFindingFor(test, responses, stats, tr('rl.findingTitle'));
+    const finding = rlFindingFor(test, responses, stats, tr('rl.findingTitle'), tr('rl.weakFindingTitle'));
     const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
     setRes(r => ({ ...r, [test.id]: { progress: { done: stats.sent, n: test.n as number }, stats, verdict, severity: finding ? finding.severity : null, finding } }));
   };
@@ -391,7 +391,7 @@ function SecurityPage({ env = { label: 'None', baseUrl: '' }, vars, cookies = []
         const identity = identities.find(x => x.id === test.identityId) || identities[0];
         const reqRunner = () => qaRunSavedRequest({ id: test.reqId }, { env, vars, cookies: cookies as QaRunCookie[], sslVerify, authOverride: identity && identity.auth, oauthToken: identity && identity._oauthToken });
         const { responses, stats } = await runBurst(test, reqRunner, { signal });
-        const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'));
+        const finding = rlFindingFor(test, responses, stats, t('rl.findingTitle'), t('rl.weakFindingTitle'));
         const verdict = classifyRateLimit(detectThrottleSignal(responses), responses.filter(x => x.status != null).length);
         out[test.id] = { progress: { done: stats.sent, n: test.n }, stats, verdict, severity: finding ? finding.severity : null, finding };
         setRlResults({ ...out });

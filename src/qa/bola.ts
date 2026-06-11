@@ -90,6 +90,45 @@ function scalarLeaves(body: unknown): Set<string> {
   return set;
 }
 
+// Structural signature: the set of normalized key-paths (array indices collapsed
+// to `[]`). Two bodies with the same signature have the same SHAPE regardless of
+// values — used by the negative control to decide "same object came back".
+function structuralSignature(body: unknown): Set<string> {
+  const sig = new Set<string>();
+  if (body != null && typeof body === 'object') {
+    walkJson(body, (p) => { sig.add(p.replace(/\[\d+\]/g, '[]')); });
+  }
+  return sig;
+}
+
+function setEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+const IDENTITY_KEYS = new Set(['id', 'uuid', 'guid', 'oid', 'pk', 'key', 'ref', 'owner', 'ownerid', 'userid', 'accountid', 'customerid', 'objectid']);
+// True for keys that name an object identity (id, userId, owner_id, uuid, …). An
+// id-echo only confirms cross-object access when the owner id lands at one of
+// these — a bare `1` showing up as page/total/count is not evidence of a read.
+export function isIdentityKey(key: string | null | undefined): boolean {
+  const orig = String(key || '');
+  if (!orig) return false;
+  if (IDENTITY_KEYS.has(orig.toLowerCase())) return true;
+  if (/(^|[_-])id$/i.test(orig)) return true;   // _id / -id / trailing id
+  if (/[a-z]Id$/.test(orig)) return true;        // camelCase userId / orderId
+  return false;
+}
+
+function idEchoedAtIdentityKey(body: unknown, idv: string): boolean {
+  let hit = false;
+  walkJson(body, (_p, k, v) => {
+    if (hit) return;
+    if (k && isIdentityKey(k) && v != null && typeof v !== 'object' && String(v) === idv) hit = true;
+  });
+  return hit;
+}
+
 // True when the attacker's response actually reflects the owner's object:
 // (a) the owner id value is echoed in the body, or
 // (b) scalar-leaf Jaccard overlap with the owner reference >= MATCH_THRESHOLD.
@@ -105,7 +144,9 @@ export function matchesOwner(attackResp: QaResponse | null | undefined, ownerRef
   const aBody = attackResp && attackResp.body;
   const idv = String(ownerIdValue);
   if (aBody != null && typeof aBody === 'object') {
-    if (scalarLeaves(aBody).has(idv)) return true;
+    // id-echo only counts at an identity-like key, so a low-entropy id (`1`)
+    // sitting in the attacker's OWN object as page/total/count is not a match.
+    if (idEchoedAtIdentityKey(aBody, idv)) return true;
   } else if (typeof aBody === 'string') {
     if (aBody.includes(idv)) return true;
   }
@@ -141,6 +182,36 @@ export function negativeControlFailed(status: number | null | undefined, denySet
   if (deny.includes(status)) return false;
   if (!(status >= 200 && status <= 299)) return false;
   return matched === true;
+}
+
+// Independent negative-control oracle. Distinct from the attack-pass content
+// match (matchesOwner) on purpose — using the same heuristic to both confirm a
+// finding AND to validate the control is circular. Here the question is narrow:
+// "did a FAKE id return the OWNER's own object?", answered structurally —
+//   (1) the control body has the SAME shape as the owner reference,
+//   (2) the synthetic id does NOT appear (so the endpoint did not actually use it),
+//   (3) the owner's real id value DOES appear (so it really is the owner's object).
+// All three ⇒ the endpoint ignores the id ⇒ it is not object-scoped.
+export function controlSuggestsIgnoredId(
+  controlResp: QaResponse | null | undefined,
+  ownerRef: QaResponse | null | undefined,
+  ownerIdValue: unknown,
+  syntheticId: unknown,
+): boolean {
+  const c = controlResp && controlResp.body;
+  const o = ownerRef && ownerRef.body;
+  const idv = String(ownerIdValue);
+  const synth = String(syntheticId);
+  if (typeof c === 'string' && typeof o === 'string') {
+    return c === o && c.includes(idv) && !c.includes(synth);
+  }
+  if (c == null || o == null || typeof c !== 'object' || typeof o !== 'object') return false;
+  const oSig = structuralSignature(o);
+  if (oSig.size === 0) return false;
+  if (!setEqual(structuralSignature(c), oSig)) return false;
+  const cLeaves = scalarLeaves(c);
+  if (cLeaves.has(synth)) return false;
+  return cLeaves.has(idv);
 }
 
 export function bolaSeverity(method: string | null | undefined, verdict: BolaVerdict | string | null | undefined): Severity | null {
@@ -211,7 +282,9 @@ export async function runBola(
         // using the same content oracle as the attack pass (real owner id value).
         const ref = reference[controlOwner.id];
         const refOk = ref && typeof ref.status === 'number' && ref.status >= 200 && ref.status <= 299;
-        const matched = refOk ? matchesOwner(resp, ref.response, sampleVal) : false;
+        // Independent structural oracle (NOT the attack-pass matchesOwner) to break
+        // the circularity of confirming and validating with the same heuristic.
+        const matched = refOk ? controlSuggestsIgnoredId(resp, ref.response, sampleVal, synthetic) : false;
         control = { status: respStatus(resp), matched, response: resp || null, syntheticId: synthetic, error: null };
       } catch (e) {
         control = { status: null, matched: false, response: null, syntheticId: synthetic, error: errStr(e) };

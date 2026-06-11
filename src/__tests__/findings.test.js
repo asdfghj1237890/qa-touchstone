@@ -123,7 +123,56 @@ describe('snapshotOf', () => {
     const snap = snapshotOf([matrixF()], lc(), {});
     const item = snap.items[0];
     expect(Object.keys(item).sort()).toEqual(
-      ['count','effectiveSeverity','engine','evidence','fp','locationLabel','path','ruleId','title']);
+      ['count','dfp','effectiveSeverity','engine','evidence','fp','locationLabel','path','ruleId','title']);
+  });
+});
+
+import { canonicalRuleId, detailHash, diffDetail, RULE_ALIASES } from '../qa/findings';
+
+describe('canonicalRuleId — rule-rename robustness', () => {
+  it('returns the id unchanged when it has no alias', () => {
+    expect(canonicalRuleId('jwt')).toBe('jwt');
+    expect(canonicalRuleId('object-authz')).toBe('object-authz');
+  });
+  it('maps a renamed rule id onto its canonical id via the alias registry', () => {
+    expect(RULE_ALIASES['jwt-in-response']).toBe('jwt');
+    expect(canonicalRuleId('jwt-in-response')).toBe('jwt');
+  });
+});
+
+describe('fingerprint — survives a documented rule rename', () => {
+  it('a renamed rule keeps the same fingerprint as its canonical id (baseline diff no longer breaks)', () => {
+    const canonical = fingerprint(matrixF({ ruleId: 'jwt' })).fp;
+    const renamed = fingerprint(matrixF({ ruleId: 'jwt-in-response' })).fp;
+    expect(renamed).toBe(canonical);
+  });
+  it('still keeps fpMaterial identical for a non-aliased id (no baseline invalidation)', () => {
+    expect(fingerprint(matrixF()).fpMaterial).toBe('matrix|jwt|GET /me @admin|data.token');
+  });
+});
+
+describe('detailHash — title + evidence drift dimension', () => {
+  it('changes when evidence changes (e.g. a rotated JWT)', () => {
+    expect(detailHash(matrixF({ evidence: 'eyJ…aaa' }))).not.toBe(detailHash(matrixF({ evidence: 'eyJ…bbb' })));
+  });
+  it('changes when the title changes', () => {
+    expect(detailHash(matrixF({ title: 'A' }))).not.toBe(detailHash(matrixF({ title: 'B' })));
+  });
+  it('is stable for identical title + evidence', () => {
+    expect(detailHash(matrixF())).toBe(detailHash(matrixF()));
+  });
+});
+
+describe('diffDetail — carried findings whose evidence drifted', () => {
+  it('flags a carried fp whose detail hash changed, but not an unchanged one', () => {
+    const cur = [{ fp: 'a', dfp: 'x2' }, { fp: 'b', dfp: 'y' }];
+    const base = [{ fp: 'a', dfp: 'x1' }, { fp: 'b', dfp: 'y' }];
+    const changed = diffDetail(cur, base);
+    expect(changed.has('a')).toBe(true);   // same finding, evidence rotated
+    expect(changed.has('b')).toBe(false);  // unchanged
+  });
+  it('does not flag a brand-new finding (no baseline counterpart)', () => {
+    expect(diffDetail([{ fp: 'n', dfp: 'z' }], []).has('n')).toBe(false);
   });
 });
 

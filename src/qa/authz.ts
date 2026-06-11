@@ -45,6 +45,90 @@ export function classifyOutcome(status: number | null | undefined, denySet: numb
   return 'other';
 }
 
+// ── Soft-deny detection ──────────────────────────────────────────────────────
+// Many real APIs return HTTP 200 while *denying* the request in the body
+// ("soft 403"): `{ "error": "Access denied" }`, `{ "status": "forbidden" }`,
+// etc. A status-only oracle reads those as `allowed`, which both raises false
+// `vuln`s on deny-cells and, worse, hides a broken allow-cell behind a false
+// `pass`. detectSoftDeny inspects a body for a denial/error marker so the
+// matrix can classify it correctly.
+//
+// Precision matters more than recall here (a noisy security scanner gets muted):
+//  - Machine status/code fields may carry a *bare* token ("forbidden").
+//  - Human prose fields require an unambiguous *phrase* so "Forbidden City" in a
+//    title is not mistaken for an authorization denial.
+const DENY_TOKEN_RE = /^(?:access[_\s-]?denied|denied|forbidden|unauthoriz(?:ed|ation)|unauthoris(?:ed|ation)|permission[_\s-]?denied|not[_\s-]?allowed|insufficient[_\s-]?(?:scope|privilege|permission|role)|login[_\s-]?required|auth(?:entication)?[_\s-]?required)$/i;
+const DENY_PHRASE_RE = /\b(?:access denied|permission denied|authoriz(?:ation|ed) denied|not authoriz(?:ed|ation)|unauthoriz(?:ed|ation)|unauthoris(?:ed|ation)|you (?:do not|don't) have permission|insufficient (?:permission|permissions|privilege|privileges|scope|scopes|role)|must be logged in|login required|authentication required|not allowed to)\b/i;
+const STATUS_FIELD_KEYS = new Set(['status', 'code', 'result', 'outcome', 'errorcode', 'error_code', 'reason_code']);
+const PROSE_FIELD_KEYS = new Set(['message', 'msg', 'detail', 'details', 'title', 'description', 'reason', 'error_description', 'errordescription']);
+const ERROR_MARKER_KEYS = new Set(['error', 'errors', 'errorcode', 'error_code']);
+
+function valueDenies(key: string, value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const v = value.trim();
+  if (!v) return false;
+  if (DENY_PHRASE_RE.test(v)) return true;
+  // `error` is treated as a status field too: `{ "error": "forbidden" }`.
+  if ((STATUS_FIELD_KEYS.has(key) || key === 'error') && DENY_TOKEN_RE.test(v)) return true;
+  return false;
+}
+
+function scanForDenyPhrase(node: unknown, depth: number): boolean {
+  if (node == null || depth > 6) return false;
+  if (Array.isArray(node)) return node.some((v) => scanForDenyPhrase(v, depth + 1));
+  if (typeof node !== 'object') return false;
+  for (const [rawKey, value] of Object.entries(node as Record<string, unknown>)) {
+    const key = rawKey.toLowerCase();
+    if ((STATUS_FIELD_KEYS.has(key) || PROSE_FIELD_KEYS.has(key) || key === 'error') && valueDenies(key, value)) return true;
+    if (value && typeof value === 'object' && scanForDenyPhrase(value, depth + 1)) return true;
+  }
+  return false;
+}
+
+function isTruthyMarker(v: unknown): boolean {
+  if (v == null || v === false || v === '') return false;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === 'object') return Object.keys(v as object).length > 0;
+  if (typeof v === 'number') return v !== 0;
+  return true; // non-empty string or true
+}
+
+function hasErrorMarker(body: Record<string, unknown>): boolean {
+  for (const [rawKey, value] of Object.entries(body)) {
+    if (ERROR_MARKER_KEYS.has(rawKey.toLowerCase()) && isTruthyMarker(value)) return true;
+  }
+  return false;
+}
+
+export type SoftOutcome = 'denied' | 'error' | null;
+// Inspect a response body for an in-band denial. Returns:
+//  'denied' — an unambiguous authorization-denial marker is present (soft 403)
+//  'error'  — a generic error marker is present but no auth phrase (ambiguous)
+//  null     — looks like a genuine success (caller keeps the status-based outcome)
+export function detectSoftDeny(resp: QaResponse | null | undefined): SoftOutcome {
+  const body = resp && resp.body;
+  if (body == null) return null;
+  if (typeof body === 'string') return DENY_PHRASE_RE.test(body) || DENY_TOKEN_RE.test(body.trim()) ? 'denied' : null;
+  if (typeof body !== 'object') return null;
+  if (scanForDenyPhrase(body, 0)) return 'denied';
+  if (hasErrorMarker(body as Record<string, unknown>)) return 'error';
+  return null;
+}
+
+// Body-aware authorization outcome. Trusts a real deny status, but when the
+// status is a 2xx it consults the body: a soft-403 becomes `denied`, a generic
+// 200-with-error becomes `other` (inconclusive — not a clean grant), and a plain
+// success stays `allowed`.
+export function classifyResponseOutcome(resp: QaResponse | null | undefined, denySet: number[] = DEFAULT_DENY_SET): Outcome {
+  const status = resp && typeof resp.status === 'number' ? resp.status : null;
+  const base = classifyOutcome(status, denySet);
+  if (base !== 'allowed') return base;
+  const soft = detectSoftDeny(resp);
+  if (soft === 'denied') return 'denied';
+  if (soft === 'error') return 'other';
+  return 'allowed';
+}
+
 // Compare an expectation against an outcome. `deny` that comes back `allowed`
 // is the access-control hole we flag as a vulnerability.
 export function verdictFor(expectation: Expectation, outcome: Outcome): Verdict | null {
@@ -132,7 +216,8 @@ export async function runMatrix(
         const resp = wrapped ? out.response : out;
         const request = wrapped ? (out.request || null) : null;
         const status = resp && typeof resp.status === 'number' ? resp.status : null;
-        const outcome = classifyOutcome(status, denySet);
+        // Body-aware: a 200 that denies in-band (soft 403) must not read as allowed.
+        const outcome = classifyResponseOutcome(resp || null, denySet);
         cell = { status, outcome, verdict: verdictFor(expectation, outcome), timeMs: (resp && resp.time) || 0, request, response: resp || null, error: null };
       } catch (e: any) {
         cell = { status: null, outcome: 'other', verdict: 'inconclusive', timeMs: 0, request: null, response: null, error: String((e && e.message) || e) };

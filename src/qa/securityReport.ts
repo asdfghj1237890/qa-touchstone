@@ -142,12 +142,68 @@ export function sevToSarifLevel(sev: string | null | undefined): 'error' | 'warn
 }
 export function sarifBaselineState(presence: string | null | undefined): 'unchanged' | 'new' { return presence === 'carried' ? 'unchanged' : 'new'; }
 
+const SARIF_HELP_BASE = 'https://github.com/asdfghj1237890/qa-touchstone#security-rules';
+
+// Static rule catalog → human name, descriptions, and GitHub/OWASP/CWE tags.
+// Keyed by the finding's ruleId/oracle. Unknown ids are synthesized at runtime
+// from the finding itself so a custom rule still yields a usable rule object.
+const SARIF_RULE_META: Record<string, { name: string; short: string; full?: string; tags: string[] }> = {
+  jwt: { name: 'JwtInResponse', short: 'JWT present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
+  'aws-key': { name: 'AwsAccessKeyId', short: 'AWS access key id present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
+  'private-key': { name: 'PrivateKeyMaterial', short: 'Private key material present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-312'] },
+  'secret-name': { name: 'SecretNamedField', short: 'A secret-named field (password/token/…) is present in a response', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
+  email: { name: 'EmailAddressPii', short: 'Email address (PII) present in a response body', tags: ['security', 'privacy', 'external/cwe/cwe-359'] },
+  card: { name: 'CreditCardNumberPii', short: 'Credit-card-like (Luhn-valid) number present in a response', tags: ['security', 'privacy', 'external/cwe/cwe-359'] },
+  internal: { name: 'InternalDebugField', short: 'Internal/debug field (stack trace, SQL, …) exposed in a response', tags: ['security', 'external/cwe/cwe-200'] },
+  'schema-drift': { name: 'SchemaDrift', short: 'Response shape drifted from the expected schema', tags: ['quality', 'reliability'] },
+  'schema-conformance:type': { name: 'SchemaConformanceType', short: 'Response field has the wrong type for the declared schema', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
+  'schema-conformance:required': { name: 'SchemaConformanceRequired', short: 'Response is missing a required property from the declared schema', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
+  'schema-conformance:enum': { name: 'SchemaConformanceEnum', short: 'Response value is outside the declared enum', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
+  'schema-conformance:format': { name: 'SchemaConformanceFormat', short: 'Response value does not match the declared format', tags: ['quality', 'reliability'] },
+  'object-authz': { name: 'BrokenObjectLevelAuthorization', short: 'BOLA/IDOR: an identity reached another object owner’s data', tags: ['security', 'external/cwe/cwe-639', 'OWASP-API1'] },
+  'rate-limit': { name: 'MissingRateLimit', short: 'No rate limiting / throttling observed under a request burst', tags: ['security', 'external/cwe/cwe-770', 'OWASP-API4'] },
+  'access-control': { name: 'BrokenFunctionLevelAuthorization', short: 'RBAC/BFLA: an unauthorized identity was allowed', tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'] },
+  bfla: { name: 'BrokenFunctionLevelAuthorization', short: 'BFLA: a non-privileged identity invoked a privileged function', tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'] },
+  'fuzz:server-error': { name: 'FuzzServerError', short: 'A boundary/injection payload caused a 5xx server error', tags: ['security', 'reliability', 'external/cwe/cwe-20'] },
+  'fuzz:error-leak': { name: 'FuzzErrorLeak', short: 'A fuzz payload leaked a stack trace / internal error', tags: ['security', 'external/cwe/cwe-209'] },
+  'fuzz:reflected': { name: 'FuzzReflectedInput', short: 'A dangerous fuzz payload was reflected unescaped in the response', tags: ['security', 'external/cwe/cwe-79'] },
+};
+
+// GitHub code scanning reads properties['security-severity'] (a "0.0".."10.0"
+// CVSS-ish string) to rank alerts; map our severities onto that band.
+function securitySeverityScore(sev: Severity | string | null | undefined): string {
+  switch (sev) {
+    case 'critical': return '9.5';
+    case 'high': return '7.5';
+    case 'medium': return '5.0';
+    case 'low': return '3.0';
+    default: return '1.0';
+  }
+}
+
+function pascalCase(id: string): string {
+  return String(id || 'rule').split(/[^a-zA-Z0-9]+/).filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') || 'Rule';
+}
+
+// Turn a finding's human location label into a stable, URI-safe artifact path so
+// SARIF consumers that require a physicalLocation can anchor the result.
+export function locationToUri(location: string | null | undefined): string {
+  const raw = String(location || 'finding').trim();
+  const slug = raw.replace(/^([A-Z]+)\s+/, '$1/').replace(/\s*·\s*/g, '/').replace(/[^a-zA-Z0-9/_.{}@:-]+/g, '-').replace(/^-+|-+$/g, '');
+  return 'security/' + (slug || 'finding');
+}
+
 /** SARIF 2.1.0 result（最小子集）。 */
 type SarifResult = {
   ruleId: string;
+  ruleIndex: number;
   level: string;
   message: { text: string };
-  locations: Array<{ logicalLocations: Array<{ fullyQualifiedName: string; kind: string }> }>;
+  locations: Array<{
+    physicalLocation: { artifactLocation: { uri: string }; region: { startLine: number } };
+    logicalLocations: Array<{ fullyQualifiedName: string; kind: string }>;
+  }>;
   partialFingerprints: { qaFingerprint: string };
   baselineState: string;
   properties: Record<string, unknown>;
@@ -156,12 +212,46 @@ type SarifResult = {
 
 export function reportToSarif(model: ReportModel): string {
   const current = model.findings.filter(f => f.presence !== 'resolved');
-  const rules = [...new Set(current.map(f => f.ruleId))].map(id => ({ id }));
+
+  // Build the rule catalog: one entry per distinct ruleId, enriched with metadata
+  // and the worst severity seen for that rule (drives level + security-severity).
+  const ruleIds = [...new Set(current.map(f => f.ruleId))];
+  const ruleIndex: Record<string, number> = {};
+  const worstSev: Record<string, Severity> = {};
+  for (const f of current) {
+    const cur = worstSev[f.ruleId];
+    if (!cur || SEVERITY_ORDER.indexOf(f.severity) > SEVERITY_ORDER.indexOf(cur)) worstSev[f.ruleId] = f.severity;
+  }
+  const rules = ruleIds.map((id, i) => {
+    ruleIndex[id] = i;
+    const meta = SARIF_RULE_META[id];
+    const sample = current.find(f => f.ruleId === id);
+    const name = meta ? meta.name : pascalCase(id);
+    const short = meta ? meta.short : ((sample && sample.title) || id);
+    const tags = meta ? meta.tags : ['security'];
+    const sev = worstSev[id];
+    return {
+      id,
+      name,
+      shortDescription: { text: short },
+      fullDescription: { text: (meta && meta.full) || short },
+      helpUri: `${SARIF_HELP_BASE}-${id}`,
+      help: { text: `${short}\n\nDetected by QA Touchstone (engine: ${(sample && sample.engine) || 'security'}).` },
+      defaultConfiguration: { level: sevToSarifLevel(sev) },
+      properties: { tags, 'security-severity': securitySeverityScore(sev) },
+    };
+  });
+
   const results = current.map(f => {
     const r: SarifResult = {
-      ruleId: f.ruleId, level: sevToSarifLevel(f.severity),
+      ruleId: f.ruleId,
+      ruleIndex: ruleIndex[f.ruleId],
+      level: sevToSarifLevel(f.severity),
       message: { text: `${f.title}${f.evidence ? ' — ' + f.evidence : ''} at ${f.location}` },
-      locations: [{ logicalLocations: [{ fullyQualifiedName: f.location, kind: 'member' }] }],
+      locations: [{
+        physicalLocation: { artifactLocation: { uri: locationToUri(f.location) }, region: { startLine: 1 } },
+        logicalLocations: [{ fullyQualifiedName: f.location || f.ruleId, kind: 'member' }],
+      }],
       partialFingerprints: { qaFingerprint: f.fp },
       baselineState: sarifBaselineState(f.presence),
       properties: { engine: f.engine, severity: f.severity, owner: f.owner, status: f.status, count: f.count },

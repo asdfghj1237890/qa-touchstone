@@ -23,13 +23,20 @@ fn resolve_credentials(
         .find(|c| c.get("id").and_then(|i| i.as_str()) == Some(api_config_id))?;
     let typ = sel.get("type").and_then(|t| t.as_str()).unwrap_or("file");
     if typ == "manual" {
-        let c = sel.get("credentials")?;
-        let ak = c.get("accessKeyId").and_then(|x| x.as_str()).unwrap_or("");
-        let sk = c.get("secretAccessKey").and_then(|x| x.as_str()).unwrap_or("");
-        if !ak.is_empty() && !sk.is_empty() {
-            return Some(Credentials { access_key_id: ak.into(), secret_access_key: sk.into(), session_token: None });
-        }
-        return None;
+        let c = sel.get("credentials");
+        let ak = c.and_then(|c| c.get("accessKeyId")).and_then(|x| x.as_str()).unwrap_or("");
+        let inline_sk = c.and_then(|c| c.get("secretAccessKey")).and_then(|x| x.as_str()).unwrap_or("");
+        // Secret resolution: a legacy inline secret (plaintext in config.json) still
+        // works; otherwise the secret comes from the OS keychain, keyed by profile id.
+        let sk: Option<String> = if !inline_sk.is_empty() {
+            Some(inline_sk.to_string())
+        } else {
+            crate::secrets::get_secret(api_config_id).ok().flatten().filter(|s| !s.is_empty())
+        };
+        return match (ak.is_empty(), sk) {
+            (false, Some(sk)) => Some(Credentials { access_key_id: ak.into(), secret_access_key: sk, session_token: None }),
+            _ => None,
+        };
     }
     let path = sel.get("path").and_then(|p| p.as_str())?;
     let content = std::fs::read_to_string(path).ok()?;
@@ -63,6 +70,39 @@ fn method_allows_body(method: &str) -> bool {
     !matches!(method, "GET" | "HEAD")
 }
 
+/// link-local 雲端 metadata 端點（AWS/GCP/Azure IMDS、ECS task metadata、阿里雲）。
+/// 命中這些位址＝可能拿到 instance role。
+fn is_cloud_metadata_host(host: &str) -> bool {
+    let h = host.trim().trim_start_matches('[').trim_end_matches(']').to_ascii_lowercase();
+    matches!(
+        h.as_str(),
+        "169.254.169.254"            // AWS / GCP / Azure IMDS
+            | "169.254.170.2"        // ECS task metadata
+            | "100.100.100.200"      // Alibaba Cloud
+            | "metadata.google.internal"
+            | "metadata.goog"
+    ) || h.starts_with("fd00:ec2:")  // AWS IPv6 IMDS
+}
+
+/// 帶 AWS 憑證對 metadata endpoint 發「已簽名」請求，會把使用者/instance 的憑證
+/// 簽進去並可能外洩 —— 這個特定組合一律擋。打 localhost / 私有 IP（無憑證）仍是
+/// API 測試工具的正常功能，不受影響。
+fn metadata_request_blocked(host: &str, has_aws_creds: bool) -> bool {
+    has_aws_creds && is_cloud_metadata_host(host)
+}
+
+/// 解析 TLS 驗證策略：停用憑證驗證＝接受 MITM 風險，必須由前端帶明確的確認旗標
+/// （sslVerifyConfirmed）才放行，否則拒絕請求，逼出一個確認對話框。
+fn resolve_tls_verification(ssl_verify: Option<bool>, confirmed: Option<bool>) -> Result<bool, String> {
+    match ssl_verify {
+        Some(false) if confirmed != Some(true) => Err(
+            "TLS verification can only be disabled with explicit confirmation (sslVerifyConfirmed).".into(),
+        ),
+        Some(false) => Ok(false),
+        _ => Ok(true),
+    }
+}
+
 fn rebase_url_for_environment(raw_url: &str, env: &Value) -> String {
     let base_url = str_field(env, "baseUrl").unwrap_or("");
     if base_url.is_empty() {
@@ -86,6 +126,7 @@ pub async fn execute_postman_request(
     selected_environment: Option<Value>,
     is_file_transfer_collection: Option<bool>,
     ssl_verify: Option<bool>,
+    ssl_verify_confirmed: Option<bool>,
 ) -> Value {
     let req = match request_details.get("request") {
         Some(r) if r.is_object() => r.clone(),
@@ -168,6 +209,16 @@ pub async fn execute_postman_request(
         .as_deref()
         .and_then(|id| resolve_credentials(&load_config_raw(&app), id, selected_profile.as_deref()));
 
+    // SSRF guard: never send an AWS-signed request to a cloud metadata endpoint —
+    // it would sign the user's/instance's credentials into a request to an address
+    // that hands back instance-role credentials. Unsigned localhost/private testing
+    // is unaffected.
+    if metadata_request_blocked(&host, credentials.is_some()) {
+        return err(format!(
+            "Refusing to send an AWS-signed request to a cloud metadata endpoint ({host}). Remove the credential profile to target it without signing."
+        ));
+    }
+
     let mut out_headers: BTreeMap<String, String> = BTreeMap::new();
     out_headers.insert("Accept".to_string(), "*/*".to_string());
     out_headers.insert("Content-Type".to_string(), content_type.clone());
@@ -226,12 +277,18 @@ pub async fn execute_postman_request(
     // disable verification when the renderer explicitly says so. Auto-redirect
     // is disabled so we can manually follow each 30x hop and collect every
     // Set-Cookie along the way (browsers + Postman do the same).
-    let verify = ssl_verify.unwrap_or(true);
+    // Disabling TLS verification now requires an explicit confirmation flag from
+    // the renderer (sslVerifyConfirmed) — a silent ssl_verify=false is rejected so
+    // the UI must surface a confirm dialog before accepting MITM exposure.
+    let verify = match resolve_tls_verification(ssl_verify, ssl_verify_confirmed) {
+        Ok(v) => v,
+        Err(e) => return err(e),
+    };
     if !verify {
         // 審計線索：停用憑證驗證等於接受 MITM 風險，每次發生都留下紀錄
         // （只記 host，不記完整 URL / query，避免把敏感參數寫進 log）。
         let host = parsed.host_str().unwrap_or("<unknown>");
-        log::warn!("TLS verification DISABLED for this request (host: {host})");
+        log::warn!("TLS verification DISABLED for this request (host: {host}) — confirmed by user");
     }
     let client_builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(15))
@@ -449,5 +506,33 @@ mod tests {
         assert!(method_allows_body("DELETE"));
         assert!(!method_allows_body("GET"));
         assert!(!method_allows_body("HEAD"));
+    }
+
+    #[test]
+    fn detects_cloud_metadata_hosts() {
+        for h in ["169.254.169.254", "169.254.170.2", "100.100.100.200", "metadata.google.internal", "fd00:ec2::254"] {
+            assert!(is_cloud_metadata_host(h), "expected {h} to be a metadata host");
+        }
+        assert!(is_cloud_metadata_host("[fd00:ec2::254]")); // bracketed IPv6
+        for h in ["example.com", "127.0.0.1", "localhost", "169.254.1.1", "10.0.0.5"] {
+            assert!(!is_cloud_metadata_host(h), "expected {h} NOT to be a metadata host");
+        }
+    }
+
+    #[test]
+    fn metadata_blocked_only_with_aws_creds() {
+        assert!(metadata_request_blocked("169.254.169.254", true));     // creds + metadata → block
+        assert!(!metadata_request_blocked("169.254.169.254", false));   // no creds → IMDS allowed (no signing exfil)
+        assert!(!metadata_request_blocked("127.0.0.1", true));          // localhost testing stays a feature
+        assert!(!metadata_request_blocked("api.example.com", true));
+    }
+
+    #[test]
+    fn tls_disable_requires_explicit_confirmation() {
+        assert_eq!(resolve_tls_verification(None, None), Ok(true));            // default: verify
+        assert_eq!(resolve_tls_verification(Some(true), None), Ok(true));      // verify on
+        assert_eq!(resolve_tls_verification(Some(false), Some(true)), Ok(false)); // confirmed off
+        assert!(resolve_tls_verification(Some(false), None).is_err());         // off without confirm → rejected
+        assert!(resolve_tls_verification(Some(false), Some(false)).is_err());
     }
 }

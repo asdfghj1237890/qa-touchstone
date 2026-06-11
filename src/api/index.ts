@@ -50,6 +50,10 @@ export const api = {
   saveConfig: (config: Record<string, unknown>): Promise<unknown> => invoke('save_config', { config }),
   getApiCredentialConfigs: (): Promise<unknown> => invoke('get_api_credential_configs'),
   setApiCredentialConfigs: (configs: unknown[]): Promise<unknown> => invoke('set_api_credential_configs', { apiConfigs: configs }),
+  // --- AWS 秘密金鑰：存進 OS keychain（非 config.json 明文）---
+  setAwsSecret: (id: string, secret: string): Promise<unknown> => invoke('set_aws_secret', { id, secret }),
+  hasAwsSecret: (id: string): Promise<boolean> => invoke('has_aws_secret', { id }),
+  deleteAwsSecret: (id: string): Promise<unknown> => invoke('delete_aws_secret', { id }),
   selectDirectory: (): Promise<string | string[] | null> => openDialog({ directory: true, multiple: false }),
   selectFile: (): Promise<string | string[] | null> => openDialog({ directory: false, multiple: false }),
 

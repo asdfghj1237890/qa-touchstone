@@ -2,10 +2,14 @@
 // Fires a bounded real burst at an endpoint and reports whether throttling
 // engages. The ABSENCE of a throttle signal is the finding. UI in RateLimitPanel.
 import './setup';
-import type { BurstResponse, BurstStats, Finding, QaResponse, RateLimitTest, RateLimitVerdict, Severity, ThrottleSignal } from './types';
+import type { BurstResponse, BurstStats, Finding, QaResponse, RateLimitTest, RateLimitVerdict, Severity, ThrottleSignal, ThrottleStrength } from './types';
 
 export const MAX_N = 200;
 export const MAX_CONCURRENCY = 10;
+// A 429 only counts as "strong" protection if it fires before this many requests
+// slip through — absolute floor or this fraction of the burst, whichever is larger.
+export const WEAK_AFTER_ABS = 20;
+export const WEAK_AFTER_FRAC = 0.5;
 
 // Lowercased header names that indicate a rate limiter is present.
 export const THROTTLE_HEADERS = [
@@ -37,6 +41,60 @@ export function classifyRateLimit(signal: { throttled?: boolean } | null | undef
   if (signal && signal.throttled) return 'pass';
   if (completedCount > 0) return 'vuln';
   return 'inconclusive';
+}
+
+/** analyzeThrottle 的量化結果（detectThrottleSignal 的超集，形狀獨立以免破壞契約）。 */
+export type ThrottleAnalysis = {
+  completed: number;
+  ok2xx: number;
+  c429: number;
+  saw429: boolean;
+  headerHit: boolean;
+  throttled: boolean;
+  firstThrottledIndex: number;
+  allowedBeforeThrottle: number;
+};
+
+// Quantify throttling rather than just detecting its presence: how many requests
+// slipped through before the limiter engaged, and whether it actually enforced
+// (a real 429) or is merely advertised by headers. This is what lets the caller
+// distinguish "throttled after 2 requests" from "throttled after 199".
+export function analyzeThrottle(
+  responses: Array<{ status?: number | null; headers?: Record<string, unknown> | null } | null | undefined> | null | undefined,
+): ThrottleAnalysis {
+  let completed = 0, ok2xx = 0, c429 = 0, allowedBeforeThrottle = 0;
+  let saw429 = false, headerHit = false, firstThrottledIndex = -1, idx = -1;
+  for (const r of responses || []) {
+    if (!r) continue;
+    idx++;
+    const st = r.status;
+    if (typeof st === 'number' && st > 0) completed++;
+    if (st === 429) {
+      c429++;
+      if (!saw429) { saw429 = true; firstThrottledIndex = idx; }
+    } else if (typeof st === 'number' && st >= 200 && st <= 299) {
+      ok2xx++;
+      if (!saw429) allowedBeforeThrottle++;
+    }
+    const hdrs = r.headers || {};
+    for (const k of Object.keys(hdrs)) {
+      if (THROTTLE_HEADERS.includes(k.toLowerCase())) { headerHit = true; break; }
+    }
+  }
+  return { completed, ok2xx, c429, saw429, headerHit, throttled: saw429 || headerHit, firstThrottledIndex, allowedBeforeThrottle };
+}
+
+// Grade the protection: none (no signal), strong (a 429 fired early), or weak
+// (a 429 only after many requests slipped through, or headers with no enforced
+// 429 at all). The weak grade is the whole point — a single late 429 is not the
+// same as real protection, and a status-only "pass" hides that.
+export function rateLimitStrength(a: ThrottleAnalysis | null | undefined): ThrottleStrength {
+  if (!a || (!a.saw429 && !a.headerHit)) return 'none';
+  if (a.saw429) {
+    const budget = Math.max(WEAK_AFTER_ABS, Math.ceil(a.completed * WEAK_AFTER_FRAC));
+    return a.allowedBeforeThrottle <= budget ? 'strong' : 'weak';
+  }
+  return 'weak'; // advertised by headers but never enforced in this burst
 }
 
 export function rateLimitSeverity(sensitivity: string | null | undefined, verdict: string | null | undefined): Severity | null {
@@ -98,7 +156,10 @@ export async function runBurst(
 }
 
 function computeStats(responses: BurstResponse[]): BurstStats {
-  const s: BurstStats = { sent: responses.length, ok2xx: 0, c429: 0, c4xx: 0, c5xx: 0, net: 0, avgMs: 0, maxMs: 0, throttled: false, headerHit: false };
+  const s: BurstStats = {
+    sent: responses.length, ok2xx: 0, c429: 0, c4xx: 0, c5xx: 0, net: 0, avgMs: 0, maxMs: 0,
+    throttled: false, headerHit: false, firstThrottledIndex: -1, allowedBeforeThrottle: 0, strength: 'none',
+  };
   let totMs = 0;
   for (const r of responses) {
     const st = r.status;
@@ -110,28 +171,52 @@ function computeStats(responses: BurstResponse[]): BurstStats {
     totMs += r.timeMs || 0;
     if ((r.timeMs || 0) > s.maxMs) s.maxMs = r.timeMs || 0;
   }
-  const sig = detectThrottleSignal(responses);
-  s.throttled = sig.throttled;
-  s.headerHit = sig.headerHit;
+  const a = analyzeThrottle(responses);
+  s.throttled = a.throttled;
+  s.headerHit = a.headerHit;
+  s.firstThrottledIndex = a.firstThrottledIndex;
+  s.allowedBeforeThrottle = a.allowedBeforeThrottle;
+  s.strength = rateLimitStrength(a);
   s.avgMs = responses.length ? Math.round(totMs / responses.length) : 0;
   return s;
 }
 
-// Evaluate a burst result into a finding (or null if throttling was observed).
-// `title` is injected so this module stays i18n-free. Shared by the panel and
-// the unified-suite rate-limit adapter so both produce identical findings.
-export function rlFindingFor(test: RateLimitTest, responses: BurstResponse[] | null | undefined, stats: Pick<BurstStats, 'sent'>, title: string): Finding | null {
-  const signal = detectThrottleSignal(responses);
-  const completed = (responses || []).filter(x => x.status != null).length;
-  const verdict = classifyRateLimit(signal, completed);
-  const severity = rateLimitSeverity(test.sensitivity, verdict);
-  if (!severity) return null;
-  return {
-    oracle: 'rate-limit', severity, title,
-    path: `${test.method} ${test.path}`,
-    evidence: `${stats.sent} requests, no 429/rate-limit headers`,
-    source: 'rule',
-  };
+// Evaluate a burst result into a finding. Three outcomes:
+//  - no protection at all          → the original high/low `title` finding
+//  - weak protection (late 429, or headers-only with no enforced 429), when an
+//    optional `weakTitle` is supplied → a lower-severity advisory that quantifies
+//    how many requests slipped through (so a single late 429 is not sold as a pass)
+//  - strong protection             → null (no finding)
+// `title`/`weakTitle` are injected so this module stays i18n-free. Shared by the
+// panel and the unified-suite rate-limit adapter so both produce identical findings.
+export function rlFindingFor(
+  test: RateLimitTest,
+  responses: BurstResponse[] | null | undefined,
+  stats: Pick<BurstStats, 'sent'>,
+  title: string,
+  weakTitle?: string,
+): Finding | null {
+  const a = analyzeThrottle(responses);
+  if (a.completed === 0) return null; // inconclusive — nothing actually landed
+  const strength = rateLimitStrength(a);
+  if (strength === 'none') {
+    const severity = rateLimitSeverity(test.sensitivity, 'vuln');
+    if (!severity) return null;
+    return {
+      oracle: 'rate-limit', severity, title,
+      path: `${test.method} ${test.path}`,
+      evidence: `${stats.sent} requests, no 429/rate-limit headers`,
+      source: 'rule',
+    };
+  }
+  if (strength === 'weak' && weakTitle) {
+    const severity: Severity = test.sensitivity === 'sensitive' ? 'medium' : 'low';
+    const evidence = a.saw429
+      ? `${a.allowedBeforeThrottle} of ${stats.sent} requests succeeded before the first 429 — throttling engages late`
+      : `rate-limit headers present but no 429 enforced across ${stats.sent} requests`;
+    return { oracle: 'rate-limit', severity, title: weakTitle, path: `${test.method} ${test.path}`, evidence, source: 'rule' };
+  }
+  return null; // strong protection, or weak without a weakTitle (back-compat)
 }
 
 // Tally per-test verdicts across the results map for the summary chips.

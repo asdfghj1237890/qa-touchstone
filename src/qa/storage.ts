@@ -43,6 +43,57 @@ function notifyError(key: string, error: any) {
   } catch { /* window unavailable（純 node 測試）— 已有 console.error */ }
 }
 
+// ── Schema versioning / migration ───────────────────────────────────────────
+// Persisted shapes drift over releases. Without a recorded version, an old
+// user_data.json silently feeds a stale shape into new code — a latent data-loss
+// bug. A store opts in by saving through saveVersioned (stamps SCHEMA_VERSION_FIELD)
+// and reading through loadVersioned, which runs ordered migration steps to bring
+// legacy data up to the current shape before the consumer ever sees it.
+export const SCHEMA_VERSION_FIELD = '__schemaVersion';
+
+/** migrations[i] upgrades a record from version i → i+1. Pure + synchronous. */
+export type MigrationStep = (data: any) => any;
+
+// Bring `parsed` up to `targetVersion`. Data with no recorded version (legacy
+// raw) is treated as v0 and run through every step. Only object records carry a
+// version stamp (arrays/scalars pass through unstamped — wrap them if needed).
+export function migrateRecord(parsed: any, targetVersion: number, migrations: MigrationStep[] = []): any {
+  let data = parsed;
+  let from = 0;
+  if (data && typeof data === 'object' && !Array.isArray(data) && typeof data[SCHEMA_VERSION_FIELD] === 'number') {
+    from = data[SCHEMA_VERSION_FIELD];
+  }
+  for (let v = from; v < targetVersion; v++) {
+    const step = migrations[v];
+    if (typeof step === 'function') data = step(data);
+  }
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    data[SCHEMA_VERSION_FIELD] = targetVersion;
+  }
+  return data;
+}
+
+// Versioned read: parse `key`, migrate to `currentVersion`, return the result —
+// or `fallback` if the key is absent or a migration throws (never propagates).
+export function loadVersioned<T = unknown>(key: string, currentVersion: number, migrations: MigrationStep[], fallback: T): T {
+  const raw = loadJSON<any>(key, null);
+  if (raw == null) return fallback;
+  try {
+    return migrateRecord(raw, currentVersion, migrations) as T;
+  } catch (e) {
+    console.error(`qaStorage: migration failed for ${key}`, e);
+    return fallback;
+  }
+}
+
+// Versioned write: stamp `currentVersion` onto an object payload before persisting.
+export function saveVersioned(key: string, currentVersion: number, value: unknown): boolean {
+  const out = (value && typeof value === 'object' && !Array.isArray(value))
+    ? { ...(value as Record<string, unknown>), [SCHEMA_VERSION_FIELD]: currentVersion }
+    : value;
+  return saveJSON(key, out);
+}
+
 export function loadJSON<T = unknown>(key: string, fallback: T | null = null): T | null {
   try {
     const raw = localStorage.getItem(key);
