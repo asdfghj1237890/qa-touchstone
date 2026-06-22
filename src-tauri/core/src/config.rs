@@ -31,6 +31,15 @@ impl<'de> serde::Deserialize<'de> for SecretRef {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Collection {
+    pub id: String,
+    pub requests: Vec<String>,
+    #[serde(default)]
+    pub variables: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawConfig {
     version: u32,
     #[serde(default)]
@@ -41,6 +50,8 @@ struct RawConfig {
     identities: Vec<RawIdentity>,
     #[serde(default)]
     requests: Vec<Request>,
+    #[serde(default)]
+    collections: Vec<Collection>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -111,6 +122,7 @@ pub struct Config {
     pub environments: Vec<Environment>,
     pub identities: Vec<Identity>,
     pub requests: Vec<Request>,
+    pub collections: Vec<Collection>,
 }
 
 const SUPPORTED_VERSION: u32 = 1;
@@ -149,7 +161,7 @@ pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<C
         .collect::<Result<Vec<_>, String>>()?;
     Ok(Config {
         version: raw.version, globals: raw.globals, environments: raw.environments,
-        identities, requests: raw.requests,
+        identities, requests: raw.requests, collections: raw.collections,
     })
 }
 
@@ -161,12 +173,41 @@ impl Config {
         let row = |(k, v): (&String, &String)| VarRow { key: k.clone(), value: v.clone(), on: true };
         ScopedVars {
             globals: self.globals.variables.iter().map(row).collect(),
-            collections: Default::default(),
+            collections: self.collections.iter()
+                .map(|c| (c.id.clone(), c.variables.iter().map(row).collect()))
+                .collect(),
             environments: self.environments.iter()
                 .map(|e| (e.name.clone(), e.variables.iter().map(row).collect()))
                 .collect(),
         }
     }
+}
+
+/// Up-front structural validation: unique ids, and every collection request-ref exists.
+/// Returns Err(message naming the offender) → the caller maps to exit 2.
+pub fn validate(cfg: &Config) -> Result<(), String> {
+    fn dups(label: &str, ids: impl Iterator<Item = String>) -> Result<(), String> {
+        let mut seen = std::collections::HashSet::new();
+        for id in ids {
+            if !seen.insert(id.clone()) {
+                return Err(format!("duplicate {label} id `{id}`"));
+            }
+        }
+        Ok(())
+    }
+    dups("request", cfg.requests.iter().map(|r| r.id.clone()))?;
+    dups("collection", cfg.collections.iter().map(|c| c.id.clone()))?;
+    dups("identity", cfg.identities.iter().map(|i| i.id.clone()))?;
+    dups("environment", cfg.environments.iter().map(|e| e.name.clone()))?;
+    let req_ids: std::collections::HashSet<&str> = cfg.requests.iter().map(|r| r.id.as_str()).collect();
+    for c in &cfg.collections {
+        for r in &c.requests {
+            if !req_ids.contains(r.as_str()) {
+                return Err(format!("collection `{}` references unknown request `{}`", c.id, r));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -300,5 +341,43 @@ mod tests {
             Auth::Bearer { token } => assert_eq!(token, "abc{{apiHost}}"),
             _ => panic!("bearer"),
         }
+    }
+
+    const WITH_COLLECTIONS: &str = r#"{
+      "version":1,
+      "environments":[{"name":"staging","variables":{"apiHost":"https://x"}}],
+      "identities":[{"id":"admin","auth":{"type":"none"}}],
+      "requests":[{"id":"getUser","method":"GET","url":"{{apiHost}}/u"}],
+      "collections":[{"id":"smoke","requests":["getUser"],"variables":{"page":"1"}}]
+    }"#;
+
+    #[test]
+    fn parses_collections_and_validates() {
+        let cfg = load_config(WITH_COLLECTIONS, &|_| None).unwrap();
+        assert_eq!(cfg.collections.len(), 1);
+        assert_eq!(cfg.collections[0].requests, vec!["getUser".to_string()]);
+        validate(&cfg).expect("valid config passes");
+        // collection-scope var available via scoped_vars under the collection id
+        let sv = cfg.scoped_vars();
+        assert!(sv.collections.get("smoke").unwrap().iter().any(|r| r.key == "page" && r.value == "1" && r.on));
+    }
+
+    #[test]
+    fn validate_rejects_unknown_collection_ref() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[],
+          "requests":[{"id":"a","method":"GET","url":"https://x"}],
+          "collections":[{"id":"c","requests":["nope"]}] }"#;
+        let cfg = load_config(bad, &|_| None).unwrap();
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.contains("nope"), "names the missing request: {err}");
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_ids() {
+        let dup = r#"{ "version":1,"environments":[],"identities":[],
+          "requests":[{"id":"a","method":"GET","url":"https://x"},{"id":"a","method":"GET","url":"https://y"}],
+          "collections":[] }"#;
+        let cfg = load_config(dup, &|_| None).unwrap();
+        assert!(validate(&cfg).unwrap_err().to_lowercase().contains("duplicate"));
     }
 }
