@@ -36,6 +36,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Regenerate golden fixtures (staleness gate)
+        run: |
+          node scripts/gen-fixtures.mjs
+          if ! git diff --quiet -- src-tauri/core/tests/fixtures; then
+            echo "::error::golden fixtures are stale — run 'node scripts/gen-fixtures.mjs' and commit"
+            git --no-pager diff -- src-tauri/core/tests/fixtures
+            exit 1
+          fi
+
       - name: Lint
         run: npm run lint
 
