@@ -267,4 +267,38 @@ mod tests {
         // environment staging carries apiHost
         assert!(scoped.environments.get("staging").unwrap().iter().any(|r| r.key == "apiHost"));
     }
+
+    #[test]
+    fn resolves_apikey_and_basic_secrets() {
+        let j = r#"{ "version":1, "environments":[], "requests":[], "identities":[
+            { "id":"k", "auth":{ "type":"apikey", "key":"X-API-Key", "value":{ "env":"AK" }, "in":"header" } },
+            { "id":"b", "auth":{ "type":"basic", "username":{ "env":"BU" }, "password":{ "env":"BP" } } }
+        ] }"#;
+        let env = envmap(&[("AK","secretkey"),("BU","user"),("BP","pass")]);
+        let cfg = load_config(j, &|k| env.get(k).cloned()).unwrap();
+        match &cfg.identities[0].auth {
+            Auth::ApiKey { key, value, location } => {
+                assert_eq!(key, "X-API-Key"); assert_eq!(value, "secretkey");
+                assert_eq!(*location, ApiKeyIn::Header);
+            }
+            _ => panic!("apiKey"),
+        }
+        match &cfg.identities[1].auth {
+            Auth::Basic { username, password } => { assert_eq!(username, "user"); assert_eq!(password, "pass"); }
+            _ => panic!("basic"),
+        }
+    }
+
+    #[test]
+    fn secret_value_is_opaque_not_a_template() {
+        // A secret whose value contains {{...}} must survive verbatim — secrets are
+        // never re-substituted (spec ordering). buildreq relies on this.
+        let j = r#"{ "version":1, "environments":[], "requests":[], "identities":[
+            { "id":"a", "auth":{ "type":"bearer", "token":{ "env":"T" } } } ] }"#;
+        let cfg = load_config(j, &|_| Some("abc{{apiHost}}".to_string())).unwrap();
+        match &cfg.identities[0].auth {
+            Auth::Bearer { token } => assert_eq!(token, "abc{{apiHost}}"),
+            _ => panic!("bearer"),
+        }
+    }
 }
