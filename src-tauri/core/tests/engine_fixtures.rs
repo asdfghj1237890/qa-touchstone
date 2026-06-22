@@ -15,8 +15,6 @@ fn substitute_matches_ts() {
 }
 
 use qa_touchstone_core::engine::{qa_var_map, ScopedVars};
-#[allow(unused_imports)]
-use qa_touchstone_core::engine::VarRow;
 
 #[derive(serde::Deserialize)]
 struct VarMapCase {

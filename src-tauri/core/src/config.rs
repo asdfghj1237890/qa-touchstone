@@ -259,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn scoped_vars_from_config_sets_on_true_and_keeps_precedence() {
+    fn scoped_vars_populates_globals_and_environments() {
         let cfg = load_config(SAMPLE, &|k| envmap(&[("ADMIN_TOKEN","s")]).get(k).cloned()).unwrap();
         let scoped = cfg.scoped_vars();
         // globals.ua present and enabled
