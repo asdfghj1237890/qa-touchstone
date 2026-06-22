@@ -190,7 +190,7 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
         let mut seen = std::collections::HashSet::new();
         for id in ids {
             if !seen.insert(id.clone()) {
-                return Err(format!("duplicate {label} id `{id}`"));
+                return Err(format!("duplicate {label} `{id}`"));
             }
         }
         Ok(())
@@ -379,5 +379,35 @@ mod tests {
           "collections":[] }"#;
         let cfg = load_config(dup, &|_| None).unwrap();
         assert!(validate(&cfg).unwrap_err().to_lowercase().contains("duplicate"));
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_collection_ids() {
+        let j = r#"{ "version":1,"environments":[],"identities":[],
+          "requests":[{"id":"a","method":"GET","url":"https://x"}],
+          "collections":[{"id":"c","requests":["a"]},{"id":"c","requests":["a"]}] }"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.contains("duplicate") && err.contains("collection"), "{err}");
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_identity_ids() {
+        let j = r#"{ "version":1,"environments":[],
+          "identities":[{"id":"x","auth":{"type":"none"}},{"id":"x","auth":{"type":"none"}}],
+          "requests":[],"collections":[] }"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.contains("duplicate") && err.contains("identity"), "{err}");
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_environment_names() {
+        let j = r#"{ "version":1,
+          "environments":[{"name":"staging","variables":{}},{"name":"staging","variables":{}}],
+          "identities":[],"requests":[],"collections":[] }"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let err = validate(&cfg).unwrap_err();
+        assert!(err.contains("duplicate") && err.contains("environment"), "{err}");
     }
 }
