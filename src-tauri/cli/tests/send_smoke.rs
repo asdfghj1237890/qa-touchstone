@@ -305,6 +305,93 @@ async fn send_redacts_apikey_in_query_url() {
 }
 
 // ---------------------------------------------------------------------------
+// Test 7: Basic-auth base64 blob echoed in response body must not appear in --json output
+// ---------------------------------------------------------------------------
+/// Identity is `basic` with username `u` and password from env `BPW=pw_secret_42`.
+/// The Authorization header sent is `Basic dTpwd19zZWNyZXRfNDI=` (base64 of `u:pw_secret_42`).
+/// Wiremock `/x` → 200 with a body that echoes that exact base64 blob.
+/// Run `send --json`. Assert exit 0 AND that the blob is absent from stdout.
+#[tokio::test]
+async fn send_redacts_basic_blob_in_body() {
+    // Compute the base64 blob the same way the production code does, so this
+    // test stays correct if the encoding ever changes.
+    let blob = qa_touchstone_core::buildreq::basic_auth_value("u", "pw_secret_42");
+    // blob == "Basic dTpwd19zZWNyZXRfNDI=" — the part after "Basic " is what we
+    // check, but we assert the whole string is absent to be thorough.
+    let blob_b64 = blob.strip_prefix("Basic ").unwrap_or(&blob).to_owned();
+
+    let server = MockServer::start().await;
+
+    // The body echoes the full base64-encoded credential blob (like a debug echo endpoint).
+    let body = format!("{{\"a\":\"Basic {}\"}}", blob_b64);
+
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_raw(body.clone(), "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/x", server.uri());
+    let cfg_path = tmp_config("basic_blob");
+    let config_json = format!(
+        r#"{{
+  "version": 1,
+  "environments": [],
+  "identities": [{{
+    "id": "basicid",
+    "auth": {{
+      "type": "basic",
+      "username": "u",
+      "password": {{ "env": "BPW" }}
+    }}
+  }}],
+  "requests": [{{
+    "id": "r",
+    "method": "GET",
+    "url": "{url}",
+    "assertions": [{{ "type": "status", "op": "eq", "value": 200 }}]
+  }}]
+}}"#
+    );
+    write_config(&cfg_path, &config_json);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+        .args(["send", "--config", cfg_path.to_str().unwrap(),
+               "--request", "r", "--identity", "basicid", "--json"])
+        .env("BPW", "pw_secret_42")
+        .output()
+        .expect("spawn binary");
+
+    remove_config(&cfg_path);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "expected exit 0 for passing assertion; stderr: {stderr}"
+    );
+
+    // Core assertion: the base64 blob must NOT appear in stdout.
+    assert!(
+        !stdout.contains(&blob_b64),
+        "Basic-auth base64 blob '{}' must NOT appear in --json stdout (was echoed in response body); got:\n{stdout}",
+        blob_b64
+    );
+
+    // Sanity: status must appear.
+    assert!(
+        stdout.contains("200"),
+        "--json output should include HTTP status 200; got:\n{stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Test 6: bearer token echoed in response body must not appear in --json output
 // ---------------------------------------------------------------------------
 /// Identity is bearer with token from env `BTOK=btok_xyz789`.

@@ -1,7 +1,6 @@
 //! Port of the buildPayload subset (src/qa/executor.ts:84-150): turn a config
 //! request + identity + var map into the inner `{ "request": {...} }` Value that
 //! `executor::execute_request` consumes. SP0b: absolute URLs only; auth = none/bearer/apiKey/basic.
-use base64::Engine as _;
 use crate::config::{Auth, ApiKeyIn, BodyMode, Identity, Request};
 use crate::engine::{qa_substitute, Dynamics};
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
@@ -13,6 +12,14 @@ const ENCODE_URI_COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'-').remove(b'_').remove(b'.').remove(b'!').remove(b'~')
     .remove(b'*').remove(b'\'').remove(b'(').remove(b')');
 pub fn enc(s: &str) -> String { utf8_percent_encode(s, ENCODE_URI_COMPONENT).to_string() }
+
+/// The `Authorization: Basic ...` header VALUE for the given credentials.
+/// Shared between `apply_auth` (which sets the header) and the CLI redaction
+/// set builder (which must redact the same byte sequence from output).
+pub fn basic_auth_value(username: &str, password: &str) -> String {
+    use base64::Engine as _;
+    format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}")))
+}
 
 /// Build the inner `{ request }` Value. Returns Err(String) on a non-absolute resolved URL.
 /// `dynamics` resolves `{{$timestamp}}`, `{{$guid}}`, etc. — pass `&mut RealDynamics` in
@@ -69,9 +76,7 @@ fn apply_auth(id: &Identity, headers: &mut Vec<Value>, query: &mut Vec<String>) 
             headers.push(json!({ "key": "Authorization", "value": format!("Bearer {token}") }));
         }
         Auth::Basic { username, password } => {
-            let raw = format!("{username}:{password}");
-            let b64 = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
-            headers.push(json!({ "key": "Authorization", "value": format!("Basic {b64}") }));
+            headers.push(json!({ "key": "Authorization", "value": basic_auth_value(username, password) }));
         }
         Auth::ApiKey { key, value, location } => match location {
             // TS: apiKey header uses value as-is (opaque), key is literal. (executor.ts:101-103)

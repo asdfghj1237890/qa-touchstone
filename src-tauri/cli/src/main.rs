@@ -108,13 +108,17 @@ fn redact_value(v: &serde_json::Value, secrets: &[String]) -> serde_json::Value 
 /// (so apiKey-in-query occurrences in the URL are also caught).
 fn build_redaction_set(auth: &qa_touchstone_core::config::Auth) -> Vec<String> {
     use qa_touchstone_core::config::Auth;
-    use qa_touchstone_core::buildreq::enc;
+    use qa_touchstone_core::buildreq::{basic_auth_value, enc};
 
     let raw_secrets: Vec<String> = match auth {
         Auth::None => vec![],
         Auth::Bearer { token } => vec![token.clone()],
         Auth::ApiKey { value, .. } => vec![value.clone()],
-        Auth::Basic { username, password } => vec![username.clone(), password.clone()],
+        Auth::Basic { username, password } => vec![
+            username.clone(),
+            password.clone(),
+            basic_auth_value(username, password),
+        ],
     };
 
     let mut set: Vec<String> = Vec::new();
@@ -281,10 +285,11 @@ async fn run_send(
         for r in &results {
             let pass = r.get("pass") == Some(&json!(true));
             let mark = if pass { '\u{2713}' } else { '\u{2717}' }; // ✓ / ✗
-            let label = r.get("label")
+            let label_raw = r.get("label")
                 .and_then(|v| v.as_str())
                 .or_else(|| r.get("type").and_then(|v| v.as_str()))
                 .unwrap_or("?");
+            let label = redact_str(label_raw, &secrets);
             let actual = match r.get("actual") {
                 Some(v) => v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
                 None => "?".to_owned(),
