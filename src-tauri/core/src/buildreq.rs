@@ -1,7 +1,8 @@
 //! Port of the buildPayload subset (src/qa/executor.ts:84-150): turn a config
 //! request + identity + var map into the inner `{ "request": {...} }` Value that
 //! `executor::execute_request` consumes. SP0b: absolute URLs only; auth = none/bearer/apiKey/basic.
-use crate::config::{BodyMode, Identity, Request};
+use base64::Engine as _;
+use crate::config::{Auth, ApiKeyIn, BodyMode, Identity, Request};
 use crate::engine::{qa_substitute, NoDynamics};
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde_json::{json, Value};
@@ -59,8 +60,26 @@ pub fn build_request(req: &Request, identity: &Identity, map: &BTreeMap<String, 
     Ok(json!({ "request": request }))
 }
 
-// Task 3 replaces this stub with the real auth construction.
-fn apply_auth(_id: &Identity, _map: &BTreeMap<String, String>, _headers: &mut Vec<Value>, _query: &mut Vec<String>) -> Result<(), String> {
+/// Apply identity auth — port of executor.ts:97-104.
+/// Secrets (token/value/password/username) are opaque literals from config load; NOT re-substituted.
+/// Basic: Authorization: Basic <base64(utf8("user:pass"))> — matches TS `b64(unescape(encodeURIComponent(...)))` for ASCII/Latin-1.
+fn apply_auth(id: &Identity, _map: &BTreeMap<String, String>, headers: &mut Vec<Value>, query: &mut Vec<String>) -> Result<(), String> {
+    match &id.auth {
+        Auth::None => {}
+        Auth::Bearer { token } => {
+            headers.push(json!({ "key": "Authorization", "value": format!("Bearer {token}") }));
+        }
+        Auth::Basic { username, password } => {
+            let raw = format!("{username}:{password}");
+            let b64 = base64::engine::general_purpose::STANDARD.encode(raw.as_bytes());
+            headers.push(json!({ "key": "Authorization", "value": format!("Basic {b64}") }));
+        }
+        Auth::ApiKey { key, value, location } => match location {
+            // TS: apiKey header uses value as-is (opaque), key is literal. (executor.ts:101-103)
+            ApiKeyIn::Header => headers.push(json!({ "key": key, "value": value })),
+            ApiKeyIn::Query => query.push(format!("{}={}", enc(key), enc(value))),
+        },
+    }
     Ok(())
 }
 

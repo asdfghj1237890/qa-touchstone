@@ -13,6 +13,9 @@ globalThis.Date = class extends RealDate { constructor(...a){ super(...(a.length
 globalThis.Date.now = () => FIXED_NOW;
 Math.random = () => FLOATS[(_i++) % FLOATS.length];
 
+// window must be set before engine bridge (which attaches qaSubstitute to it),
+// and before buildPayload bridge (which reads window.qaSubstitute at call time).
+globalThis.window = globalThis;
 const { qaSubstitute, qaVarMap, qaRunAssertions } = await import('./_engine-bridge.mjs');
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -82,3 +85,27 @@ const assertOut = assertCases.map(c => ({ ...c,
   expected: qaRunAssertions([c.a], resp)[0] || null }));   // null when on:false (filtered out)
 writeFileSync(join(OUT, 'assertions.json'), JSON.stringify({ resp, cases: assertOut }, null, 2) + '\n');
 console.log(`wrote assertions.json (${assertOut.length} cases)`);
+
+// buildreq vs TS buildPayload(...).requestDetails.
+// buildPayload(req, env, varMap, opts) — executor.ts:84-150.
+// Compare ONLY the inner `requestDetails` (the { request } shape execute_request consumes).
+// Use dynamic import so window.qaSubstitute is set (by engine bridge above) before the
+// buildPayload bundle executes at module evaluation time.
+const { buildPayload } = await import('./_buildpayload-bridge.mjs');
+_i = 0;
+// QaRequest shape (buildReq.ts): id, method, url, params[], headers[], bodyMode, body, auth{...}
+const mkReq = (o) => ({ id:'r', method:'GET', url:'', params:[], headers:[], bodyMode:'none', body:'',
+  gqlQuery:'', gqlVars:'', form:[], auth:{ type:'none', bearer:'', apiKey:{key:'',value:'',placement:'header'},
+  basic:{user:'',pass:''}, aws:{}, oauth2:{} }, ...o });
+const brEnv = { baseUrl: '' };  // absolute URLs in fixtures so no rebasing
+const brCases = [
+  { name:'bearer', req: mkReq({ url:'https://x.example/u', auth:{ type:'bearer', bearer:'TOK', apiKey:{}, basic:{}, aws:{}, oauth2:{} } }), varMap:{} },
+  { name:'apikey_header', req: mkReq({ url:'https://x.example/u', auth:{ type:'apiKey', bearer:'', apiKey:{key:'X-API-Key',value:'AK',placement:'header'}, basic:{}, aws:{}, oauth2:{} } }), varMap:{} },
+  { name:'apikey_query', req: mkReq({ url:'https://x.example/u', auth:{ type:'apiKey', bearer:'', apiKey:{key:'X-API-Key',value:'AK',placement:'query'}, basic:{}, aws:{}, oauth2:{} } }), varMap:{} },
+  { name:'basic', req: mkReq({ url:'https://x.example/u', auth:{ type:'basic', bearer:'', apiKey:{}, basic:{user:'u',pass:'p'}, aws:{}, oauth2:{} } }), varMap:{} },
+  { name:'query_enc', req: mkReq({ url:'https://x.example/s', params:[{key:'q',value:'a b&c',on:true}] }), varMap:{} },
+  { name:'json_body', req: mkReq({ method:'POST', url:'https://x.example/u', bodyMode:'json', body:'{"a":1}' }), varMap:{} },
+];
+const brOut = brCases.map(c => ({ name:c.name, expected: buildPayload(c.req, brEnv, c.varMap).requestDetails }));
+writeFileSync(join(OUT, 'buildreq.json'), JSON.stringify(brOut, null, 2) + '\n');
+console.log(`wrote buildreq.json (${brOut.length} cases)`);

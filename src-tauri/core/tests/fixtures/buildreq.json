@@ -1,0 +1,86 @@
+[
+  {
+    "name": "bearer",
+    "expected": {
+      "request": {
+        "method": "GET",
+        "url": "https://x.example/u",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer TOK"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "apikey_header",
+    "expected": {
+      "request": {
+        "method": "GET",
+        "url": "https://x.example/u",
+        "header": [
+          {
+            "key": "X-API-Key",
+            "value": "AK"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "apikey_query",
+    "expected": {
+      "request": {
+        "method": "GET",
+        "url": "https://x.example/u?X-API-Key=AK",
+        "header": []
+      }
+    }
+  },
+  {
+    "name": "basic",
+    "expected": {
+      "request": {
+        "method": "GET",
+        "url": "https://x.example/u",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Basic dTpw"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "query_enc",
+    "expected": {
+      "request": {
+        "method": "GET",
+        "url": "https://x.example/s?q=a%20b%26c",
+        "header": []
+      }
+    }
+  },
+  {
+    "name": "json_body",
+    "expected": {
+      "request": {
+        "method": "POST",
+        "url": "https://x.example/u",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"a\":1}"
+        }
+      }
+    }
+  }
+]
