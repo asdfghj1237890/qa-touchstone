@@ -13,7 +13,7 @@ globalThis.Date = class extends RealDate { constructor(...a){ super(...(a.length
 globalThis.Date.now = () => FIXED_NOW;
 Math.random = () => FLOATS[(_i++) % FLOATS.length];
 
-const { qaSubstitute, qaVarMap } = await import('./_engine-bridge.mjs');
+const { qaSubstitute, qaVarMap, qaRunAssertions } = await import('./_engine-bridge.mjs');
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dir, '..', 'src-tauri', 'core', 'tests', 'fixtures');
@@ -59,3 +59,24 @@ const dynamics = dynNames.map(n => {
 });
 writeFileSync(join(OUT, 'dynamics.json'), JSON.stringify({ fixedNowMs: FIXED_NOW, floats: FLOATS, cases: dynamics }, null, 2) + '\n');
 console.log(`wrote dynamics.json (${dynamics.length} cases)`);
+
+// qaEval/qaRunAssertions (engine.ts:90-108). resp shape: { status, time, body, headers }.
+_i = 0;
+const resp = { status: 200, time: 12, headers: { 'Content-Type': 'application/json' },
+  body: { id: 7, nullable: null, data: [1,2,3] } };
+const assertCases = [
+  { name: 'status_eq',     a: { type:'status', op:'eq', value:200, on:true } },
+  { name: 'status_neq',    a: { type:'status', op:'neq', value:201, on:true } },
+  { name: 'bodyHas_null',  a: { type:'bodyHas', path:'nullable', on:true } },   // null is PRESENT
+  { name: 'bodyHas_miss',  a: { type:'bodyHas', path:'nope', on:true } },
+  { name: 'bodyEq_str',    a: { type:'bodyEq', path:'id', value:'7', on:true } }, // String(7)===String('7')
+  { name: 'bodyArray_data',a: { type:'bodyArray', on:true } },                    // body.data is array
+  { name: 'header_contains_cs', a: { type:'header', name:'content-type', op:'contains', value:'JSON', on:true } }, // case-SENSITIVE -> fail
+  { name: 'time_lt',       a: { type:'time', op:'lt', value:100, on:true } },
+  { name: 'unknown_type',  a: { type:'whatever', text:'x', on:true } },          // passes by default
+  { name: 'disabled',      a: { type:'status', op:'eq', value:999, on:false } }, // skipped by run_assertions
+];
+const assertOut = assertCases.map(c => ({ ...c,
+  expected: qaRunAssertions([c.a], resp)[0] || null }));   // null when on:false (filtered out)
+writeFileSync(join(OUT, 'assertions.json'), JSON.stringify({ resp, cases: assertOut }, null, 2) + '\n');
+console.log(`wrote assertions.json (${assertOut.length} cases)`);

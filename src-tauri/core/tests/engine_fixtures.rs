@@ -50,3 +50,27 @@ fn dynamics_match_ts() {
         assert_eq!(got, c.expected, "case {}", c.name);
     }
 }
+
+use qa_touchstone_core::engine::run_assertions;
+use serde_json::Value;
+
+#[derive(serde::Deserialize)]
+struct AssertFile { resp: Value, cases: Vec<AssertCase> }
+#[derive(serde::Deserialize)]
+struct AssertCase { name: String, a: Value, expected: Option<Value> }
+
+#[test]
+fn assertions_match_ts() {
+    let f: AssertFile = serde_json::from_str(include_str!("fixtures/assertions.json")).unwrap();
+    for c in &f.cases {
+        let got = run_assertions(std::slice::from_ref(&c.a), &f.resp);
+        match &c.expected {
+            None => assert!(got.is_empty(), "case {} should be filtered (on:false)", c.name),
+            Some(exp) => {
+                assert_eq!(got.len(), 1, "case {}", c.name);
+                assert_eq!(got[0]["pass"], exp["pass"], "case {} pass", c.name);
+                assert_eq!(got[0]["actual"], exp["actual"], "case {} actual", c.name);
+            }
+        }
+    }
+}

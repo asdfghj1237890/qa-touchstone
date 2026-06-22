@@ -1,0 +1,175 @@
+{
+  "resp": {
+    "status": 200,
+    "time": 12,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "id": 7,
+      "nullable": null,
+      "data": [
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  "cases": [
+    {
+      "name": "status_eq",
+      "a": {
+        "type": "status",
+        "op": "eq",
+        "value": 200,
+        "on": true
+      },
+      "expected": {
+        "type": "status",
+        "op": "eq",
+        "value": 200,
+        "on": true,
+        "pass": true,
+        "actual": "200"
+      }
+    },
+    {
+      "name": "status_neq",
+      "a": {
+        "type": "status",
+        "op": "neq",
+        "value": 201,
+        "on": true
+      },
+      "expected": {
+        "type": "status",
+        "op": "neq",
+        "value": 201,
+        "on": true,
+        "pass": true,
+        "actual": "200"
+      }
+    },
+    {
+      "name": "bodyHas_null",
+      "a": {
+        "type": "bodyHas",
+        "path": "nullable",
+        "on": true
+      },
+      "expected": {
+        "type": "bodyHas",
+        "path": "nullable",
+        "on": true,
+        "pass": true,
+        "actual": "present"
+      }
+    },
+    {
+      "name": "bodyHas_miss",
+      "a": {
+        "type": "bodyHas",
+        "path": "nope",
+        "on": true
+      },
+      "expected": {
+        "type": "bodyHas",
+        "path": "nope",
+        "on": true,
+        "pass": false,
+        "actual": "missing"
+      }
+    },
+    {
+      "name": "bodyEq_str",
+      "a": {
+        "type": "bodyEq",
+        "path": "id",
+        "value": "7",
+        "on": true
+      },
+      "expected": {
+        "type": "bodyEq",
+        "path": "id",
+        "value": "7",
+        "on": true,
+        "pass": true,
+        "actual": "7"
+      }
+    },
+    {
+      "name": "bodyArray_data",
+      "a": {
+        "type": "bodyArray",
+        "on": true
+      },
+      "expected": {
+        "type": "bodyArray",
+        "on": true,
+        "pass": true,
+        "actual": "array(3)"
+      }
+    },
+    {
+      "name": "header_contains_cs",
+      "a": {
+        "type": "header",
+        "name": "content-type",
+        "op": "contains",
+        "value": "JSON",
+        "on": true
+      },
+      "expected": {
+        "type": "header",
+        "name": "content-type",
+        "op": "contains",
+        "value": "JSON",
+        "on": true,
+        "pass": false,
+        "actual": "application/json"
+      }
+    },
+    {
+      "name": "time_lt",
+      "a": {
+        "type": "time",
+        "op": "lt",
+        "value": 100,
+        "on": true
+      },
+      "expected": {
+        "type": "time",
+        "op": "lt",
+        "value": 100,
+        "on": true,
+        "pass": true,
+        "actual": "12 ms"
+      }
+    },
+    {
+      "name": "unknown_type",
+      "a": {
+        "type": "whatever",
+        "text": "x",
+        "on": true
+      },
+      "expected": {
+        "type": "whatever",
+        "text": "x",
+        "on": true,
+        "pass": true,
+        "actual": "—"
+      }
+    },
+    {
+      "name": "disabled",
+      "a": {
+        "type": "status",
+        "op": "eq",
+        "value": 999,
+        "on": false
+      },
+      "expected": null
+    }
+  ]
+}
