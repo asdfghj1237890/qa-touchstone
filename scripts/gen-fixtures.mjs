@@ -65,7 +65,7 @@ console.log(`wrote dynamics.json (${dynamics.length} cases)`);
 
 // qaEval/qaRunAssertions (engine.ts:90-108). resp shape: { status, time, body, headers }.
 _i = 0;
-const resp = { status: 200, time: 12, headers: { 'Content-Type': 'application/json', 'X-Count': '3' },
+const resp = { status: 200, time: 12, headers: { 'Content-Type': 'application/json', 'X-Count': '3', 'X-Version': 'v2' },
   body: { id: 7, nullable: null, data: [1,2,3], name: 'alice' } };
 const assertCases = [
   { name: 'status_eq',     a: { type:'status', op:'eq', value:200, on:true } },
@@ -80,6 +80,8 @@ const assertCases = [
   { name: 'disabled',      a: { type:'status', op:'eq', value:999, on:false } }, // skipped by run_assertions
   { name: 'header_eq_num', a: { type:'header', name:'x-count', op:'eq', value:3, on:true } }, // String("3")===String(3) -> pass
   { name: 'bodyEq_string_val', a: { type:'bodyEq', path:'name', value:'alice', on:true } },   // JSON.stringify("alice")='"alice"'; String("alice")===String("alice") -> pass
+  { name: 'header_contains_num', a: { type:'header', name:'x-version', op:'contains', value:2, on:true } }, // String('v2'||'').includes(2) -> 'v2'.includes('2') -> true
+  { name: 'header_contains_missing', a: { type:'header', name:'no-such-header', op:'contains', value:'x', on:true } }, // String(undefined||'')=''; ''.includes('x') -> false
 ];
 const assertOut = assertCases.map(c => ({ ...c,
   expected: qaRunAssertions([c.a], resp)[0] || null }));   // null when on:false (filtered out)

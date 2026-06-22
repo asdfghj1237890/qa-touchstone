@@ -4,7 +4,8 @@
     "time": 12,
     "headers": {
       "Content-Type": "application/json",
-      "X-Count": "3"
+      "X-Count": "3",
+      "X-Version": "v2"
     },
     "body": {
       "id": 7,
@@ -207,6 +208,44 @@
         "on": true,
         "pass": true,
         "actual": "\"alice\""
+      }
+    },
+    {
+      "name": "header_contains_num",
+      "a": {
+        "type": "header",
+        "name": "x-version",
+        "op": "contains",
+        "value": 2,
+        "on": true
+      },
+      "expected": {
+        "type": "header",
+        "name": "x-version",
+        "op": "contains",
+        "value": 2,
+        "on": true,
+        "pass": true,
+        "actual": "v2"
+      }
+    },
+    {
+      "name": "header_contains_missing",
+      "a": {
+        "type": "header",
+        "name": "no-such-header",
+        "op": "contains",
+        "value": "x",
+        "on": true
+      },
+      "expected": {
+        "type": "header",
+        "name": "no-such-header",
+        "op": "contains",
+        "value": "x",
+        "on": true,
+        "pass": false,
+        "actual": "missing"
       }
     }
   ]

@@ -240,9 +240,13 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
             let pass = match op {
                 "exists" => val.is_some(),
                 "contains" => {
-                    // contains is case-SENSITIVE (engine.ts:103)
-                    let search = a.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                    actual.contains(search)
+                    // Mirror engine.ts:103: String(val || '').includes(a.value)
+                    // search = String(a.value) via string_coerce (handles numeric values like 3 → "3")
+                    let search = string_coerce(a.get("value"));
+                    // target = header value as string if present, else "" (NOT "missing")
+                    // TS: String(val || '') — undefined||'' = '' → String('')= ""
+                    let target = val.map(|v| string_coerce(Some(v))).unwrap_or_default();
+                    target.contains(search.as_str())
                 }
                 _ => {
                     // TS: String(val) === String(a.value)
