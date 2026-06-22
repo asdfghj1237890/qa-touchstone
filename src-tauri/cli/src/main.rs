@@ -32,8 +32,8 @@ async fn main() -> std::process::ExitCode {
                 &request_details, &json!({}), None, None, None, None, None,
             )
             .await;
-            if out["success"] == json!(true) {
-                println!("{} {}", out["status"], out["finalUrl"]);
+            if out["success"].as_bool() == Some(true) {
+                println!("{} {}", out["status"], out["finalUrl"].as_str().unwrap_or("?"));
                 std::process::ExitCode::SUCCESS
             } else {
                 eprintln!("error: {}", out["error"].as_str().unwrap_or("request failed"));
