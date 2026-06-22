@@ -1,7 +1,7 @@
 // Generates TS-vs-Rust golden fixtures by running the real TS engine with a
 // pinned clock + RNG. Run: `node scripts/gen-fixtures.mjs`. CI fails if the
 // committed fixtures differ from a fresh run (staleness gate, added later).
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -17,7 +17,10 @@ const { qaSubstitute } = await import('./_engine-bridge.mjs');
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dir, '..', 'src-tauri', 'core', 'tests', 'fixtures');
+mkdirSync(OUT, { recursive: true });
 
+// reset RNG cursor so each fixture section is independent (later sections rely on this)
+_i = 0;
 const substitute = [
   { name: 'hit',           text: 'Hello {{who}}',  map: { who: 'world' } },
   { name: 'miss_passthru', text: 'Hello {{ who }}', map: {} },
