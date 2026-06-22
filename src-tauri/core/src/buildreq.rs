@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 const ENCODE_URI_COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'-').remove(b'_').remove(b'.').remove(b'!').remove(b'~')
     .remove(b'*').remove(b'\'').remove(b'(').remove(b')');
-fn enc(s: &str) -> String { utf8_percent_encode(s, ENCODE_URI_COMPONENT).to_string() }
+pub fn enc(s: &str) -> String { utf8_percent_encode(s, ENCODE_URI_COMPONENT).to_string() }
 
 /// Build the inner `{ request }` Value. Returns Err(String) on a non-absolute resolved URL.
 /// `dynamics` resolves `{{$timestamp}}`, `{{$guid}}`, etc. — pass `&mut RealDynamics` in

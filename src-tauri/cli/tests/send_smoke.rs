@@ -227,3 +227,150 @@ async fn send_json_no_secret_in_output() {
         "--json output should include the HTTP status 200; got:\n{stdout}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 5: apiKey-in-query secret must not appear in --json url output
+// ---------------------------------------------------------------------------
+/// Identity is apikey in:query with value from env `QKEY=qsecret_abc123`.
+/// Wiremock matches the path only (ignoring query params) → 200.
+/// Run `send --json`. Assert exit 0 AND that `qsecret_abc123` is absent from stdout.
+#[tokio::test]
+async fn send_redacts_apikey_in_query_url() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/q"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_raw(r#"{"ok":true}"#, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/q", server.uri());
+    let cfg_path = tmp_config("apikey_query");
+    let config_json = format!(
+        r#"{{
+  "version": 1,
+  "environments": [],
+  "identities": [{{
+    "id": "keyid",
+    "auth": {{
+      "type": "apikey",
+      "key": "api_key",
+      "value": {{ "env": "QKEY" }},
+      "in": "query"
+    }}
+  }}],
+  "requests": [{{
+    "id": "r",
+    "method": "GET",
+    "url": "{url}",
+    "assertions": [{{ "type": "status", "op": "eq", "value": 200 }}]
+  }}]
+}}"#
+    );
+    write_config(&cfg_path, &config_json);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+        .args(["send", "--config", cfg_path.to_str().unwrap(),
+               "--request", "r", "--identity", "keyid", "--json"])
+        .env("QKEY", "qsecret_abc123")
+        .output()
+        .expect("spawn binary");
+
+    remove_config(&cfg_path);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "expected exit 0 for passing assertion; stderr: {stderr}"
+    );
+
+    // Core assertion: the raw apiKey secret must NOT appear in stdout (it was in the URL query string).
+    assert!(
+        !stdout.contains("qsecret_abc123"),
+        "apiKey query secret 'qsecret_abc123' must NOT appear in --json stdout; got:\n{stdout}"
+    );
+
+    // Sanity: the response status should appear.
+    assert!(
+        stdout.contains("200"),
+        "--json output should include HTTP status 200; got:\n{stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: bearer token echoed in response body must not appear in --json output
+// ---------------------------------------------------------------------------
+/// Identity is bearer with token from env `BTOK=btok_xyz789`.
+/// Wiremock `/x` → 200 with a JSON body that ECHOES the token (simulating httpbin).
+/// Run `send --json`. Assert exit 0 AND that `btok_xyz789` is absent from stdout.
+#[tokio::test]
+async fn send_redacts_echoed_secret_in_body() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_raw(r#"{"echoed":"Bearer btok_xyz789"}"#, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/x", server.uri());
+    let cfg_path = tmp_config("bearer_echo");
+    let config_json = format!(
+        r#"{{
+  "version": 1,
+  "environments": [],
+  "identities": [{{
+    "id": "bearid",
+    "auth": {{ "type": "bearer", "token": {{ "env": "BTOK" }} }}
+  }}],
+  "requests": [{{
+    "id": "r",
+    "method": "GET",
+    "url": "{url}",
+    "assertions": [{{ "type": "status", "op": "eq", "value": 200 }}]
+  }}]
+}}"#
+    );
+    write_config(&cfg_path, &config_json);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+        .args(["send", "--config", cfg_path.to_str().unwrap(),
+               "--request", "r", "--identity", "bearid", "--json"])
+        .env("BTOK", "btok_xyz789")
+        .output()
+        .expect("spawn binary");
+
+    remove_config(&cfg_path);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "expected exit 0 for passing assertion; stderr: {stderr}"
+    );
+
+    // Core assertion: the bearer token must NOT appear anywhere in stdout (it was echoed in the body).
+    assert!(
+        !stdout.contains("btok_xyz789"),
+        "bearer token 'btok_xyz789' must NOT appear in --json stdout (echoed in response body); got:\n{stdout}"
+    );
+
+    // Sanity: the response status should appear.
+    assert!(
+        stdout.contains("200"),
+        "--json output should include HTTP status 200; got:\n{stdout}"
+    );
+}

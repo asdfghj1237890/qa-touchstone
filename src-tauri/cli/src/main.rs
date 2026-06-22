@@ -78,6 +78,61 @@ fn try_parse(raw: &str) -> serde_json::Value {
     serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
 }
 
+/// Replace every occurrence of each secret in `s` with `***REDACTED***`.
+fn redact_str(s: &str, secrets: &[String]) -> String {
+    let mut out = s.to_string();
+    for sec in secrets {
+        if !sec.is_empty() {
+            out = out.replace(sec.as_str(), "***REDACTED***");
+        }
+    }
+    out
+}
+
+/// Recursively redact all string leaves in a JSON value.
+fn redact_value(v: &serde_json::Value, secrets: &[String]) -> serde_json::Value {
+    match v {
+        serde_json::Value::String(s) => serde_json::Value::String(redact_str(s, secrets)),
+        serde_json::Value::Array(a) => {
+            serde_json::Value::Array(a.iter().map(|x| redact_value(x, secrets)).collect())
+        }
+        serde_json::Value::Object(o) => serde_json::Value::Object(
+            o.iter().map(|(k, x)| (k.clone(), redact_value(x, secrets))).collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Build a redaction set from a resolved identity's auth secrets.
+/// Each raw secret value is included along with its percent-encoded form
+/// (so apiKey-in-query occurrences in the URL are also caught).
+fn build_redaction_set(auth: &qa_touchstone_core::config::Auth) -> Vec<String> {
+    use qa_touchstone_core::config::Auth;
+    use qa_touchstone_core::buildreq::enc;
+
+    let raw_secrets: Vec<String> = match auth {
+        Auth::None => vec![],
+        Auth::Bearer { token } => vec![token.clone()],
+        Auth::ApiKey { value, .. } => vec![value.clone()],
+        Auth::Basic { username, password } => vec![username.clone(), password.clone()],
+    };
+
+    let mut set: Vec<String> = Vec::new();
+    for secret in raw_secrets {
+        if !secret.is_empty() {
+            let encoded = enc(&secret);
+            if !set.contains(&secret) {
+                set.push(secret.clone());
+            }
+            // Add the encoded form only if it differs from the raw form and isn't empty.
+            if encoded != secret && !encoded.is_empty() && !set.contains(&encoded) {
+                set.push(encoded);
+            }
+        }
+    }
+    set
+}
+
 async fn run_send(
     config_path: String,
     request_id: String,
@@ -129,6 +184,9 @@ async fn run_send(
         }
     }
 
+    // Build redaction set from resolved identity secrets (raw + percent-encoded forms).
+    let secrets = build_redaction_set(&identity.auth);
+
     // Step 4: build var map
     let scoped = cfg.scoped_vars();
     let map = qa_var_map(&scoped, env_name.as_deref(), None, None);
@@ -168,20 +226,20 @@ async fn run_send(
     // Runtime failure → exit 1 (no assertion rows).
     if resp["success"] != json!(true) {
         let err_msg = resp["error"].as_str().unwrap_or("request failed");
+        let redacted_err = redact_str(err_msg, &secrets);
         if use_json {
-            // Machine-readable runtime-failure output — REDACTED: no request headers / auth secrets.
+            // Machine-readable runtime-failure output — secrets are redacted.
             let json_out = json!({
                 "success": false,
                 "status": status,
-                "url": final_url,
+                "url": redact_str(final_url, &secrets),
                 "method": method,
                 "ms": ms,
-                "error": err_msg,
+                "error": redacted_err,
             });
             println!("{}", json_out);
         } else {
-            // Human-readable — no request headers, so secrets never leak here
-            eprintln!("error: {err_msg}");
+            eprintln!("error: {redacted_err}");
         }
         return std::process::ExitCode::from(1);
     }
@@ -203,23 +261,23 @@ async fn run_send(
 
     // Step 11: output
     if use_json {
-        // Machine-readable JSON — REDACTED: request headers and identity auth are never echoed.
-        // Only safe response fields are included.
+        // Machine-readable JSON — secrets are redacted from url, responseHeaders, body, and assertions.
+        let redacted_results: serde_json::Value = redact_value(&serde_json::Value::Array(results.clone()), &secrets);
         let json_out = json!({
             "success": true,
             "status": status,
-            "url": final_url,
+            "url": redact_str(final_url, &secrets),
             "method": method,
             "ms": ms,
-            // response headers (from server) are included; request headers are NOT (auth redaction)
-            "responseHeaders": resp["headers"],
-            "body": assert_resp["body"],
-            "assertions": results,
+            // response headers (from server) included but redacted; request headers are NOT echoed (auth redaction)
+            "responseHeaders": redact_value(&resp["headers"], &secrets),
+            "body": redact_value(&assert_resp["body"], &secrets),
+            "assertions": redacted_results,
         });
         println!("{}", json_out);
     } else {
-        // Human-readable output — no request headers, so secrets never leak here
-        println!("{method} {final_url} → {status} ({ms}ms)");
+        // Human-readable output — final_url and assertion actuals are redacted.
+        println!("{method} {} → {status} ({ms}ms)", redact_str(final_url, &secrets));
         for r in &results {
             let pass = r.get("pass") == Some(&json!(true));
             let mark = if pass { '\u{2713}' } else { '\u{2717}' }; // ✓ / ✗
@@ -231,7 +289,8 @@ async fn run_send(
                 Some(v) => v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
                 None => "?".to_owned(),
             };
-            println!("{mark} {label} (actual: {actual})");
+            let redacted_actual = redact_str(&actual, &secrets);
+            println!("{mark} {label} (actual: {redacted_actual})");
         }
     }
 
