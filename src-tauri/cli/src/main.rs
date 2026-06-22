@@ -143,9 +143,19 @@ async fn run_send(
     };
 
     // Step 6: execute + measure wall-clock ms
+    // Mark the identity's api-key header as sensitive so it is stripped on cross-origin
+    // redirects (Authorization/Cookie/x-amz-* are already covered by the built-in list).
+    let sensitive_header_names = match &identity.auth {
+        qa_touchstone_core::config::Auth::ApiKey {
+            key,
+            location: qa_touchstone_core::config::ApiKeyIn::Header,
+            ..
+        } => vec![key.clone()],
+        _ => vec![],
+    };
     let t0 = std::time::Instant::now();
     // &json!({}) is the (empty) params/session context — SP1 will thread session state here.
-    let resp = execute_request(&rd, &json!({}), None, None, ExecOptions::default()).await;
+    let resp = execute_request(&rd, &json!({}), None, None, ExecOptions { sensitive_header_names, ..Default::default() }).await;
     let ms = t0.elapsed().as_millis() as u64;
 
     let method = rd["request"]["method"].as_str().unwrap_or("?");

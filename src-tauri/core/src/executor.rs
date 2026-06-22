@@ -11,12 +11,18 @@ use std::time::Duration;
 /// Optional execution toggles. Defaults mean "safe default": `is_file_transfer_collection`
 /// selects the AWS service default; `ssl_verify` verifies unless explicitly `Some(false)`;
 /// `ssl_verify_confirmed` must be `Some(true)` to honor a `Some(false)` ssl_verify, else the
-/// request is rejected.
+/// request is rejected. `sensitive_header_names` lists additional header names (beyond the
+/// built-in set) that must be stripped when the redirect chain crosses origins — callers
+/// should add the identity's api-key header name here so it is never forwarded to a
+/// different host.
 #[derive(Debug, Default, Clone)]
 pub struct ExecOptions {
     pub is_file_transfer_collection: Option<bool>,
     pub ssl_verify: Option<bool>,
     pub ssl_verify_confirmed: Option<bool>,
+    /// Additional header names to strip on cross-origin redirects (case-insensitive).
+    /// Defaults to empty — the built-in list covers Authorization/Cookie/x-amz-*.
+    pub sensitive_header_names: Vec<String>,
 }
 
 fn err(msg: impl Into<String>) -> Value {
@@ -306,7 +312,11 @@ pub async fn execute_request(
     for hop in 0..=MAX_HOPS {
         let mut rb = client.request(current_method.clone(), current_url.clone());
         for (k, v) in &out_headers {
-            if cross_origin && is_sensitive_header(k.as_str()) { continue; }
+            if cross_origin && (is_sensitive_header(k.as_str())
+                || options.sensitive_header_names.iter().any(|s| s.eq_ignore_ascii_case(k.as_str())))
+            {
+                continue;
+            }
             rb = rb.header(k.as_str(), v.as_str());
         }
         if let Some(body) = &current_body {

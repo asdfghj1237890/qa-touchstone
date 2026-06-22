@@ -68,6 +68,9 @@ pub async fn execute_postman_request(
             is_file_transfer_collection,
             ssl_verify,
             ssl_verify_confirmed,
+            // The GUI applies auth renderer-side, so marking sensitive header names here
+            // is out of scope for this fix — pass empty and use the built-in defaults.
+            sensitive_header_names: Vec::new(),
         },
     )
     .await
