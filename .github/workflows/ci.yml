@@ -72,7 +72,16 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace
+
+      - name: Assert CLI does not link tauri or keyring
+        run: |
+          tree=$(cargo tree --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci -e normal)
+          echo "$tree"
+          if echo "$tree" | grep -Eq '(^|[^[:alnum:]_-])(tauri|keyring)([^[:alnum:]_-]|$)'; then
+            echo "::error::qa-touchstone-ci must not depend on tauri/keyring"
+            exit 1
+          fi
 
   cargo-audit:
     runs-on: ubuntu-latest
