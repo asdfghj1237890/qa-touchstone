@@ -1,0 +1,31 @@
+[
+  {
+    "name": "hit",
+    "text": "Hello {{who}}",
+    "map": {
+      "who": "world"
+    },
+    "expected": "Hello world"
+  },
+  {
+    "name": "miss_passthru",
+    "text": "Hello {{ who }}",
+    "map": {},
+    "expected": "Hello {{ who }}"
+  },
+  {
+    "name": "multi",
+    "text": "{{a}}/{{b}}",
+    "map": {
+      "a": "1",
+      "b": "2"
+    },
+    "expected": "1/2"
+  },
+  {
+    "name": "empty_map",
+    "text": "no vars here",
+    "map": {},
+    "expected": "no vars here"
+  }
+]

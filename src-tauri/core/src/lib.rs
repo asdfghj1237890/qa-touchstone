@@ -3,5 +3,6 @@
 
 pub mod aws;
 pub mod config;
+pub mod engine;
 pub mod executor;
 pub mod reqprep;
