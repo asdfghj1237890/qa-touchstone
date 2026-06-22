@@ -1,6 +1,6 @@
 // Generates TS-vs-Rust golden fixtures by running the real TS engine with a
-// pinned clock + RNG. Run: `node scripts/gen-fixtures.mjs`. CI fails if the
-// committed fixtures differ from a fresh run (staleness gate, added later).
+// pinned clock + RNG. Run: `node scripts/gen-fixtures.mjs`.
+// CI (ci.yml frontend job) regenerates these and fails on a dirty fixtures/ diff — keep fixtures committed in sync.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';

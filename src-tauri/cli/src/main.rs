@@ -157,9 +157,7 @@ async fn run_send(
     // Step 7: short-circuit on runtime failure — do NOT evaluate/print assertions against a null response.
     // Runtime failure → exit 1 (no assertion rows).
     if resp["success"] != json!(true) {
-        let err_msg = resp["body"]["error"].as_str()
-            .or_else(|| resp["error"].as_str())
-            .unwrap_or("request failed");
+        let err_msg = resp["error"].as_str().unwrap_or("request failed");
         if use_json {
             // Machine-readable runtime-failure output — REDACTED: no request headers / auth secrets.
             let json_out = json!({

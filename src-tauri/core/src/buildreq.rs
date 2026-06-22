@@ -40,7 +40,7 @@ pub fn build_request(req: &Request, identity: &Identity, map: &BTreeMap<String, 
     }
 
     // auth (Task 3 fills none/bearer/apiKey/basic) — apiKey-in-query may push to `query`
-    apply_auth(identity, map, &mut headers, &mut query)?;
+    apply_auth(identity, &mut headers, &mut query)?;
 
     if let Some(ct) = content_type {
         if !headers.iter().any(|h| h["key"].as_str().map(|k| k.eq_ignore_ascii_case("content-type")).unwrap_or(false)) {
@@ -64,7 +64,7 @@ pub fn build_request(req: &Request, identity: &Identity, map: &BTreeMap<String, 
 /// Secrets (token/value/password/username) are opaque literals from config load; NOT re-substituted.
 /// Basic: Authorization: Basic <base64(utf8("user:pass"))>.
 // Authorization: Basic base64(utf8(user:pass)). Matches TS btoa(unescape(encodeURIComponent(...))) for ALL Unicode — both base64 the UTF-8 bytes.
-fn apply_auth(id: &Identity, _map: &BTreeMap<String, String>, headers: &mut Vec<Value>, query: &mut Vec<String>) -> Result<(), String> {
+fn apply_auth(id: &Identity, headers: &mut Vec<Value>, query: &mut Vec<String>) -> Result<(), String> {
     match &id.auth {
         Auth::None => {}
         Auth::Bearer { token } => {
