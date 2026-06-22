@@ -74,6 +74,7 @@ pub struct RealDynamics;
 impl Dynamics for RealDynamics {
     fn resolve(&mut self, name: &str) -> Option<String> {
         let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            // as i64 truncates sub-millisecond; unwrap_or(0) is a "never in practice" backdate fallback.
             .map(|d| d.as_millis() as i64).unwrap_or(0);
         let mut next = || rand::random::<f64>();
         dynamic_value(name, now_ms, &mut next)
@@ -87,9 +88,13 @@ impl PinnedDynamics {
 }
 impl Dynamics for PinnedDynamics {
     fn resolve(&mut self, name: &str) -> Option<String> {
-        let floats = self.floats.clone();
-        let mut next = || { let v = floats[self.cursor % floats.len()]; self.cursor += 1; v };
-        dynamic_value(name, self.now_ms, &mut next)
+        let len = self.floats.len();
+        let mut cursor = self.cursor;
+        let floats = &self.floats;
+        let mut next = || { let v = floats[cursor % len]; cursor += 1; v };
+        let result = dynamic_value(name, self.now_ms, &mut next);
+        self.cursor = cursor;
+        result
     }
 }
 
@@ -100,6 +105,7 @@ fn dynamic_value(name: &str, now_ms: i64, next: &mut dyn FnMut() -> f64) -> Opti
         "$timestamp" => Some(((now_ms as f64 / 1000.0).floor() as i64).to_string()),
         "$isoTimestamp" => {
             // new Date(now).toISOString() — RFC3339 millis, 'Z'. chrono is a dep.
+            // `?` → None leaves `{{$isoTimestamp}}` verbatim if `now_ms` is out of chrono range.
             let dt = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)?;
             Some(dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string())
         }
@@ -110,7 +116,7 @@ fn dynamic_value(name: &str, now_ms: i64, next: &mut dyn FnMut() -> f64) -> Opti
             let mut out = String::with_capacity(tmpl.len());
             for ch in tmpl.chars() {
                 if ch == 'x' || ch == 'y' {
-                    let r = (next() * 16.0) as u32 & 0xF;       // r = Math.random()*16 | 0
+                    let r = (next() * 16.0) as u32 & 0xF;       // r = Math.random()*16 | 0; mask keeps 0..=15 even if next() returns 1.0
                     let v = if ch == 'x' { r } else { (r & 0x3) | 0x8 };
                     out.push(char::from_digit(v, 16).unwrap());
                 } else { out.push(ch); }
@@ -183,14 +189,18 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
             let val = a.get("value").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
             let op = a.get("op").and_then(|o| o.as_str()).unwrap_or("eq");
             let pass = match op { "neq" => s != val, "lt" => s < val, "gt" => s > val, _ => s == val };
-            (pass, format!("{}", s as i64))
+            // actual mirrors JS String(resp.status) — faithful for non-integer/missing values
+            let actual = resp.get("status").map(json_stringify).unwrap_or_else(|| "undefined".into());
+            (pass, actual)
         }
         "time" => {
             let t = resp.get("time").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
             let val = a.get("value").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
             let op = a.get("op").and_then(|o| o.as_str()).unwrap_or("");
             let pass = if op == "gt" { t > val } else { t < val };
-            (pass, format!("{} ms", t as i64))
+            // actual mirrors JS resp.time + ' ms' — faithful for non-integer/missing values
+            let actual = format!("{} ms", resp.get("time").map(json_stringify).unwrap_or_else(|| "undefined".into()));
+            (pass, actual)
         }
         "bodyHas" => {
             let p = a.get("path").and_then(|p| p.as_str()).unwrap_or("");
@@ -251,8 +261,11 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
     if let Some(o) = out.as_object_mut() {
         o.insert("pass".into(), json!(pass));
         o.insert("actual".into(), json!(actual));
+        return out;
     }
-    out
+    // Non-object assertion (degenerate input) — return a visible error object rather than silently
+    // returning the unchanged value with no pass/actual fields.
+    json!({ "pass": false, "actual": "invalid assertion" })
 }
 
 /// Port of qaRunAssertions (engine.ts:108): skip `on === false`, eval the rest.
