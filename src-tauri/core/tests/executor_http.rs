@@ -1,4 +1,4 @@
-use qa_touchstone_core::executor::execute_request;
+use qa_touchstone_core::executor::{execute_request, ExecOptions};
 use serde_json::json;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -29,7 +29,7 @@ async fn follows_redirect_and_captures_set_cookie() {
     let request_details = json!({
         "request": { "method": "GET", "url": format!("{}/start", server.uri()), "header": [] }
     });
-    let out = execute_request(&request_details, &json!({}), None, None, None, None, None).await;
+    let out = execute_request(&request_details, &json!({}), None, None, ExecOptions::default()).await;
 
     assert_eq!(out["success"], json!(true));
     assert_eq!(out["status"], json!(200));
@@ -45,7 +45,7 @@ async fn follows_redirect_and_captures_set_cookie() {
 #[tokio::test]
 async fn invalid_url_returns_error_value() {
     let request_details = json!({ "request": { "method": "GET", "url": "not a url", "header": [] } });
-    let out = execute_request(&request_details, &json!({}), None, None, None, None, None).await;
+    let out = execute_request(&request_details, &json!({}), None, None, ExecOptions::default()).await;
     assert_eq!(out["success"], json!(false));
     assert!(out["error"].as_str().unwrap_or("").to_lowercase().contains("url"));
 }

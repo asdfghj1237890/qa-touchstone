@@ -2,6 +2,7 @@
 //! Exit codes (fixed for all phases): 0 ok, 1 runtime error,
 //! 2 invalid input (clap usage / config), 3 findings gate (reserved, SP3).
 use clap::{Parser, Subcommand};
+use qa_touchstone_core::executor::ExecOptions;
 use serde_json::json;
 
 #[derive(Parser)]
@@ -29,7 +30,7 @@ async fn main() -> std::process::ExitCode {
         Command::Ping { url } => {
             let request_details = json!({ "request": { "method": "GET", "url": url, "header": [] } });
             let out = qa_touchstone_core::executor::execute_request(
-                &request_details, &json!({}), None, None, None, None, None,
+                &request_details, &json!({}), None, None, ExecOptions::default(),
             )
             .await;
             if out["success"].as_bool() == Some(true) {

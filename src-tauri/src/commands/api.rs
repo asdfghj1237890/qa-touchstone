@@ -62,11 +62,13 @@ pub async fn execute_postman_request(
     qa_touchstone_core::executor::execute_request(
         &request_details,
         &params,
-        selected_environment.as_ref().filter(|e| !e.is_null()),
-        is_file_transfer_collection,
-        ssl_verify,
-        ssl_verify_confirmed,
+        selected_environment.as_ref(),
         credentials,
+        qa_touchstone_core::executor::ExecOptions {
+            is_file_transfer_collection,
+            ssl_verify,
+            ssl_verify_confirmed,
+        },
     )
     .await
 }

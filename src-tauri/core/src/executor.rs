@@ -4,6 +4,17 @@ use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+/// Optional execution toggles. Defaults mean "safe default": `is_file_transfer_collection`
+/// selects the AWS service default; `ssl_verify` verifies unless explicitly `Some(false)`;
+/// `ssl_verify_confirmed` must be `Some(true)` to honor a `Some(false)` ssl_verify, else the
+/// request is rejected.
+#[derive(Debug, Default, Clone)]
+pub struct ExecOptions {
+    pub is_file_transfer_collection: Option<bool>,
+    pub ssl_verify: Option<bool>,
+    pub ssl_verify_confirmed: Option<bool>,
+}
+
 fn err(msg: impl Into<String>) -> Value {
     json!({ "success": false, "error": msg.into() })
 }
@@ -81,10 +92,8 @@ pub async fn execute_request(
     request_details: &Value,
     params: &Value,
     selected_environment: Option<&Value>,
-    is_file_transfer_collection: Option<bool>,
-    ssl_verify: Option<bool>,
-    ssl_verify_confirmed: Option<bool>,
     credentials: Option<Credentials>,
+    options: ExecOptions,
 ) -> Value {
     let req = match request_details.get("request") {
         Some(r) if r.is_object() => r.clone(),
@@ -147,7 +156,7 @@ pub async fn execute_request(
         }
     }
 
-    let mut service = if is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" }.to_string();
+    let mut service = if options.is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" }.to_string();
     let mut region = "us-east-1".to_string();
     if let Some(auth) = req.get("auth") {
         if str_field(auth, "type") == Some("awsv4") {
@@ -234,7 +243,7 @@ pub async fn execute_request(
     // Disabling TLS verification now requires an explicit confirmation flag from
     // the renderer (sslVerifyConfirmed) — a silent ssl_verify=false is rejected so
     // the UI must surface a confirm dialog before accepting MITM exposure.
-    let verify = match resolve_tls_verification(ssl_verify, ssl_verify_confirmed) {
+    let verify = match resolve_tls_verification(options.ssl_verify, options.ssl_verify_confirmed) {
         Ok(v) => v,
         Err(e) => return err(e),
     };
@@ -388,8 +397,8 @@ pub async fn execute_request(
         "requestMetadata": {
             "sentHeaders": sent_headers,
             // 對齊 Electron：metadata 回報 collection 預設 service（非 awsv4 覆寫後的）。
-            "awsService": if is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" },
-            "isFileTransferCollection": is_file_transfer_collection.unwrap_or(false)
+            "awsService": if options.is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" },
+            "isFileTransferCollection": options.is_file_transfer_collection.unwrap_or(false)
         }
     })
 }
