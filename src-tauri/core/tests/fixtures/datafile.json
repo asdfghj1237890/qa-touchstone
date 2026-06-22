@@ -1,0 +1,118 @@
+[
+  {
+    "name": "csv_basic",
+    "text": "a,b\n1,2\n3,4",
+    "file": "d.csv",
+    "expected": {
+      "rows": [
+        {
+          "a": "1",
+          "b": "2"
+        },
+        {
+          "a": "3",
+          "b": "4"
+        }
+      ],
+      "columns": [
+        "a",
+        "b"
+      ],
+      "error": "",
+      "format": "csv"
+    }
+  },
+  {
+    "name": "csv_quoted",
+    "text": "a,b\n\"x,y\",\"he said \"\"hi\"\"\"",
+    "file": "d.csv",
+    "expected": {
+      "rows": [
+        {
+          "a": "x,y",
+          "b": "he said \"hi\""
+        }
+      ],
+      "columns": [
+        "a",
+        "b"
+      ],
+      "error": "",
+      "format": "csv"
+    }
+  },
+  {
+    "name": "json_array",
+    "text": "[{\"a\":1,\"b\":\"two\"},{\"a\":3}]",
+    "file": "d.json",
+    "expected": {
+      "rows": [
+        {
+          "a": 1,
+          "b": "two"
+        },
+        {
+          "a": 3
+        }
+      ],
+      "columns": [
+        "a",
+        "b"
+      ],
+      "error": "",
+      "format": "json"
+    }
+  },
+  {
+    "name": "json_single",
+    "text": "{\"a\":1,\"b\":2}",
+    "file": "d.json",
+    "expected": {
+      "rows": [
+        {
+          "a": 1,
+          "b": 2
+        }
+      ],
+      "columns": [
+        "a",
+        "b"
+      ],
+      "error": "",
+      "format": "json"
+    }
+  },
+  {
+    "name": "json_empty",
+    "text": "[]",
+    "file": "d.json",
+    "expected": {
+      "rows": null,
+      "columns": [],
+      "error": "Empty JSON array",
+      "format": "json"
+    }
+  },
+  {
+    "name": "empty_text",
+    "text": "   ",
+    "file": "d.csv",
+    "expected": {
+      "rows": null,
+      "columns": [],
+      "error": "",
+      "format": null
+    }
+  },
+  {
+    "name": "csv_too_short",
+    "text": "a,b",
+    "file": "d.csv",
+    "expected": {
+      "rows": null,
+      "columns": [],
+      "error": "CSV needs a header row + at least one data row",
+      "format": "csv"
+    }
+  }
+]

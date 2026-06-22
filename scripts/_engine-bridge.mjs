@@ -26,3 +26,4 @@ export const qaSubstitute = globalThis.qaSubstitute;
 export const qaVarMap = globalThis.qaVarMap;
 export const qaEval = globalThis.qaEval;
 export const qaRunAssertions = globalThis.qaRunAssertions;
+export const qaParseDataFile = globalThis.qaParseDataFile;

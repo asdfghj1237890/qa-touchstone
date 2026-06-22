@@ -16,7 +16,7 @@ Math.random = () => FLOATS[(_i++) % FLOATS.length];
 // window must be set before engine bridge (which attaches qaSubstitute to it),
 // and before buildPayload bridge (which reads window.qaSubstitute at call time).
 globalThis.window = globalThis;
-const { qaSubstitute, qaVarMap, qaRunAssertions } = await import('./_engine-bridge.mjs');
+const { qaSubstitute, qaVarMap, qaRunAssertions, qaParseDataFile } = await import('./_engine-bridge.mjs');
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dir, '..', 'src-tauri', 'core', 'tests', 'fixtures');
@@ -114,3 +114,29 @@ const brCases = [
 const brOut = brCases.map(c => ({ name:c.name, expected: buildPayload(c.req, brEnv, c.varMap).requestDetails }));
 writeFileSync(join(OUT, 'buildreq.json'), JSON.stringify({ fixedNowMs: FIXED_NOW, floats: FLOATS, cases: brOut }, null, 2) + '\n');
 console.log(`wrote buildreq.json (${brOut.length} cases)`);
+
+// qaParseDataFile — CSV/JSON data file parser (engine.ts:195-227).
+_i = 0;
+const dataCases = [
+  { name:'csv_basic',     text:'a,b\n1,2\n3,4',                 file:'d.csv' },
+  { name:'csv_quoted',    text:'a,b\n"x,y","he said ""hi"""',  file:'d.csv' },
+  { name:'json_array',    text:'[{"a":1,"b":"two"},{"a":3}]',   file:'d.json' },
+  { name:'json_single',   text:'{"a":1,"b":2}',                 file:'d.json' },
+  { name:'json_empty',    text:'[]',                            file:'d.json' },
+  { name:'empty_text',    text:'   ',                           file:'d.csv' },
+  { name:'csv_too_short', text:'a,b',                           file:'d.csv' },
+];
+const dataOut = dataCases.map(c => ({ ...c, expected: qaParseDataFile(c.text, c.file) }));
+writeFileSync(join(OUT, 'datafile.json'), JSON.stringify(dataOut, null, 2) + '\n');
+console.log(`wrote datafile.json (${dataOut.length} cases)`);
+
+// js_string coercion — JS String() per type, to pin the Rust js_string() behaviour.
+_i = 0;
+const coercion = [
+  { name:'num',   value: 7 },      { name:'float', value: 1.5 },
+  { name:'bool',  value: true },   { name:'null',  value: null },
+  { name:'str',   value: 'hi' },   { name:'arr',   value: [1,2] },
+  { name:'obj',   value: {a:1} },
+].map(c => ({ name:c.name, value:c.value, expected: String(c.value) }));
+writeFileSync(join(OUT, 'coercion.json'), JSON.stringify(coercion, null, 2) + '\n');
+console.log(`wrote coercion.json (${coercion.length} cases)`);

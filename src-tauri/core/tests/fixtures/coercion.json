@@ -1,0 +1,42 @@
+[
+  {
+    "name": "num",
+    "value": 7,
+    "expected": "7"
+  },
+  {
+    "name": "float",
+    "value": 1.5,
+    "expected": "1.5"
+  },
+  {
+    "name": "bool",
+    "value": true,
+    "expected": "true"
+  },
+  {
+    "name": "null",
+    "value": null,
+    "expected": "null"
+  },
+  {
+    "name": "str",
+    "value": "hi",
+    "expected": "hi"
+  },
+  {
+    "name": "arr",
+    "value": [
+      1,
+      2
+    ],
+    "expected": "1,2"
+  },
+  {
+    "name": "obj",
+    "value": {
+      "a": 1
+    },
+    "expected": "[object Object]"
+  }
+]

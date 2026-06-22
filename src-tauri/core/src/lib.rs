@@ -4,6 +4,7 @@
 pub mod aws;
 pub mod buildreq;
 pub mod config;
+pub mod datafile;
 pub mod engine;
 pub mod executor;
 pub mod reqprep;
