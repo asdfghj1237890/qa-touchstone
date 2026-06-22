@@ -1,11 +1,9 @@
-mod aws;
 mod commands;
 mod credentials;
 mod error;
 mod events;
 mod json_store;
 mod paths;
-mod reqprep;
 mod secrets;
 mod state;
 

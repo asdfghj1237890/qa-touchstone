@@ -2858,6 +2858,7 @@ dependencies = [
  "keyring",
  "log",
  "parking_lot",
+ "qa_touchstone_core",
  "regex",
  "reqwest",
  "serde",

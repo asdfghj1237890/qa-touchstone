@@ -1,7 +1,7 @@
-use crate::aws::{self, Credentials};
+use qa_touchstone_core::aws::{self, Credentials};
 use crate::commands::config::load_config_raw;
 use crate::credentials::parse_credential_file_content;
-use crate::reqprep::{rebase_url, remove_json_comments, substitute_body, substitute_url};
+use qa_touchstone_core::reqprep::{rebase_url, remove_json_comments, substitute_body, substitute_url};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use std::time::Duration;
