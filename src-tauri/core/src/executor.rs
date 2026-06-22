@@ -1,3 +1,7 @@
+//! HTTP request execution — Tauri-free and credential-agnostic. Credentials are
+//! resolved by the caller and passed in; this module knows nothing about config
+//! files, the OS keychain, or Tauri APIs.
+
 use crate::aws::{self, Credentials};
 use crate::reqprep::{rebase_url, remove_json_comments, substitute_body, substitute_url};
 use serde_json::{json, Map, Value};

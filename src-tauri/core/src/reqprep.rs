@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 
 /// Legacy/test base paths used by rebase_url tests. Runtime environments pass their own
 /// knownBasePaths so external presets do not inherit default path-stripping behavior.
-pub const KNOWN_ENV_BASE_PATHS: &[&str] = &[
+pub(crate) const KNOWN_ENV_BASE_PATHS: &[&str] = &[
     "/legacy-alpha",
     "/legacy-prod",
     "/api-alpha",
