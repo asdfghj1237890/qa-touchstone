@@ -78,7 +78,10 @@ jobs:
         run: |
           tree=$(cargo tree --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci -e normal)
           echo "$tree"
-          if echo "$tree" | grep -Eq '(^|[^[:alnum:]_-])(tauri|keyring)([^[:alnum:]_-]|$)'; then
+          # Strip the " (/path/.../src-tauri/cli)" path parenthetical before matching so the
+          # "src-tauri" in the checkout path cannot trigger a false positive; then match
+          # tauri / keyring as whole package-name tokens (this also catches tauri-*/keyring-*).
+          if echo "$tree" | sed 's/ (.*)//' | grep -Eq '\b(tauri|keyring)\b'; then
             echo "::error::qa-touchstone-ci must not depend on tauri/keyring"
             exit 1
           fi
