@@ -69,15 +69,6 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-/// Mirrors tryParse(executor.ts:71-74): empty string → Null, valid JSON → parsed,
-/// otherwise the raw string as a JSON String value.
-fn try_parse(raw: &str) -> serde_json::Value {
-    if raw.is_empty() {
-        return serde_json::Value::Null;
-    }
-    serde_json::from_str(raw).unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
-}
-
 /// Replace every occurrence of each secret in `s` with `***REDACTED***`.
 fn redact_str(s: &str, secrets: &[String]) -> String {
     let mut out = s.to_string();
@@ -154,7 +145,7 @@ async fn run_send(
     env_name: Option<String>,
     use_json: bool,
 ) -> std::process::ExitCode {
-    use qa_touchstone_core::{buildreq, config::load_config, engine::{qa_var_map, RealDynamics}, executor::execute_request};
+    use qa_touchstone_core::{buildreq, config::load_config, engine::{qa_var_map, RealDynamics}};
 
     // Step 1: read the config file (IO error → exit 2)
     let text = match std::fs::read_to_string(&config_path) {
@@ -225,30 +216,26 @@ async fn run_send(
         } => vec![key.clone()],
         _ => vec![],
     };
-    let t0 = std::time::Instant::now();
-    // &json!({}) is the (empty) params/session context — SP1 will thread session state here.
-    let resp = execute_request(&rd, &json!({}), None, None, ExecOptions { sensitive_header_names, ..Default::default() }).await;
-    let ms = t0.elapsed().as_millis() as u64;
+    let exec_opts = ExecOptions { sensitive_header_names, ..Default::default() };
+
+    // Steps 6-9: execute, adapt, and assert via run_step (no printing/redaction inside).
+    let step = qa_touchstone_core::step::run_step(&rd, &req.assertions, exec_opts).await;
 
     let method = rd["request"]["method"].as_str().unwrap_or("?");
-    let final_url = resp["finalUrl"].as_str()
-        .or_else(|| rd["request"]["url"].as_str())
-        .unwrap_or("?");
-    let status = resp["status"].as_i64().unwrap_or(0);
+    let final_url = redact_str(&step.final_url, &secrets);
 
     // Step 7: short-circuit on runtime failure — do NOT evaluate/print assertions against a null response.
     // Runtime failure → exit 1 (no assertion rows).
-    if resp["success"] != json!(true) {
-        let err_msg = resp["error"].as_str().unwrap_or("request failed");
-        let redacted_err = redact_str(err_msg, &secrets);
+    if !step.success {
+        let redacted_err = redact_str(step.error.as_deref().unwrap_or("request failed"), &secrets);
         if use_json {
             // Machine-readable runtime-failure output — secrets are redacted.
             let json_out = json!({
                 "success": false,
-                "status": status,
-                "url": redact_str(final_url, &secrets),
+                "status": step.status,
+                "url": final_url,
                 "method": method,
-                "ms": ms,
+                "ms": step.ms,
                 "error": redacted_err,
             });
             println!("{}", json_out);
@@ -258,41 +245,31 @@ async fn run_send(
         return std::process::ExitCode::from(1);
     }
 
-    // Step 8: runtime ok — build response adapter → assertion-response shape
-    let assert_resp = json!({
-        "status": resp["status"],
-        "headers": resp["headers"],
-        "time": ms,
-        "body": try_parse(resp["body"].as_str().unwrap_or("")),
-    });
-
-    // Step 9: run assertions
-    let results = qa_touchstone_core::engine::run_assertions(&req.assertions, &assert_resp);
-
     // Step 10: determine exit code
     // any assertion pass != true → assertion failure (exit 4); all passed → exit 0
-    let assertions_pass = results.iter().all(|r| r["pass"] == json!(true));
+    let assertions_pass = step.results.iter().all(|r| r["pass"] == json!(true));
 
     // Step 11: output
     if use_json {
         // Machine-readable JSON — secrets are redacted from url, responseHeaders, body, and assertions.
-        let redacted_results: serde_json::Value = redact_value(&serde_json::Value::Array(results.clone()), &secrets);
+        let redacted_results: serde_json::Value =
+            redact_value(&serde_json::Value::Array(step.results.clone()), &secrets);
         let json_out = json!({
             "success": true,
-            "status": status,
-            "url": redact_str(final_url, &secrets),
+            "status": step.status,
+            "url": final_url,
             "method": method,
-            "ms": ms,
+            "ms": step.ms,
             // response headers (from server) included but redacted; request headers are NOT echoed (auth redaction)
-            "responseHeaders": redact_value(&resp["headers"], &secrets),
-            "body": redact_value(&assert_resp["body"], &secrets),
+            "responseHeaders": redact_value(&step.headers, &secrets),
+            "body": redact_value(&step.body, &secrets),
             "assertions": redacted_results,
         });
         println!("{}", json_out);
     } else {
         // Human-readable output — final_url and assertion actuals are redacted.
-        println!("{method} {} → {status} ({ms}ms)", redact_str(final_url, &secrets));
-        for r in &results {
+        println!("{method} {final_url} → {} ({}ms)", step.status, step.ms);
+        for r in &step.results {
             let pass = r.get("pass") == Some(&json!(true));
             let mark = if pass { '\u{2713}' } else { '\u{2717}' }; // ✓ / ✗
             let label_raw = r.get("label")
