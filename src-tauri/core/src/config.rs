@@ -153,6 +153,22 @@ pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<C
     })
 }
 
+impl Config {
+    /// Adapt the JSON config (object-map variables) into the engine's scoped-vars
+    /// shape (rows with `on: true`). Rust-only glue — no TS counterpart.
+    pub fn scoped_vars(&self) -> crate::engine::ScopedVars {
+        use crate::engine::{ScopedVars, VarRow};
+        let row = |(k, v): (&String, &String)| VarRow { key: k.clone(), value: v.clone(), on: true };
+        ScopedVars {
+            globals: self.globals.variables.iter().map(row).collect(),
+            collections: Default::default(),
+            environments: self.environments.iter()
+                .map(|e| (e.name.clone(), e.variables.iter().map(row).collect()))
+                .collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,5 +256,15 @@ mod tests {
         // `rejected` is false here — serde silently accepts extra fields inside internally-tagged enum
         // variants; deny_unknown_fields is a no-op in this position with the serde version in use.
         let _ = rejected;
+    }
+
+    #[test]
+    fn scoped_vars_from_config_sets_on_true_and_keeps_precedence() {
+        let cfg = load_config(SAMPLE, &|k| envmap(&[("ADMIN_TOKEN","s")]).get(k).cloned()).unwrap();
+        let scoped = cfg.scoped_vars();
+        // globals.ua present and enabled
+        assert!(scoped.globals.iter().any(|r| r.key == "ua" && r.value == "qa-touchstone-ci" && r.on));
+        // environment staging carries apiHost
+        assert!(scoped.environments.get("staging").unwrap().iter().any(|r| r.key == "apiHost"));
     }
 }

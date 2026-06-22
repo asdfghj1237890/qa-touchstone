@@ -13,7 +13,7 @@ globalThis.Date = class extends RealDate { constructor(...a){ super(...(a.length
 globalThis.Date.now = () => FIXED_NOW;
 Math.random = () => FLOATS[(_i++) % FLOATS.length];
 
-const { qaSubstitute } = await import('./_engine-bridge.mjs');
+const { qaSubstitute, qaVarMap } = await import('./_engine-bridge.mjs');
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dir, '..', 'src-tauri', 'core', 'tests', 'fixtures');
@@ -30,3 +30,21 @@ const substitute = [
 const out = substitute.map(c => ({ ...c, expected: qaSubstitute(c.text, c.map) }));
 writeFileSync(join(OUT, 'substitute.json'), JSON.stringify(out, null, 2) + '\n');
 console.log(`wrote substitute.json (${out.length} cases)`);
+
+// qaVarMap(vars, envLabel, collectionIdOrExtra, extra) — engine.ts:35-46.
+// vars shape: { globals:[{key,value,on}], collections:{cid:[...]}, environments:{label:[...]} }
+_i = 0;
+const varmapCases = [
+  { name: 'precedence_env_over_global',
+    vars: { globals: [{key:'h',value:'g',on:true}], collections:{}, environments:{ staging:[{key:'h',value:'e',on:true}] } },
+    env: 'staging', collectionId: null },
+  { name: 'off_rows_skipped',
+    vars: { globals: [{key:'a',value:'1',on:false},{key:'b',value:'2',on:true}], collections:{}, environments:{} },
+    env: null, collectionId: null },
+  { name: 'missing_on_is_disabled',
+    vars: { globals: [{key:'a',value:'1'}], collections:{}, environments:{} },   // no `on` -> falsy
+    env: null, collectionId: null },
+];
+const varmapOut = varmapCases.map(c => ({ ...c, expected: qaVarMap(c.vars, c.env, c.collectionId) }));
+writeFileSync(join(OUT, 'varmap.json'), JSON.stringify(varmapOut, null, 2) + '\n');
+console.log(`wrote varmap.json (${varmapOut.length} cases)`);

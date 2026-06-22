@@ -1,6 +1,7 @@
 //! Port of src/qa/engine.ts — variable resolver + assertion engine.
 //! Behavior must match engine.ts exactly (verified by tests/engine_fixtures.rs).
 use regex::Regex;
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -14,6 +15,40 @@ impl Dynamics for NoDynamics { fn resolve(&mut self, _name: &str) -> Option<Stri
 fn var_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\{\{\s*([^}]+?)\s*\}\}").unwrap())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VarRow { pub key: String, pub value: String, #[serde(default)] pub on: bool }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ScopedVars {
+    #[serde(default)] pub globals: Vec<VarRow>,
+    #[serde(default)] pub collections: BTreeMap<String, Vec<VarRow>>,
+    #[serde(default)] pub environments: BTreeMap<String, Vec<VarRow>>,
+}
+
+/// Port of qaVarMap (engine.ts:35-46). Precedence low→high:
+/// global < collection < environment < local. A row counts only when `on` is true.
+pub fn qa_var_map(
+    vars: &ScopedVars,
+    env_label: Option<&str>,
+    collection_id: Option<&str>,
+    local: Option<&BTreeMap<String, String>>,
+) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    for v in &vars.globals { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+    if let Some(cid) = collection_id {
+        if let Some(rows) = vars.collections.get(cid) {
+            for v in rows { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+        }
+    }
+    if let Some(label) = env_label {
+        if let Some(rows) = vars.environments.get(label) {
+            for v in rows { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+        }
+    }
+    if let Some(local) = local { for (k, v) in local { map.insert(k.clone(), v.clone()); } }
+    map
 }
 
 /// Port of qaSubstitute (engine.ts:58-64). Unknown vars are left as the ORIGINAL

@@ -1,0 +1,69 @@
+[
+  {
+    "name": "precedence_env_over_global",
+    "vars": {
+      "globals": [
+        {
+          "key": "h",
+          "value": "g",
+          "on": true
+        }
+      ],
+      "collections": {},
+      "environments": {
+        "staging": [
+          {
+            "key": "h",
+            "value": "e",
+            "on": true
+          }
+        ]
+      }
+    },
+    "env": "staging",
+    "collectionId": null,
+    "expected": {
+      "h": "e"
+    }
+  },
+  {
+    "name": "off_rows_skipped",
+    "vars": {
+      "globals": [
+        {
+          "key": "a",
+          "value": "1",
+          "on": false
+        },
+        {
+          "key": "b",
+          "value": "2",
+          "on": true
+        }
+      ],
+      "collections": {},
+      "environments": {}
+    },
+    "env": null,
+    "collectionId": null,
+    "expected": {
+      "b": "2"
+    }
+  },
+  {
+    "name": "missing_on_is_disabled",
+    "vars": {
+      "globals": [
+        {
+          "key": "a",
+          "value": "1"
+        }
+      ],
+      "collections": {},
+      "environments": {}
+    },
+    "env": null,
+    "collectionId": null,
+    "expected": {}
+  }
+]

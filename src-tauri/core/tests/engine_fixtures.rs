@@ -13,3 +13,25 @@ fn substitute_matches_ts() {
         assert_eq!(got, c.expected, "case {}", c.name);
     }
 }
+
+use qa_touchstone_core::engine::{qa_var_map, ScopedVars};
+#[allow(unused_imports)]
+use qa_touchstone_core::engine::VarRow;
+
+#[derive(serde::Deserialize)]
+struct VarMapCase {
+    name: String,
+    vars: ScopedVars,
+    env: Option<String>,
+    #[serde(rename = "collectionId")] collection_id: Option<String>,
+    expected: BTreeMap<String, String>,
+}
+
+#[test]
+fn varmap_matches_ts() {
+    let cases: Vec<VarMapCase> = serde_json::from_str(include_str!("fixtures/varmap.json")).unwrap();
+    for c in &cases {
+        let got = qa_var_map(&c.vars, c.env.as_deref(), c.collection_id.as_deref(), None);
+        assert_eq!(got, c.expected, "case {}", c.name);
+    }
+}
