@@ -85,7 +85,7 @@ async fn run_send(
     env_name: Option<String>,
     use_json: bool,
 ) -> std::process::ExitCode {
-    use qa_touchstone_core::{buildreq, config::load_config, engine::qa_var_map, executor::execute_request};
+    use qa_touchstone_core::{buildreq, config::load_config, engine::{qa_var_map, RealDynamics}, executor::execute_request};
 
     // Step 1: read the config file (IO error → exit 2)
     let text = match std::fs::read_to_string(&config_path) {
@@ -134,7 +134,7 @@ async fn run_send(
     let map = qa_var_map(&scoped, env_name.as_deref(), None, None);
 
     // Step 5: build the request payload (Err → exit 2)
-    let rd = match buildreq::build_request(req, identity, &map) {
+    let rd = match buildreq::build_request(req, identity, &map, &mut RealDynamics) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("error: build_request failed: {e}");

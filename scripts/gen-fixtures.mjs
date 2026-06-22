@@ -107,7 +107,10 @@ const brCases = [
   { name:'basic', req: mkReq({ url:'https://x.example/u', auth:{ type:'basic', bearer:'', apiKey:{}, basic:{user:'u',pass:'p'}, aws:{}, oauth2:{} } }), varMap:{} },
   { name:'query_enc', req: mkReq({ url:'https://x.example/s', params:[{key:'q',value:'a b&c',on:true}] }), varMap:{} },
   { name:'json_body', req: mkReq({ method:'POST', url:'https://x.example/u', bodyMode:'json', body:'{"a":1}' }), varMap:{} },
+  // Dynamic case: {{$timestamp}} in a query param → resolved via pinned Date.now (FIXED_NOW).
+  // $timestamp does not consume floats, so float cursor ordering is unaffected.
+  { name:'timestamp_query', req: mkReq({ url:'https://x.example/u', params:[{key:'t',value:'{{$timestamp}}',on:true}] }), varMap:{} },
 ];
 const brOut = brCases.map(c => ({ name:c.name, expected: buildPayload(c.req, brEnv, c.varMap).requestDetails }));
-writeFileSync(join(OUT, 'buildreq.json'), JSON.stringify(brOut, null, 2) + '\n');
+writeFileSync(join(OUT, 'buildreq.json'), JSON.stringify({ fixedNowMs: FIXED_NOW, floats: FLOATS, cases: brOut }, null, 2) + '\n');
 console.log(`wrote buildreq.json (${brOut.length} cases)`);

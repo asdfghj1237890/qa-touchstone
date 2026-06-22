@@ -6,6 +6,7 @@
 use qa_touchstone_core::{
     buildreq::build_request,
     config::{ApiKeyIn, Auth, Body, BodyMode, Identity, Kv, Request},
+    engine::{NoDynamics, PinnedDynamics},
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -18,9 +19,29 @@ fn fixture_path() -> std::path::PathBuf {
         .join("buildreq.json")
 }
 
-fn load_fixtures() -> Vec<serde_json::Value> {
+struct Fixtures {
+    fixed_now_ms: i64,
+    floats: Vec<f64>,
+    cases: Vec<serde_json::Value>,
+}
+
+fn load_fixtures() -> Fixtures {
     let text = fs::read_to_string(fixture_path()).expect("buildreq.json not found — run `node scripts/gen-fixtures.mjs`");
-    serde_json::from_str(&text).expect("buildreq.json must be a JSON array")
+    let root: serde_json::Value = serde_json::from_str(&text).expect("buildreq.json must be valid JSON");
+    let fixed_now_ms = root["fixedNowMs"]
+        .as_i64()
+        .expect("buildreq.json must have top-level `fixedNowMs`");
+    let floats: Vec<f64> = root["floats"]
+        .as_array()
+        .expect("buildreq.json must have top-level `floats`")
+        .iter()
+        .map(|v| v.as_f64().expect("floats must be numbers"))
+        .collect();
+    let cases = root["cases"]
+        .as_array()
+        .expect("buildreq.json must have top-level `cases`")
+        .clone();
+    Fixtures { fixed_now_ms, floats, cases }
 }
 
 fn get_expected(cases: &[serde_json::Value], name: &str) -> serde_json::Value {
@@ -55,75 +76,89 @@ fn no_map() -> BTreeMap<String, String> {
 
 #[test]
 fn bearer() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "bearer");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "bearer");
 
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity { id: "id".into(), auth: Auth::Bearer { token: "TOK".into() } };
-    let got = build_request(&req, &id, &no_map()).unwrap();
+    let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "bearer: Rust output must match TS buildPayload golden");
 }
 
 #[test]
 fn apikey_header() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "apikey_header");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "apikey_header");
 
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
         auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Header },
     };
-    let got = build_request(&req, &id, &no_map()).unwrap();
+    let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "apikey_header: Rust output must match TS buildPayload golden");
 }
 
 #[test]
 fn apikey_query() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "apikey_query");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "apikey_query");
 
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
         auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Query },
     };
-    let got = build_request(&req, &id, &no_map()).unwrap();
+    let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "apikey_query: Rust output must match TS buildPayload golden");
 }
 
 #[test]
 fn basic() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "basic");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "basic");
 
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
         auth: Auth::Basic { username: "u".into(), password: "p".into() },
     };
-    let got = build_request(&req, &id, &no_map()).unwrap();
+    let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "basic: Rust output must match TS buildPayload golden (Basic dTpw)");
 }
 
 #[test]
 fn query_enc() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "query_enc");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "query_enc");
 
     let mut req = bare_req("GET", "https://x.example/s");
     req.query = vec![Kv { key: "q".into(), value: "a b&c".into() }];
-    let got = build_request(&req, &anon(), &no_map()).unwrap();
+    let got = build_request(&req, &anon(), &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "query_enc: Rust output must match TS encodeURIComponent golden");
 }
 
 #[test]
 fn json_body() {
-    let cases = load_fixtures();
-    let expected = get_expected(&cases, "json_body");
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "json_body");
 
     let mut req = bare_req("POST", "https://x.example/u");
     req.body = Some(Body { mode: BodyMode::Json, content: r#"{"a":1}"#.into() });
-    let got = build_request(&req, &anon(), &no_map()).unwrap();
+    let got = build_request(&req, &anon(), &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "json_body: Rust output must match TS buildPayload golden");
+}
+
+#[test]
+fn timestamp_query() {
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "timestamp_query");
+
+    // $timestamp is clock-only — no float consumption — so PinnedDynamics cursor stays at 0.
+    let mut dyns = PinnedDynamics::new(fix.fixed_now_ms, fix.floats.clone());
+    let mut req = bare_req("GET", "https://x.example/u");
+    req.query = vec![Kv { key: "t".into(), value: "{{$timestamp}}".into() }];
+    let got = build_request(&req, &anon(), &no_map(), &mut dyns).unwrap();
+    // With FIXED_NOW=1700000000000 ms → $timestamp = floor(1700000000000/1000) = 1700000000
+    assert_eq!(got, expected, "timestamp_query: Rust PinnedDynamics must match TS pinned Date.now golden");
 }
