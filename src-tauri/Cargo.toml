@@ -1,3 +1,7 @@
+[workspace]
+members = ["core"]
+resolver = "2"
+
 [package]
 name = "qa-touchstone"
 version = "0.22.0"

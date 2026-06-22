@@ -1,0 +1,2 @@
+//! qa_touchstone_core — Tauri-free request execution + (later) analysis logic,
+//! shared by the desktop app and the headless CLI.
