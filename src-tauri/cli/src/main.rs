@@ -144,26 +144,9 @@ async fn run_send(
 
     // Step 6: execute + measure wall-clock ms
     let t0 = std::time::Instant::now();
+    // &json!({}) is the (empty) params/session context — SP1 will thread session state here.
     let resp = execute_request(&rd, &json!({}), None, None, ExecOptions::default()).await;
-    let ms = t0.elapsed().as_millis() as i64;
-
-    // Step 7: response adapter → assertion-response shape
-    let assert_resp = json!({
-        "status": resp["status"],
-        "headers": resp["headers"],
-        "time": ms,
-        "body": try_parse(resp["body"].as_str().unwrap_or("")),
-    });
-
-    // Step 8: run assertions
-    let results = qa_touchstone_core::engine::run_assertions(&req.assertions, &assert_resp);
-
-    // Step 9: determine exit code
-    // success != true → runtime failure (exit 1)
-    // any assertion pass != true → assertion failure (exit 4)
-    // all passed → exit 0
-    let runtime_ok = resp["success"] == json!(true);
-    let assertions_pass = results.iter().all(|r| r["pass"] == json!(true));
+    let ms = t0.elapsed().as_millis() as u64;
 
     let method = rd["request"]["method"].as_str().unwrap_or("?");
     let final_url = resp["finalUrl"].as_str()
@@ -171,12 +154,51 @@ async fn run_send(
         .unwrap_or("?");
     let status = resp["status"].as_i64().unwrap_or(0);
 
-    // Step 10: output
+    // Step 7: short-circuit on runtime failure — do NOT evaluate/print assertions against a null response.
+    // Runtime failure → exit 1 (no assertion rows).
+    if resp["success"] != json!(true) {
+        let err_msg = resp["body"]["error"].as_str()
+            .or_else(|| resp["error"].as_str())
+            .unwrap_or("request failed");
+        if use_json {
+            // Machine-readable runtime-failure output — REDACTED: no request headers / auth secrets.
+            let json_out = json!({
+                "success": false,
+                "status": status,
+                "url": final_url,
+                "method": method,
+                "ms": ms,
+                "error": err_msg,
+            });
+            println!("{}", json_out);
+        } else {
+            // Human-readable — no request headers, so secrets never leak here
+            eprintln!("error: {err_msg}");
+        }
+        return std::process::ExitCode::from(1);
+    }
+
+    // Step 8: runtime ok — build response adapter → assertion-response shape
+    let assert_resp = json!({
+        "status": resp["status"],
+        "headers": resp["headers"],
+        "time": ms,
+        "body": try_parse(resp["body"].as_str().unwrap_or("")),
+    });
+
+    // Step 9: run assertions
+    let results = qa_touchstone_core::engine::run_assertions(&req.assertions, &assert_resp);
+
+    // Step 10: determine exit code
+    // any assertion pass != true → assertion failure (exit 4); all passed → exit 0
+    let assertions_pass = results.iter().all(|r| r["pass"] == json!(true));
+
+    // Step 11: output
     if use_json {
         // Machine-readable JSON — REDACTED: request headers and identity auth are never echoed.
         // Only safe response fields are included.
         let json_out = json!({
-            "success": runtime_ok,
+            "success": true,
             "status": status,
             "url": final_url,
             "method": method,
@@ -191,24 +213,21 @@ async fn run_send(
         // Human-readable output — no request headers, so secrets never leak here
         println!("{method} {final_url} → {status} ({ms}ms)");
         for r in &results {
-            let pass = r["pass"] == json!(true);
+            let pass = r.get("pass") == Some(&json!(true));
             let mark = if pass { '\u{2713}' } else { '\u{2717}' }; // ✓ / ✗
             let label = r.get("label")
                 .and_then(|v| v.as_str())
                 .or_else(|| r.get("type").and_then(|v| v.as_str()))
                 .unwrap_or("?");
-            let actual = r.get("actual").and_then(|v| v.as_str()).unwrap_or("?");
+            let actual = match r.get("actual") {
+                Some(v) => v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
+                None => "?".to_owned(),
+            };
             println!("{mark} {label} (actual: {actual})");
-        }
-        if !runtime_ok {
-            let err = resp["error"].as_str().unwrap_or("request failed");
-            eprintln!("error: runtime failure: {err}");
         }
     }
 
-    if !runtime_ok {
-        std::process::ExitCode::from(1)
-    } else if !assertions_pass {
+    if !assertions_pass {
         std::process::ExitCode::from(4)
     } else {
         std::process::ExitCode::SUCCESS
