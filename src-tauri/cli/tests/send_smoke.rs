@@ -461,3 +461,154 @@ async fn send_redacts_echoed_secret_in_body() {
         "--json output should include HTTP status 200; got:\n{stdout}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Test 8: secret appearing as a JSON response body KEY must not appear in --json output
+// ---------------------------------------------------------------------------
+/// Identity is bearer with token from env `KTOK=ktok_key_99`.
+/// Wiremock `/x` → 200 with body `{"ktok_key_99": "v"}` — the secret is a JSON KEY.
+/// Run `send --json`. Assert exit 0 AND that `ktok_key_99` is absent from stdout.
+#[tokio::test]
+async fn send_redacts_secret_as_response_body_key() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_raw(r#"{"ktok_key_99": "v"}"#, "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/x", server.uri());
+    let cfg_path = tmp_config("key_redact");
+    let config_json = format!(
+        r#"{{
+  "version": 1,
+  "environments": [],
+  "identities": [{{
+    "id": "tok",
+    "auth": {{ "type": "bearer", "token": {{ "env": "KTOK" }} }}
+  }}],
+  "requests": [{{
+    "id": "r",
+    "method": "GET",
+    "url": "{url}",
+    "assertions": [{{ "type": "status", "op": "eq", "value": 200 }}]
+  }}]
+}}"#
+    );
+    write_config(&cfg_path, &config_json);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+        .args(["send", "--config", cfg_path.to_str().unwrap(),
+               "--request", "r", "--identity", "tok", "--json"])
+        .env("KTOK", "ktok_key_99")
+        .output()
+        .expect("spawn binary");
+
+    remove_config(&cfg_path);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "expected exit 0 for passing assertion; stderr: {stderr}"
+    );
+
+    // Core assertion: the secret must NOT appear as an object key in the output.
+    assert!(
+        !stdout.contains("ktok_key_99"),
+        "bearer token 'ktok_key_99' must NOT appear in --json stdout (was echoed as a response body key); got:\n{stdout}"
+    );
+
+    assert!(
+        stdout.contains("200"),
+        "--json output should include HTTP status 200; got:\n{stdout}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: bare base64 blob echoed in response body (no "Basic " prefix) must not appear
+// ---------------------------------------------------------------------------
+/// Identity is basic with username `u` and password from env `BPW=pw_bare_77`.
+/// The bare base64 of `u:pw_bare_77` is computed and echoed in the response body
+/// WITHOUT the "Basic " prefix (e.g. `{"echoed": "<b64>"}`).
+/// Run `send --json`. Assert exit 0 AND that the bare base64 blob is absent from stdout.
+#[tokio::test]
+async fn send_redacts_bare_base64_blob() {
+    use base64::Engine as _;
+    let bareb64 = base64::engine::general_purpose::STANDARD.encode("u:pw_bare_77");
+
+    let server = MockServer::start().await;
+
+    let body = format!(r#"{{"echoed": "{}"}}"#, bareb64);
+
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/json")
+                .set_body_raw(body.clone(), "application/json"),
+        )
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/x", server.uri());
+    let cfg_path = tmp_config("bare_b64");
+    let config_json = format!(
+        r#"{{
+  "version": 1,
+  "environments": [],
+  "identities": [{{
+    "id": "basicid",
+    "auth": {{
+      "type": "basic",
+      "username": "u",
+      "password": {{ "env": "BPW" }}
+    }}
+  }}],
+  "requests": [{{
+    "id": "r",
+    "method": "GET",
+    "url": "{url}",
+    "assertions": [{{ "type": "status", "op": "eq", "value": 200 }}]
+  }}]
+}}"#
+    );
+    write_config(&cfg_path, &config_json);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+        .args(["send", "--config", cfg_path.to_str().unwrap(),
+               "--request", "r", "--identity", "basicid", "--json"])
+        .env("BPW", "pw_bare_77")
+        .output()
+        .expect("spawn binary");
+
+    remove_config(&cfg_path);
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "expected exit 0 for passing assertion; stderr: {stderr}"
+    );
+
+    // Core assertion: the bare base64 blob must NOT appear in stdout.
+    assert!(
+        !stdout.contains(&bareb64),
+        "bare base64 blob '{}' must NOT appear in --json stdout (was echoed in response body without 'Basic ' prefix); got:\n{stdout}",
+        bareb64
+    );
+
+    assert!(
+        stdout.contains("200"),
+        "--json output should include HTTP status 200; got:\n{stdout}"
+    );
+}

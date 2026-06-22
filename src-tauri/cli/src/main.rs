@@ -97,7 +97,10 @@ fn redact_value(v: &serde_json::Value, secrets: &[String]) -> serde_json::Value 
             serde_json::Value::Array(a.iter().map(|x| redact_value(x, secrets)).collect())
         }
         serde_json::Value::Object(o) => serde_json::Value::Object(
-            o.iter().map(|(k, x)| (k.clone(), redact_value(x, secrets))).collect(),
+            // Keys are redacted too — a secret-as-key (e.g. from an echo endpoint)
+            // would otherwise leak. If two keys redact to the same string the map
+            // keeps one entry, which is acceptable for redacted output.
+            o.iter().map(|(k, x)| (redact_str(k, secrets), redact_value(x, secrets))).collect(),
         ),
         other => other.clone(),
     }
@@ -114,11 +117,14 @@ fn build_redaction_set(auth: &qa_touchstone_core::config::Auth) -> Vec<String> {
         Auth::None => vec![],
         Auth::Bearer { token } => vec![token.clone()],
         Auth::ApiKey { value, .. } => vec![value.clone()],
-        Auth::Basic { username, password } => vec![
-            username.clone(),
-            password.clone(),
-            basic_auth_value(username, password),
-        ],
+        Auth::Basic { username, password } => {
+            // Include the full "Basic <b64>" header value AND the bare base64 token.
+            // A server may echo only the bare blob (without the "Basic " prefix), so
+            // both forms must be in the redaction set.
+            let full = basic_auth_value(username, password);
+            let bare = full.strip_prefix("Basic ").unwrap_or(&full).to_string();
+            vec![username.clone(), password.clone(), full, bare]
+        }
     };
 
     let mut set: Vec<String> = Vec::new();
@@ -134,6 +140,10 @@ fn build_redaction_set(auth: &qa_touchstone_core::config::Auth) -> Vec<String> {
             }
         }
     }
+    // Sort longest first so a short raw secret (e.g. username) cannot partially
+    // match and corrupt a longer token (e.g. the bare base64 or "Basic <b64>")
+    // before the longer form is replaced.
+    set.sort_by(|a, b| b.len().cmp(&a.len()));
     set
 }
 
@@ -199,7 +209,7 @@ async fn run_send(
     let rd = match buildreq::build_request(req, identity, &map, &mut RealDynamics) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("error: build_request failed: {e}");
+            eprintln!("error: build_request failed: {}", redact_str(&e, &secrets));
             return std::process::ExitCode::from(2);
         }
     };

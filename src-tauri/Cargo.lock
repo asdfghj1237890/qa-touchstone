@@ -3101,6 +3101,7 @@ dependencies = [
 name = "qa-touchstone-ci"
 version = "0.22.0"
 dependencies = [
+ "base64 0.22.1",
  "clap",
  "env_logger",
  "log",
