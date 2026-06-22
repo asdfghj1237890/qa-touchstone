@@ -62,7 +62,8 @@ pub fn build_request(req: &Request, identity: &Identity, map: &BTreeMap<String, 
 
 /// Apply identity auth — port of executor.ts:97-104.
 /// Secrets (token/value/password/username) are opaque literals from config load; NOT re-substituted.
-/// Basic: Authorization: Basic <base64(utf8("user:pass"))> — matches TS `b64(unescape(encodeURIComponent(...)))` for ASCII/Latin-1.
+/// Basic: Authorization: Basic <base64(utf8("user:pass"))>.
+// Authorization: Basic base64(utf8(user:pass)). Matches TS btoa(unescape(encodeURIComponent(...))) for ALL Unicode — both base64 the UTF-8 bytes.
 fn apply_auth(id: &Identity, _map: &BTreeMap<String, String>, headers: &mut Vec<Value>, query: &mut Vec<String>) -> Result<(), String> {
     match &id.auth {
         Auth::None => {}

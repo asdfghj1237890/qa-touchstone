@@ -12,7 +12,16 @@ import { tmpdir } from 'node:os';
 const stub = {
   name: 'stub', setup(b) {
     b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, a => ({ path: a.path, namespace: 'stub' }));
-    b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({ contents: 'export default {};', loader: 'js' }));
+    b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
+      contents: `
+  const guard = new Proxy(function(){}, {
+    get(_, k) { if (k === 'default' || k === '__esModule') return guard; throw new Error('stubbed module property accessed during fixture gen: ' + String(k)); },
+    apply() { throw new Error('stubbed module called during fixture gen'); },
+  });
+  export default guard;
+`,
+      loader: 'js',
+    }));
   },
 };
 const __dir = dirname(fileURLToPath(import.meta.url));
