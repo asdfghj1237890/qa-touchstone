@@ -48,3 +48,14 @@ const varmapCases = [
 const varmapOut = varmapCases.map(c => ({ ...c, expected: qaVarMap(c.vars, c.env, c.collectionId) }));
 writeFileSync(join(OUT, 'varmap.json'), JSON.stringify(varmapOut, null, 2) + '\n');
 console.log(`wrote varmap.json (${varmapOut.length} cases)`);
+
+// qaDynamic via qaSubstitute (engine.ts:19-28). The pinned Date.now/Math.random
+// (top of this file) make these deterministic. The Rust side replays the SAME
+// float sequence + fixed clock.
+const dynNames = ['$timestamp', '$isoTimestamp', '$randomInt', '$guid', '$randomEmail'];
+const dynamics = dynNames.map(n => {
+  _i = 0;                                   // reset the float cursor per case for determinism
+  return { name: n, text: `{{${n}}}`, expected: qaSubstitute(`{{${n}}}`, {}) };
+});
+writeFileSync(join(OUT, 'dynamics.json'), JSON.stringify({ fixedNowMs: FIXED_NOW, floats: FLOATS, cases: dynamics }, null, 2) + '\n');
+console.log(`wrote dynamics.json (${dynamics.length} cases)`);

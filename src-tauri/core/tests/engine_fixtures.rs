@@ -33,3 +33,20 @@ fn varmap_matches_ts() {
         assert_eq!(got, c.expected, "case {}", c.name);
     }
 }
+
+use qa_touchstone_core::engine::PinnedDynamics;
+
+#[derive(serde::Deserialize)]
+struct DynFile { #[serde(rename="fixedNowMs")] fixed_now_ms: i64, floats: Vec<f64>, cases: Vec<DynCase> }
+#[derive(serde::Deserialize)]
+struct DynCase { name: String, text: String, expected: String }
+
+#[test]
+fn dynamics_match_ts() {
+    let f: DynFile = serde_json::from_str(include_str!("fixtures/dynamics.json")).unwrap();
+    for c in &f.cases {
+        let mut dyns = PinnedDynamics::new(f.fixed_now_ms, f.floats.clone());
+        let got = qa_substitute(&c.text, &Default::default(), &mut dyns);
+        assert_eq!(got, c.expected, "case {}", c.name);
+    }
+}
