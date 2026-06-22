@@ -235,8 +235,12 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
                     actual.contains(search)
                 }
                 _ => {
-                    let want = a.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                    actual.as_str() == want
+                    // TS: String(val) === String(a.value)
+                    // val is already String(val) for present headers; for missing,
+                    // `actual` is "missing" but TS yields String(undefined) = "undefined".
+                    let lhs = val.map(|v| string_coerce(Some(v))).unwrap_or_else(|| "undefined".into());
+                    let rhs = string_coerce(a.get("value"));
+                    lhs == rhs
                 }
             };
             (pass, actual)

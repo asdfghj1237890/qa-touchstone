@@ -3,7 +3,8 @@
     "status": 200,
     "time": 12,
     "headers": {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "X-Count": "3"
     },
     "body": {
       "id": 7,
@@ -12,7 +13,8 @@
         1,
         2,
         3
-      ]
+      ],
+      "name": "alice"
     }
   },
   "cases": [
@@ -170,6 +172,42 @@
         "on": false
       },
       "expected": null
+    },
+    {
+      "name": "header_eq_num",
+      "a": {
+        "type": "header",
+        "name": "x-count",
+        "op": "eq",
+        "value": 3,
+        "on": true
+      },
+      "expected": {
+        "type": "header",
+        "name": "x-count",
+        "op": "eq",
+        "value": 3,
+        "on": true,
+        "pass": true,
+        "actual": "3"
+      }
+    },
+    {
+      "name": "bodyEq_string_val",
+      "a": {
+        "type": "bodyEq",
+        "path": "name",
+        "value": "alice",
+        "on": true
+      },
+      "expected": {
+        "type": "bodyEq",
+        "path": "name",
+        "value": "alice",
+        "on": true,
+        "pass": true,
+        "actual": "\"alice\""
+      }
     }
   ]
 }
