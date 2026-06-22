@@ -3113,10 +3113,12 @@ dependencies = [
 name = "qa_touchstone_core"
 version = "0.22.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "hex",
  "hmac",
  "log",
+ "percent-encoding",
  "rand 0.8.6",
  "regex",
  "reqwest",

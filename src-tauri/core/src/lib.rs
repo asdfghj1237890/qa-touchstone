@@ -2,6 +2,7 @@
 //! shared by the desktop app and the headless CLI.
 
 pub mod aws;
+pub mod buildreq;
 pub mod config;
 pub mod engine;
 pub mod executor;
