@@ -55,6 +55,10 @@ impl RedactionSet {
             // `\`, or a control char would otherwise appear escaped (e.g. `a"b` -> `a\"b`) and
             // slip past the raw/encoded tokens. Add the inner-escaped form so it is caught too.
             self.push(json_escaped(&secret));
+            // Lowercased form: a secret substituted into a URL HOST is lowercased by URL
+            // canonicalization before it shows up in `final_url` (hosts are case-insensitive).
+            // Residual NOT covered: a non-ASCII host secret is IDNA/punycode-encoded (niche).
+            self.push(secret.to_lowercase());
         }
         // longest-first so a short token cannot corrupt a longer one mid-replacement
         self.tokens.sort_by(|a, b| b.len().cmp(&a.len()));
@@ -155,6 +159,18 @@ mod tests {
     fn none_auth_is_noop() {
         let r = RedactionSet::from_auth(&Auth::None);
         assert_eq!(r.redact_str("nothing to hide"), "nothing to hide");
+    }
+
+    #[test]
+    fn lowercased_host_form_is_redacted() {
+        // A secret substituted into a URL host is lowercased by canonicalization before it
+        // appears in final_url; the lowercased form must also be a redaction token.
+        let mut r = RedactionSet::from_auth(&Auth::None);
+        let row: Map<String, Value> = serde_json::from_value(json!({"tenant": "SecretTenant"})).unwrap();
+        r.extend_with_data_row(&row);
+        assert_eq!(r.redact_str("https://secrettenant.example/x"), "https://***REDACTED***.example/x");
+        // mixed-case raw form still caught too
+        assert_eq!(r.redact_str("SecretTenant"), "***REDACTED***");
     }
 
     #[test]
