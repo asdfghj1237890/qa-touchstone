@@ -69,74 +69,6 @@ async fn main() -> std::process::ExitCode {
     }
 }
 
-/// Replace every occurrence of each secret in `s` with `***REDACTED***`.
-fn redact_str(s: &str, secrets: &[String]) -> String {
-    let mut out = s.to_string();
-    for sec in secrets {
-        if !sec.is_empty() {
-            out = out.replace(sec.as_str(), "***REDACTED***");
-        }
-    }
-    out
-}
-
-/// Recursively redact all string leaves in a JSON value.
-fn redact_value(v: &serde_json::Value, secrets: &[String]) -> serde_json::Value {
-    match v {
-        serde_json::Value::String(s) => serde_json::Value::String(redact_str(s, secrets)),
-        serde_json::Value::Array(a) => {
-            serde_json::Value::Array(a.iter().map(|x| redact_value(x, secrets)).collect())
-        }
-        serde_json::Value::Object(o) => serde_json::Value::Object(
-            // Keys are redacted too — a secret-as-key (e.g. from an echo endpoint)
-            // would otherwise leak. If two keys redact to the same string the map
-            // keeps one entry, which is acceptable for redacted output.
-            o.iter().map(|(k, x)| (redact_str(k, secrets), redact_value(x, secrets))).collect(),
-        ),
-        other => other.clone(),
-    }
-}
-
-/// Build a redaction set from a resolved identity's auth secrets.
-/// Each raw secret value is included along with its percent-encoded form
-/// (so apiKey-in-query occurrences in the URL are also caught).
-fn build_redaction_set(auth: &qa_touchstone_core::config::Auth) -> Vec<String> {
-    use qa_touchstone_core::config::Auth;
-    use qa_touchstone_core::buildreq::{basic_auth_value, enc};
-
-    let raw_secrets: Vec<String> = match auth {
-        Auth::None => vec![],
-        Auth::Bearer { token } => vec![token.clone()],
-        Auth::ApiKey { value, .. } => vec![value.clone()],
-        Auth::Basic { username, password } => {
-            // Include the full "Basic <b64>" header value AND the bare base64 token.
-            // A server may echo only the bare blob (without the "Basic " prefix), so
-            // both forms must be in the redaction set.
-            let full = basic_auth_value(username, password);
-            let bare = full.strip_prefix("Basic ").unwrap_or(&full).to_string();
-            vec![username.clone(), password.clone(), full, bare]
-        }
-    };
-
-    let mut set: Vec<String> = Vec::new();
-    for secret in raw_secrets {
-        if !secret.is_empty() {
-            let encoded = enc(&secret);
-            if !set.contains(&secret) {
-                set.push(secret.clone());
-            }
-            // Add the encoded form only if it differs from the raw form and isn't empty.
-            if encoded != secret && !encoded.is_empty() && !set.contains(&encoded) {
-                set.push(encoded);
-            }
-        }
-    }
-    // Sort longest first so a short raw secret (e.g. username) cannot partially
-    // match and corrupt a longer token (e.g. the bare base64 or "Basic <b64>")
-    // before the longer form is replaced.
-    set.sort_by(|a, b| b.len().cmp(&a.len()));
-    set
-}
 
 async fn run_send(
     config_path: String,
@@ -190,7 +122,7 @@ async fn run_send(
     }
 
     // Build redaction set from resolved identity secrets (raw + percent-encoded forms).
-    let secrets = build_redaction_set(&identity.auth);
+    let red = qa_touchstone_core::redact::RedactionSet::from_auth(&identity.auth);
 
     // Step 4: build var map
     let scoped = cfg.scoped_vars();
@@ -200,7 +132,7 @@ async fn run_send(
     let rd = match buildreq::build_request(req, identity, &map, &mut RealDynamics) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("error: build_request failed: {}", redact_str(&e, &secrets));
+            eprintln!("error: build_request failed: {}", red.redact_str(&e));
             return std::process::ExitCode::from(2);
         }
     };
@@ -222,12 +154,12 @@ async fn run_send(
     let step = qa_touchstone_core::step::run_step(&rd, &req.assertions, exec_opts).await;
 
     let method = rd["request"]["method"].as_str().unwrap_or("?");
-    let final_url = redact_str(&step.final_url, &secrets);
+    let final_url = red.redact_str(&step.final_url);
 
     // Step 7: short-circuit on runtime failure — do NOT evaluate/print assertions against a null response.
     // Runtime failure → exit 1 (no assertion rows).
     if !step.success {
-        let redacted_err = redact_str(step.error.as_deref().unwrap_or("request failed"), &secrets);
+        let redacted_err = red.redact_str(step.error.as_deref().unwrap_or("request failed"));
         if use_json {
             // Machine-readable runtime-failure output — secrets are redacted.
             let json_out = json!({
@@ -253,7 +185,7 @@ async fn run_send(
     if use_json {
         // Machine-readable JSON — secrets are redacted from url, responseHeaders, body, and assertions.
         let redacted_results: serde_json::Value =
-            redact_value(&serde_json::Value::Array(step.results.clone()), &secrets);
+            red.redact_value(&serde_json::Value::Array(step.results.clone()));
         let json_out = json!({
             "success": true,
             "status": step.status,
@@ -261,8 +193,8 @@ async fn run_send(
             "method": method,
             "ms": step.ms,
             // response headers (from server) included but redacted; request headers are NOT echoed (auth redaction)
-            "responseHeaders": redact_value(&step.headers, &secrets),
-            "body": redact_value(&step.body, &secrets),
+            "responseHeaders": red.redact_value(&step.headers),
+            "body": red.redact_value(&step.body),
             "assertions": redacted_results,
         });
         println!("{}", json_out);
@@ -276,12 +208,12 @@ async fn run_send(
                 .and_then(|v| v.as_str())
                 .or_else(|| r.get("type").and_then(|v| v.as_str()))
                 .unwrap_or("?");
-            let label = redact_str(label_raw, &secrets);
+            let label = red.redact_str(label_raw);
             let actual = match r.get("actual") {
                 Some(v) => v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
                 None => "?".to_owned(),
             };
-            let redacted_actual = redact_str(&actual, &secrets);
+            let redacted_actual = red.redact_str(&actual);
             println!("{mark} {label} (actual: {redacted_actual})");
         }
     }

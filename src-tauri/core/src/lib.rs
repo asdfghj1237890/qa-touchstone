@@ -7,5 +7,6 @@ pub mod config;
 pub mod datafile;
 pub mod engine;
 pub mod executor;
+pub mod redact;
 pub mod reqprep;
 pub mod step;
