@@ -204,3 +204,33 @@ fn iterations_zero_exits_2() {
     ]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
+
+#[tokio::test]
+async fn junit_has_one_testsuite_per_data_iteration() {
+    // spec §6: a 2-request collection over a 2-row data file → one <testsuite> per iteration.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/a")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    Mock::given(method("GET")).and(path("/b")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    let cfg = format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
+      "requests":[
+        {{"id":"ra","method":"GET","url":"{base}/a?p={{{{p}}}}","assertions":[{{"type":"status","op":"eq","value":200}}]}},
+        {{"id":"rb","method":"GET","url":"{base}/b?p={{{{p}}}}","assertions":[{{"type":"status","op":"eq","value":200}}]}}
+      ],
+      "collections":[{{"id":"c","requests":["ra","rb"]}}]
+    }}"#, base = server.uri());
+    let cfgp = write_temp("mi.json", &cfg);
+    let data = write_temp("mi.csv", "p\n1\n2\n");   // 2 rows → 2 iterations
+    let junit = write_temp("mi.xml", "");
+    let out = bin().args([
+        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
+        "--data",data.to_str().unwrap(),"--junit",junit.to_str().unwrap(),
+    ]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let xml = std::fs::read_to_string(&junit).unwrap();
+    let doc = roxmltree::Document::parse(&xml).expect("well-formed junit");
+    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("testsuite")).count(), 2, "2 iterations → 2 suites: {xml}");
+    // 2 iterations × 2 requests × 1 assertion each = 4 testcases
+    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("testcase")).count(), 4, "{xml}");
+}
