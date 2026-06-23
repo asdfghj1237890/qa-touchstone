@@ -63,7 +63,7 @@ fn scan_for_deny_phrase(node: &Value, depth: u32) -> bool {
         Value::Object(o) => o.iter().any(|(raw, value)| {
             let key = raw.to_lowercase();
             ((status_field(&key) || prose_field(&key) || key == "error") && value_denies(&key, value))
-                || (value.is_object() || value.is_array()) && scan_for_deny_phrase(value, depth + 1)
+                || ((value.is_object() || value.is_array()) && scan_for_deny_phrase(value, depth + 1))
         }),
         _ => false,
     }
@@ -142,5 +142,10 @@ mod tests {
     #[test] fn endpoint_priv() {
         assert!(classify_endpoint("DELETE","/u")); assert!(classify_endpoint("GET","/admin/x"));
         assert!(!classify_endpoint("GET","/u")); assert!(endpoint_privileged(Some(true),"GET","/u"));
+    }
+    #[test] fn endpoint_privileged_override() {
+        assert!(!endpoint_privileged(Some(false), "DELETE", "/u"), "explicit false overrides the write-method heuristic");
+        assert!(endpoint_privileged(None, "DELETE", "/u"), "no override → heuristic (DELETE = privileged)");
+        assert!(!endpoint_privileged(None, "GET", "/u"));
     }
 }
