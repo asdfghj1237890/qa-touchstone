@@ -9,4 +9,5 @@ pub mod engine;
 pub mod executor;
 pub mod redact;
 pub mod reqprep;
+pub mod security;
 pub mod step;
