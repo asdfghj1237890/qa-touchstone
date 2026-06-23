@@ -11,6 +11,7 @@ use serde_json::json;
 
 mod report;
 mod run;
+mod scan;
 
 #[derive(Parser)]
 #[command(name = "qa-touchstone-ci", version)]
@@ -56,6 +57,14 @@ enum Command {
         #[arg(long)] junit: Option<String>,
         #[arg(long)] json: bool,
     },
+    /// Run the security suite (SP2: matrix; bola/rate-limit added later) and report findings.
+    Scan {
+        #[arg(long)] config: String,
+        #[arg(long)] engine: Option<String>,
+        #[arg(long)] env: Option<String>,
+        #[arg(long)] json: bool,
+        #[arg(long)] out: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -83,6 +92,7 @@ async fn main() -> std::process::ExitCode {
         Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
             run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
         }
+        Command::Scan { config, engine, env, json: use_json, out } => scan::run_scan(config, engine, env, use_json, out).await,
     }
 }
 

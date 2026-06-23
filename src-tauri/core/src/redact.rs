@@ -7,6 +7,21 @@ use serde_json::{Map, Value};
 
 const MARKER: &str = "***REDACTED***";
 
+/// Extract the per-`Auth` raw secret list (None→vec![], Bearer→[token],
+/// ApiKey→[value], Basic→[username,password,full_header,bare_b64]).
+fn raw_secrets_of(auth: &Auth) -> Vec<String> {
+    match auth {
+        Auth::None => vec![],
+        Auth::Bearer { token } => vec![token.clone()],
+        Auth::ApiKey { value, .. } => vec![value.clone()],
+        Auth::Basic { username, password } => {
+            let full = basic_auth_value(username, password);
+            let bare = full.strip_prefix("Basic ").unwrap_or(&full).to_string();
+            vec![username.clone(), password.clone(), full, bare]
+        }
+    }
+}
+
 /// Secret tokens to scrub from output, kept sorted longest-first so a short token
 /// (e.g. a username) cannot corrupt a longer one (e.g. a base64 blob) mid-replace.
 #[derive(Debug, Clone, Default)]
@@ -15,21 +30,17 @@ pub struct RedactionSet {
 }
 
 impl RedactionSet {
-    /// Build from a resolved identity's auth secrets: each raw secret + its
-    /// percent-encoded form; for Basic, both the full `Basic <b64>` and the bare b64.
+    /// Build from a resolved identity's auth secrets.
     pub fn from_auth(auth: &Auth) -> Self {
-        let raw: Vec<String> = match auth {
-            Auth::None => vec![],
-            Auth::Bearer { token } => vec![token.clone()],
-            Auth::ApiKey { value, .. } => vec![value.clone()],
-            Auth::Basic { username, password } => {
-                let full = basic_auth_value(username, password);
-                let bare = full.strip_prefix("Basic ").unwrap_or(&full).to_string();
-                vec![username.clone(), password.clone(), full, bare]
-            }
-        };
+        Self::from_auths(std::iter::once(auth))
+    }
+
+    /// Union of several identities' auth secrets (the `scan` command spans identities).
+    pub fn from_auths<'a>(auths: impl IntoIterator<Item = &'a Auth>) -> Self {
         let mut set = RedactionSet::default();
-        set.add_raw(raw);
+        for a in auths {
+            set.add_raw(raw_secrets_of(a));
+        }
         set
     }
 
@@ -171,6 +182,15 @@ mod tests {
         assert_eq!(r.redact_str("https://secrettenant.example/x"), "https://***REDACTED***.example/x");
         // mixed-case raw form still caught too
         assert_eq!(r.redact_str("SecretTenant"), "***REDACTED***");
+    }
+
+    #[test]
+    fn from_auths_unions_multiple_identities() {
+        let r = RedactionSet::from_auths([
+            &Auth::Bearer { token: "AAA".into() },
+            &Auth::Bearer { token: "BBB".into() },
+        ]);
+        assert_eq!(r.redact_str("AAA and BBB"), "***REDACTED*** and ***REDACTED***");
     }
 
     #[test]

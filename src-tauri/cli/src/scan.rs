@@ -1,0 +1,76 @@
+//! `scan` command: run the security suite (SP2a: matrix), redact (union of all identity
+//! secrets), emit findings (JSON/human), exit 3 on any finding >= high.
+use qa_touchstone_core::config::load_config;
+use qa_touchstone_core::redact::RedactionSet;
+use qa_touchstone_core::security::finding::{EngineId, Finding, Severity};
+use qa_touchstone_core::security::runner::run_matrix;
+use serde::Serialize;
+use std::process::ExitCode;
+
+#[derive(Serialize)]
+struct ScanReport { findings: Vec<RFinding>, totals: Totals, ok: bool }
+#[derive(Serialize)]
+struct Totals { critical: usize, high: usize, medium: usize, low: usize, info: usize }
+#[derive(Serialize)]
+struct RFinding {
+    engine: String, severity: String, rule_id: String, oracle: String,
+    title: String, path: String, evidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")] method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] identity: Option<String>,
+}
+
+fn sev_str(s: Severity) -> &'static str {
+    match s { Severity::Critical=>"critical", Severity::High=>"high", Severity::Medium=>"medium", Severity::Low=>"low", Severity::Info=>"info" }
+}
+fn engine_str(e: EngineId) -> &'static str {
+    match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::RateLimit=>"ratelimit" }
+}
+
+pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<String>, use_json: bool, out: Option<String>) -> ExitCode {
+    let text = match std::fs::read_to_string(&config_path) {
+        Ok(t) => t, Err(e) => { eprintln!("error: cannot read config `{config_path}`: {e}"); return ExitCode::from(2); }
+    };
+    let cfg = match load_config(&text, &|k| std::env::var(k).ok()) {
+        Ok(c) => c, Err(e) => { eprintln!("error: invalid config: {e}"); return ExitCode::from(2); }
+    };
+    if cfg.security.is_none() { eprintln!("error: config has no `security` block"); return ExitCode::from(2); }
+    if let Some(ref name) = env {
+        if !cfg.environments.iter().any(|e| &e.name == name) { eprintln!("error: no environment named `{name}`"); return ExitCode::from(2); }
+    }
+    if let Some(eng) = &engine {
+        if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
+    }
+
+    // Redaction = UNION of every identity's auth secrets.
+    let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
+
+    // Run engines (SP2a: matrix only; bola/ratelimit in SP2b/c). --engine filters.
+    let want = |e: &str| engine.as_deref().map(|x| x == e).unwrap_or(true);
+    let mut findings: Vec<Finding> = Vec::new();
+    if want("matrix") { findings.extend(run_matrix(&cfg, env.as_deref()).await); }
+
+    let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0 };
+    let rfs: Vec<RFinding> = findings.iter().map(|f| {
+        match f.severity { Severity::Critical=>totals.critical+=1, Severity::High=>totals.high+=1, Severity::Medium=>totals.medium+=1, Severity::Low=>totals.low+=1, Severity::Info=>totals.info+=1 }
+        RFinding {
+            engine: engine_str(f.engine).into(), severity: sev_str(f.severity).into(), rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
+            title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
+            method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
+        }
+    }).collect();
+    let gated = findings.iter().any(|f| f.severity >= Severity::High);
+    let report = ScanReport { findings: rfs, ok: !gated, totals };
+
+    if let Some(path) = out {
+        if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&report).unwrap()) {
+            eprintln!("error: cannot write `{path}`: {e}"); return ExitCode::from(1);
+        }
+    }
+    if use_json { println!("{}", serde_json::to_string(&report).unwrap()); }
+    else {
+        println!("security scan: {} finding(s) — {}C {}H {}M {}L {}I", report.findings.len(), report.totals.critical, report.totals.high, report.totals.medium, report.totals.low, report.totals.info);
+        for f in &report.findings { println!("  [{}] {}  {}  — {}", f.severity, f.engine, f.path, f.evidence); }
+    }
+    if gated { ExitCode::from(3) } else { ExitCode::SUCCESS }
+}
