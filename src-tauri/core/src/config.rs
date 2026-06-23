@@ -150,7 +150,8 @@ fn resolve_auth(raw: RawAuth, env: &dyn Fn(&str) -> Option<String>) -> Result<Au
     })
 }
 
-/// Parse a CI config from JSON and resolve `{env}` secrets via `env`. Fail-closed.
+/// Parse a CI config from JSON, resolve `{env}` secrets via `env` (fail-closed), and
+/// run structural `validate()`. A `Config` returned here is therefore always validated.
 pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<Config, String> {
     let raw: RawConfig = serde_json::from_str(json).map_err(|e| format!("invalid config JSON: {e}"))?;
     if raw.version != SUPPORTED_VERSION {
@@ -159,10 +160,16 @@ pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<C
     let identities = raw.identities.into_iter()
         .map(|i| Ok(Identity { id: i.id, auth: resolve_auth(i.auth, env)? }))
         .collect::<Result<Vec<_>, String>>()?;
-    Ok(Config {
+    let cfg = Config {
         version: raw.version, globals: raw.globals, environments: raw.environments,
         identities, requests: raw.requests, collections: raw.collections,
-    })
+    };
+    // Enforce structural validation at the single construction site so it is impossible
+    // to obtain an unvalidated Config. scoped_vars() and the CLI both rely on this — e.g.
+    // duplicate collection ids would otherwise silently drop a collection's variables
+    // via the BTreeMap in scoped_vars().
+    validate(&cfg)?;
+    Ok(cfg)
 }
 
 impl Config {
@@ -367,8 +374,7 @@ mod tests {
         let bad = r#"{ "version":1,"environments":[],"identities":[],
           "requests":[{"id":"a","method":"GET","url":"https://x"}],
           "collections":[{"id":"c","requests":["nope"]}] }"#;
-        let cfg = load_config(bad, &|_| None).unwrap();
-        let err = validate(&cfg).unwrap_err();
+        let err = load_config(bad, &|_| None).unwrap_err();
         assert!(err.contains("nope"), "names the missing request: {err}");
     }
 
@@ -377,17 +383,21 @@ mod tests {
         let dup = r#"{ "version":1,"environments":[],"identities":[],
           "requests":[{"id":"a","method":"GET","url":"https://x"},{"id":"a","method":"GET","url":"https://y"}],
           "collections":[] }"#;
-        let cfg = load_config(dup, &|_| None).unwrap();
-        assert!(validate(&cfg).unwrap_err().to_lowercase().contains("duplicate"));
+        assert!(load_config(dup, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
     }
 
     #[test]
     fn validate_rejects_duplicate_collection_ids() {
+        // Two collections sharing an id would make scoped_vars() silently drop the
+        // first collection's variables (BTreeMap overwrite). load_config must reject
+        // the config up front so the silent loss can never occur.
         let j = r#"{ "version":1,"environments":[],"identities":[],
           "requests":[{"id":"a","method":"GET","url":"https://x"}],
-          "collections":[{"id":"c","requests":["a"]},{"id":"c","requests":["a"]}] }"#;
-        let cfg = load_config(j, &|_| None).unwrap();
-        let err = validate(&cfg).unwrap_err();
+          "collections":[
+            {"id":"c","requests":["a"],"variables":{"page":"1"}},
+            {"id":"c","requests":["a"],"variables":{"page":"2"}}
+          ] }"#;
+        let err = load_config(j, &|_| None).unwrap_err();
         assert!(err.contains("duplicate") && err.contains("collection"), "{err}");
     }
 
@@ -396,8 +406,7 @@ mod tests {
         let j = r#"{ "version":1,"environments":[],
           "identities":[{"id":"x","auth":{"type":"none"}},{"id":"x","auth":{"type":"none"}}],
           "requests":[],"collections":[] }"#;
-        let cfg = load_config(j, &|_| None).unwrap();
-        let err = validate(&cfg).unwrap_err();
+        let err = load_config(j, &|_| None).unwrap_err();
         assert!(err.contains("duplicate") && err.contains("identity"), "{err}");
     }
 
@@ -406,8 +415,7 @@ mod tests {
         let j = r#"{ "version":1,
           "environments":[{"name":"staging","variables":{}},{"name":"staging","variables":{}}],
           "identities":[],"requests":[],"collections":[] }"#;
-        let cfg = load_config(j, &|_| None).unwrap();
-        let err = validate(&cfg).unwrap_err();
+        let err = load_config(j, &|_| None).unwrap_err();
         assert!(err.contains("duplicate") && err.contains("environment"), "{err}");
     }
 }
