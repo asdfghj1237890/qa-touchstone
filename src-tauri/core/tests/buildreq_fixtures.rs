@@ -61,11 +61,12 @@ fn bare_req(method: &str, url: &str) -> Request {
         query: vec![],
         body: None,
         assertions: vec![],
+        privileged: None,
     }
 }
 
 fn anon() -> Identity {
-    Identity { id: "anon".into(), auth: Auth::None }
+    Identity { id: "anon".into(), auth: Auth::None, privileged: false }
 }
 
 fn no_map() -> BTreeMap<String, String> {
@@ -80,7 +81,7 @@ fn bearer() {
     let expected = get_expected(&fix.cases, "bearer");
 
     let req = bare_req("GET", "https://x.example/u");
-    let id = Identity { id: "id".into(), auth: Auth::Bearer { token: "TOK".into() } };
+    let id = Identity { id: "id".into(), auth: Auth::Bearer { token: "TOK".into() }, privileged: false };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "bearer: Rust output must match TS buildPayload golden");
 }
@@ -94,6 +95,7 @@ fn apikey_header() {
     let id = Identity {
         id: "id".into(),
         auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Header },
+        privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "apikey_header: Rust output must match TS buildPayload golden");
@@ -108,6 +110,7 @@ fn apikey_query() {
     let id = Identity {
         id: "id".into(),
         auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Query },
+        privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "apikey_query: Rust output must match TS buildPayload golden");
@@ -122,6 +125,7 @@ fn basic() {
     let id = Identity {
         id: "id".into(),
         auth: Auth::Basic { username: "u".into(), password: "p".into() },
+        privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
     assert_eq!(got, expected, "basic: Rust output must match TS buildPayload golden (Basic dTpw)");

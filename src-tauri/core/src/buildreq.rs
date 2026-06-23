@@ -97,7 +97,7 @@ mod tests {
     fn req(url: &str) -> Request {
         serde_json::from_str(&format!(r#"{{"id":"r","method":"GET","url":"{url}"}}"#)).unwrap()
     }
-    fn anon() -> Identity { Identity { id: "anon".into(), auth: Auth::None } }
+    fn anon() -> Identity { Identity { id: "anon".into(), auth: Auth::None, privileged: false } }
 
     #[test]
     fn substitutes_and_requires_absolute_url() {

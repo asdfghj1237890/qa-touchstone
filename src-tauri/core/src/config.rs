@@ -52,6 +52,8 @@ struct RawConfig {
     requests: Vec<Request>,
     #[serde(default)]
     collections: Vec<Collection>,
+    #[serde(default)]
+    security: Option<SecurityConfig>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -64,7 +66,7 @@ pub struct Environment { pub name: String, #[serde(default)] pub variables: BTre
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawIdentity { id: String, auth: RawAuth }
+struct RawIdentity { id: String, auth: RawAuth, #[serde(default)] privileged: bool }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
@@ -89,7 +91,7 @@ pub enum Auth {
 }
 
 #[derive(Debug, Clone)]
-pub struct Identity { pub id: String, pub auth: Auth }
+pub struct Identity { pub id: String, pub auth: Auth, pub privileged: bool }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +103,7 @@ pub struct Request {
     #[serde(default)] pub query: Vec<Kv>,
     pub body: Option<Body>,
     #[serde(default)] pub assertions: Vec<serde_json::Value>,
+    #[serde(default)] pub privileged: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -115,6 +118,25 @@ pub struct Body { pub mode: BodyMode, #[serde(default)] pub content: String }
 #[serde(rename_all = "lowercase")]
 pub enum BodyMode { None, Json, Raw }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Expectation { Allow, Deny, Skip }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatrixConfig {
+    #[serde(default)] pub endpoints: Vec<String>,
+    #[serde(default = "default_deny_set", rename = "denySet")] pub deny_set: Vec<i64>,
+    #[serde(default)] pub expect: std::collections::BTreeMap<String, std::collections::BTreeMap<String, Expectation>>,
+}
+fn default_deny_set() -> Vec<i64> { vec![401, 403, 404] }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecurityConfig {
+    #[serde(default)] pub matrix: Option<MatrixConfig>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub version: u32,
@@ -123,6 +145,7 @@ pub struct Config {
     pub identities: Vec<Identity>,
     pub requests: Vec<Request>,
     pub collections: Vec<Collection>,
+    pub security: Option<SecurityConfig>,
 }
 
 const SUPPORTED_VERSION: u32 = 1;
@@ -158,11 +181,12 @@ pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<C
         return Err(format!("unsupported config version {} (this binary supports {SUPPORTED_VERSION})", raw.version));
     }
     let identities = raw.identities.into_iter()
-        .map(|i| Ok(Identity { id: i.id, auth: resolve_auth(i.auth, env)? }))
+        .map(|i| Ok(Identity { id: i.id, auth: resolve_auth(i.auth, env)?, privileged: i.privileged }))
         .collect::<Result<Vec<_>, String>>()?;
     let cfg = Config {
         version: raw.version, globals: raw.globals, environments: raw.environments,
         identities, requests: raw.requests, collections: raw.collections,
+        security: raw.security,
     };
     // Enforce structural validation at the single construction site so it is impossible
     // to obtain an unvalidated Config. scoped_vars() and the CLI both rely on this — e.g.
@@ -211,6 +235,20 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
         for r in &c.requests {
             if !req_ids.contains(r.as_str()) {
                 return Err(format!("collection `{}` references unknown request `{}`", c.id, r));
+            }
+        }
+    }
+    if let Some(sec) = &cfg.security {
+        if let Some(m) = &sec.matrix {
+            let id_ids: std::collections::HashSet<&str> = cfg.identities.iter().map(|i| i.id.as_str()).collect();
+            for e in &m.endpoints {
+                if !req_ids.contains(e.as_str()) { return Err(format!("security.matrix endpoint references unknown request `{e}`")); }
+            }
+            for (rid, row) in &m.expect {
+                if !req_ids.contains(rid.as_str()) { return Err(format!("security.matrix.expect references unknown request `{rid}`")); }
+                for idid in row.keys() {
+                    if !id_ids.contains(idid.as_str()) { return Err(format!("security.matrix.expect references unknown identity `{idid}`")); }
+                }
             }
         }
     }
@@ -417,5 +455,38 @@ mod tests {
           "identities":[],"requests":[],"collections":[] }"#;
         let err = load_config(j, &|_| None).unwrap_err();
         assert!(err.contains("duplicate") && err.contains("environment"), "{err}");
+    }
+
+    const WITH_SECURITY: &str = r#"{
+      "version":1,"environments":[],
+      "identities":[{"id":"admin","auth":{"type":"none"},"privileged":true},{"id":"anon","auth":{"type":"none"}}],
+      "requests":[{"id":"getU","method":"GET","url":"https://x/u"},{"id":"delU","method":"DELETE","url":"https://x/u"}],
+      "security":{"matrix":{"endpoints":["getU","delU"],"denySet":[401,403],"expect":{"delU":{"anon":"deny"}}}}
+    }"#;
+
+    #[test]
+    fn parses_security_matrix() {
+        let c = load_config(WITH_SECURITY, &|_| None).unwrap();
+        let m = c.security.as_ref().unwrap().matrix.as_ref().unwrap();
+        assert_eq!(m.endpoints, vec!["getU","delU"]);
+        assert_eq!(m.deny_set, vec![401,403]);
+        assert_eq!(m.expect["delU"]["anon"], Expectation::Deny);
+        assert!(c.identities.iter().find(|i| i.id=="admin").unwrap().privileged);
+    }
+
+    #[test]
+    fn security_matrix_rejects_unknown_endpoint() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"matrix":{"endpoints":["nope"]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("nope"));
+    }
+
+    #[test]
+    fn security_matrix_rejects_unknown_expect_identity() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"matrix":{"endpoints":["r"],"expect":{"r":{"ghost":"deny"}}}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
     }
 }
