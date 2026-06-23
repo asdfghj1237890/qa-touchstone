@@ -3,7 +3,7 @@
 //!   0 ok
 //!   1 runtime error (HTTP/network failure)
 //!   2 invalid input (clap usage / config / missing request or identity)
-//!   3 findings gate (reserved, SP3)
+//!   3 findings gate (any security finding >= High from `scan`)
 //!   4 assertion failure (one or more assertions did not pass)
 use clap::{Parser, Subcommand};
 use qa_touchstone_core::executor::ExecOptions;

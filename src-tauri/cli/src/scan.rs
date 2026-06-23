@@ -41,6 +41,11 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
     if let Some(eng) = &engine {
         if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
     }
+    // bola/ratelimit are wired in SP2b/SP2c; warn so a requested-but-unimplemented engine
+    // doesn't silently report "0 findings" (which could mask a typo or a missing engine).
+    if matches!(engine.as_deref(), Some("bola") | Some("ratelimit")) {
+        eprintln!("warn: engine `{}` is not yet implemented; no findings reported", engine.as_deref().unwrap());
+    }
 
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
