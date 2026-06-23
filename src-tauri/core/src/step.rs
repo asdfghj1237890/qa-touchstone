@@ -19,7 +19,9 @@ pub struct StepResult {
 }
 
 /// tryParse mirror (executor.ts:71-74): empty → Null; valid JSON → parsed; else the raw string.
-pub fn try_parse(raw: &str) -> Value {
+/// Private: returns the UNREDACTED body — callers consume the redaction-agnostic
+/// `StepResult.body` (and redact at output) rather than parsing raw bodies themselves.
+fn try_parse(raw: &str) -> Value {
     if raw.is_empty() {
         return Value::Null;
     }

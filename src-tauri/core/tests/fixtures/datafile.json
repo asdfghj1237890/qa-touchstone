@@ -114,5 +114,16 @@
       "error": "CSV needs a header row + at least one data row",
       "format": "csv"
     }
+  },
+  {
+    "name": "json_malformed",
+    "text": "{\"a\": }",
+    "file": "d.json",
+    "expected": {
+      "rows": null,
+      "columns": [],
+      "error": "Invalid JSON",
+      "format": "json"
+    }
   }
 ]

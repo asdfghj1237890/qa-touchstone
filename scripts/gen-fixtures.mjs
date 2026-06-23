@@ -125,6 +125,7 @@ const dataCases = [
   { name:'json_empty',    text:'[]',                            file:'d.json' },
   { name:'empty_text',    text:'   ',                           file:'d.csv' },
   { name:'csv_too_short', text:'a,b',                           file:'d.csv' },
+  { name:'json_malformed',text:'{"a": }',                       file:'d.json' },  // JSON.parse throws -> "Invalid JSON"
 ];
 const dataOut = dataCases.map(c => ({ ...c, expected: qaParseDataFile(c.text, c.file) }));
 writeFileSync(join(OUT, 'datafile.json'), JSON.stringify(dataOut, null, 2) + '\n');

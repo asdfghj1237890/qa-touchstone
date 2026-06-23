@@ -18,6 +18,10 @@ async fn run_step_executes_and_asserts() {
     assert!(step.success);
     assert_eq!(step.status, 200);
     assert!(step.error.is_none());
+    // headers/body are the SP1-2 reporter inputs (send's --json responseHeaders/body):
+    // body is try_parse'd JSON; headers is populated (non-null) on success.
+    assert_eq!(step.body, json!({"id":1}));
+    assert!(!step.headers.is_null());
     assert_eq!(step.results.len(), 1);
     assert_eq!(step.results[0]["pass"], json!(true));
 }
