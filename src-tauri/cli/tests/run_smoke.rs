@@ -116,6 +116,9 @@ async fn echo_server() -> MockServer {
 #[tokio::test]
 async fn identity_secret_never_appears_in_any_report() {
     let server = echo_server().await;
+    // The bearer token rides in the Authorization header (never echoed by the server), so this
+    // is an ALLOWLIST guard: `run` must not dump request/auth headers into any report. The
+    // redaction-of-secret path itself is covered by data_row_secret_* and the core::redact tests.
     let cfg = format!(r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"bearer","token":"SUPERSECRETTOKEN"}}}}],
@@ -137,13 +140,14 @@ async fn identity_secret_never_appears_in_any_report() {
 #[tokio::test]
 async fn data_row_secret_absent_even_when_it_reaches_url_and_actual() {
     let server = echo_server().await;
-    // {{tok}} from the data row is substituted into the query, echoed back into the body,
-    // and asserted on — so it would reach final_url AND the assertion actual without redaction.
+    // {{tok}} from the data row is substituted into the query (→ final_url) AND echoed into the
+    // body; a FAILING bodyEq surfaces the echoed value into the assertion `actual`, which is
+    // emitted in BOTH --json and the JUnit <failure>. Every path must be redacted.
     let cfg = format!(r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
       "requests":[{{"id":"r","method":"GET","url":"{base}/x?tok={{{{tok}}}}",
-        "assertions":[{{"type":"bodyHas","path":"echo"}}]}}],
+        "assertions":[{{"type":"bodyEq","path":"echo","value":"MISMATCH"}}]}}],
       "collections":[{{"id":"c","requests":["r"]}}]
     }}"#, base = server.uri());
     let cfgp = write_temp("dr.json", &cfg);
@@ -156,7 +160,10 @@ async fn data_row_secret_absent_even_when_it_reaches_url_and_actual() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let xml = std::fs::read_to_string(&junit).unwrap();
     assert!(!stdout.contains("ROWSECRETVALUE"), "json leaked data-row secret: {stdout}");
-    assert!(!xml.contains("ROWSECRETVALUE"), "junit leaked data-row secret");
+    assert!(!xml.contains("ROWSECRETVALUE"), "junit leaked data-row secret: {xml}");
+    // Non-vacuous: the value really did reach the emitted assertion `actual` (JUnit <failure>),
+    // so the redaction marker must be present — proving redaction did the work, not absence.
+    assert!(xml.contains("***REDACTED***"), "expected redaction marker in JUnit failure actual: {xml}");
 }
 
 #[tokio::test]
