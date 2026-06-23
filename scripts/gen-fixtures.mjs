@@ -47,8 +47,26 @@ const varmapCases = [
   { name: 'missing_on_is_disabled',
     vars: { globals: [{key:'a',value:'1'}], collections:{}, environments:{} },   // no `on` -> falsy
     env: null, collectionId: null },
+  // --- 4-scope precedence (SP1-2): global < collection < environment < local ---
+  { name: 'collection_over_global',
+    vars: { globals:[{key:'h',value:'g',on:true}], collections:{ c:[{key:'h',value:'c',on:true}] }, environments:{} },
+    env: null, collectionId: 'c', local: null },
+  { name: 'env_over_collection',
+    vars: { globals:[{key:'h',value:'g',on:true}], collections:{ c:[{key:'h',value:'c',on:true}] }, environments:{ staging:[{key:'h',value:'e',on:true}] } },
+    env: 'staging', collectionId: 'c', local: null },
+  { name: 'local_over_all',
+    vars: { globals:[{key:'h',value:'g',on:true}], collections:{ c:[{key:'h',value:'c',on:true}] }, environments:{ staging:[{key:'h',value:'e',on:true}] } },
+    env: 'staging', collectionId: 'c', local: { h: 'l' } },
+  { name: 'four_scope_union',
+    vars: { globals:[{key:'a',value:'ga',on:true},{key:'h',value:'g',on:true}],
+            collections:{ c:[{key:'b',value:'cb',on:true},{key:'h',value:'c',on:true}] },
+            environments:{ staging:[{key:'d',value:'ed',on:true},{key:'h',value:'e',on:true}] } },
+    env: 'staging', collectionId: 'c', local: { h: 'l' } },
+  { name: 'collection_off_row_skipped',
+    vars: { globals:[], collections:{ c:[{key:'h',value:'c',on:false}] }, environments:{} },
+    env: null, collectionId: 'c', local: null },
 ];
-const varmapOut = varmapCases.map(c => ({ ...c, expected: qaVarMap(c.vars, c.env, c.collectionId) }));
+const varmapOut = varmapCases.map(c => ({ ...c, expected: qaVarMap(c.vars, c.env, c.collectionId, c.local || null) }));
 writeFileSync(join(OUT, 'varmap.json'), JSON.stringify(varmapOut, null, 2) + '\n');
 console.log(`wrote varmap.json (${varmapOut.length} cases)`);
 
