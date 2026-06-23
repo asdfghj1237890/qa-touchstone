@@ -9,6 +9,9 @@ use clap::{Parser, Subcommand};
 use qa_touchstone_core::executor::ExecOptions;
 use serde_json::json;
 
+mod report;
+mod run;
+
 #[derive(Parser)]
 #[command(name = "qa-touchstone-ci", version)]
 struct Cli {
@@ -42,6 +45,17 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Run a collection (optionally over a data file) and report per-assertion results.
+    Run {
+        #[arg(long)] config: String,
+        #[arg(long)] collection: String,
+        #[arg(long)] identity: String,
+        #[arg(long)] env: Option<String>,
+        #[arg(long)] data: Option<String>,
+        #[arg(long, conflicts_with = "data")] iterations: Option<u32>,
+        #[arg(long)] junit: Option<String>,
+        #[arg(long)] json: bool,
+    },
 }
 
 #[tokio::main]
@@ -66,9 +80,24 @@ async fn main() -> std::process::ExitCode {
         Command::Send { config, request, identity, env, json: use_json } => {
             run_send(config, request, identity, env, use_json).await
         }
+        Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
+            run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
+        }
     }
 }
 
+
+/// ExecOptions for an identity: mark its api-key header sensitive so it is stripped
+/// on cross-origin redirects (Authorization/Cookie/x-amz-* are already built in).
+pub(crate) fn exec_opts_for(auth: &qa_touchstone_core::config::Auth) -> ExecOptions {
+    let sensitive_header_names = match auth {
+        qa_touchstone_core::config::Auth::ApiKey {
+            key, location: qa_touchstone_core::config::ApiKeyIn::Header, ..
+        } => vec![key.clone()],
+        _ => vec![],
+    };
+    ExecOptions { sensitive_header_names, ..Default::default() }
+}
 
 async fn run_send(
     config_path: String,
@@ -138,17 +167,7 @@ async fn run_send(
     };
 
     // Step 6: execute + measure wall-clock ms
-    // Mark the identity's api-key header as sensitive so it is stripped on cross-origin
-    // redirects (Authorization/Cookie/x-amz-* are already covered by the built-in list).
-    let sensitive_header_names = match &identity.auth {
-        qa_touchstone_core::config::Auth::ApiKey {
-            key,
-            location: qa_touchstone_core::config::ApiKeyIn::Header,
-            ..
-        } => vec![key.clone()],
-        _ => vec![],
-    };
-    let exec_opts = ExecOptions { sensitive_header_names, ..Default::default() };
+    let exec_opts = exec_opts_for(&identity.auth);
 
     // Steps 6-9: execute, adapt, and assert via run_step (no printing/redaction inside).
     let step = qa_touchstone_core::step::run_step(&rd, &req.assertions, exec_opts).await;
