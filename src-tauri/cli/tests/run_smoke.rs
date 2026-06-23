@@ -102,3 +102,98 @@ async fn run_writes_junit_with_failure_and_error() {
     assert_eq!(doc.descendants().filter(|n| n.has_tag_name("failure")).count(), 1);
     assert_eq!(doc.descendants().filter(|n| n.has_tag_name("error")).count(), 1);
 }
+
+// The server echoes whatever query it received into its JSON body, so a secret
+// substituted into the request surfaces in a response-derived assertion `actual`.
+async fn echo_server() -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).respond_with(|req: &wiremock::Request| {
+        ResponseTemplate::new(200).set_body_string(format!("{{\"echo\":\"{}\"}}", req.url.query().unwrap_or("")))
+    }).mount(&server).await;
+    server
+}
+
+#[tokio::test]
+async fn identity_secret_never_appears_in_any_report() {
+    let server = echo_server().await;
+    let cfg = format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"a","auth":{{"type":"bearer","token":"SUPERSECRETTOKEN"}}}}],
+      "requests":[{{"id":"r","method":"GET","url":"{base}/x","assertions":[{{"type":"status","op":"eq","value":200}}]}}],
+      "collections":[{{"id":"c","requests":["r"]}}]
+    }}"#, base = server.uri());
+    let cfgp = write_temp("rs.json", &cfg);
+    let junit = write_temp("rs.xml", "");
+    let out = bin().args([
+        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
+        "--json","--junit",junit.to_str().unwrap(),
+    ]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let xml = std::fs::read_to_string(&junit).unwrap();
+    assert!(!stdout.contains("SUPERSECRETTOKEN"), "json/human leaked token: {stdout}");
+    assert!(!xml.contains("SUPERSECRETTOKEN"), "junit leaked token");
+}
+
+#[tokio::test]
+async fn data_row_secret_absent_even_when_it_reaches_url_and_actual() {
+    let server = echo_server().await;
+    // {{tok}} from the data row is substituted into the query, echoed back into the body,
+    // and asserted on — so it would reach final_url AND the assertion actual without redaction.
+    let cfg = format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"r","method":"GET","url":"{base}/x?tok={{{{tok}}}}",
+        "assertions":[{{"type":"bodyHas","path":"echo"}}]}}],
+      "collections":[{{"id":"c","requests":["r"]}}]
+    }}"#, base = server.uri());
+    let cfgp = write_temp("dr.json", &cfg);
+    let data = write_temp("dr.csv", "tok\nROWSECRETVALUE\n");
+    let junit = write_temp("dr.xml", "");
+    let out = bin().args([
+        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
+        "--data",data.to_str().unwrap(),"--json","--junit",junit.to_str().unwrap(),
+    ]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let xml = std::fs::read_to_string(&junit).unwrap();
+    assert!(!stdout.contains("ROWSECRETVALUE"), "json leaked data-row secret: {stdout}");
+    assert!(!xml.contains("ROWSECRETVALUE"), "junit leaked data-row secret");
+}
+
+#[tokio::test]
+async fn response_body_and_headers_are_not_emitted_by_run() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/x")).respond_with(
+        ResponseTemplate::new(200)
+            .insert_header("X-Marker", "HEADERMARKER")
+            .set_body_string("{\"secretBodyField\":\"BODYMARKER\"}")
+    ).mount(&server).await;
+    // assertion is on status only — nothing surfaces the body/header into an `actual`.
+    let cfg = format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"r","method":"GET","url":"{base}/x","assertions":[{{"type":"status","op":"eq","value":200}}]}}],
+      "collections":[{{"id":"c","requests":["r"]}}]
+    }}"#, base = server.uri());
+    let cfgp = write_temp("aw.json", &cfg);
+    let junit = write_temp("aw.xml", "");
+    let out = bin().args([
+        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
+        "--json","--junit",junit.to_str().unwrap(),
+    ]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let xml = std::fs::read_to_string(&junit).unwrap();
+    for marker in ["BODYMARKER", "HEADERMARKER", "secretBodyField"] {
+        assert!(!stdout.contains(marker), "run --json must not emit response body/headers: {marker}");
+        assert!(!xml.contains(marker), "run --junit must not emit response body/headers: {marker}");
+    }
+}
+
+#[test]
+fn iterations_zero_exits_2() {
+    let cfg = write_temp("i0.json", &config_json("https://example.invalid"));
+    let out = bin().args([
+        "run","--config",cfg.to_str().unwrap(),"--collection","pass","--identity","anon","--iterations","0",
+    ]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}

@@ -46,6 +46,8 @@ impl RunReport {
     /// Compute totals + `ok` from rows, then construct. All strings in `results`
     /// MUST already be redacted by the caller (run loop).
     pub fn build(collection: String, identity: String, iterations: usize, results: Vec<ResultRow>) -> Self {
+        debug_assert!(results.iter().all(|r| r.iter < iterations),
+            "ResultRow.iter must be < iterations (dense 0..iterations) for JUnit suite grouping");
         let mut totals = Totals { requests: results.len(), assertions: 0, passed: 0, failed: 0, errors: 0 };
         for r in &results {
             if r.error.is_some() {
@@ -134,6 +136,8 @@ pub fn to_junit(r: &RunReport) -> String {
 /// Replace characters not permitted in XML 1.0 (NUL/most C0 controls, U+FFFE/FFFF)
 /// with the replacement char. Tab/newline/CR are allowed.
 fn sanitize_xml(s: &str) -> String {
+    // Rust `String` is valid UTF-8, so lone surrogates (U+D800–U+DFFF) cannot occur here;
+    // we only need to strip the forbidden control chars and U+FFFE/U+FFFF.
     s.chars().map(|c| {
         let u = c as u32;
         if c == '\t' || c == '\n' || c == '\r' { c }
@@ -150,6 +154,12 @@ fn attr(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+/// Machine-readable report. The DTO derives `Serialize`; its fields ARE the
+/// allowlist, and every string was redacted when the run loop built it.
+pub fn to_json(r: &RunReport) -> serde_json::Value {
+    serde_json::to_value(r).expect("RunReport serializes")
 }
 
 #[cfg(test)]
@@ -190,5 +200,6 @@ mod junit_tests {
         roxmltree::Document::parse(&xml).expect("well-formed even with metachars/control chars");
         assert!(!xml.contains('\u{0}'), "NUL must be sanitized out");
         assert!(xml.contains("&lt;b&gt;"), "angle brackets escaped");
+        assert!(xml.contains("&amp;"), "ampersand escaped to &amp;");
     }
 }

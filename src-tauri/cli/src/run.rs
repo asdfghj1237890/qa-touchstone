@@ -127,8 +127,11 @@ pub async fn run_collection(
             return ExitCode::from(1);
         }
     }
-    let _ = use_json; // JSON reporter lands in Task 5
-    crate::report::print_human(&report);
+    if use_json {
+        println!("{}", crate::report::to_json(&report));
+    } else {
+        crate::report::print_human(&report);
+    }
 
     if report.ok { ExitCode::SUCCESS } else { ExitCode::from(4) }
 }
