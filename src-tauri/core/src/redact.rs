@@ -46,15 +46,25 @@ impl RedactionSet {
             if secret.is_empty() {
                 continue;
             }
-            if !self.tokens.contains(&secret) {
-                self.tokens.push(secret.clone());
-            }
-            let e = enc(&secret);
-            if e != secret && !e.is_empty() && !self.tokens.contains(&e) {
-                self.tokens.push(e);
-            }
+            // raw form
+            self.push(secret.clone());
+            // percent-encoded form (apiKey-in-query and other URL contexts)
+            self.push(enc(&secret));
+            // JSON-string-escaped form: assertion `actual`s are JSON.stringify'd before they
+            // reach redaction (engine.rs bodyEq/time/bodyArray), so a secret containing `"`,
+            // `\`, or a control char would otherwise appear escaped (e.g. `a"b` -> `a\"b`) and
+            // slip past the raw/encoded tokens. Add the inner-escaped form so it is caught too.
+            self.push(json_escaped(&secret));
         }
+        // longest-first so a short token cannot corrupt a longer one mid-replacement
         self.tokens.sort_by(|a, b| b.len().cmp(&a.len()));
+    }
+
+    /// Add a token if non-empty and not already present.
+    fn push(&mut self, token: String) {
+        if !token.is_empty() && !self.tokens.contains(&token) {
+            self.tokens.push(token);
+        }
     }
 
     /// Replace every token occurrence in `s` with the redaction marker.
@@ -85,6 +95,18 @@ impl RedactionSet {
     pub(crate) fn tokens(&self) -> &[String] {
         &self.tokens
     }
+}
+
+/// The JSON-string escaping of `s` WITHOUT the surrounding quotes (`a"b` -> `a\"b`,
+/// newline -> `\n`). Assertion actuals are JSON.stringify'd before they reach redaction,
+/// so the escaped form of a secret must also be a redaction token.
+fn json_escaped(s: &str) -> String {
+    let quoted = serde_json::to_string(s).unwrap_or_default();
+    quoted
+        .strip_prefix('"')
+        .and_then(|x| x.strip_suffix('"'))
+        .unwrap_or(quoted.as_str())
+        .to_string()
 }
 
 #[cfg(test)]
@@ -133,5 +155,19 @@ mod tests {
     fn none_auth_is_noop() {
         let r = RedactionSet::from_auth(&Auth::None);
         assert_eq!(r.redact_str("nothing to hide"), "nothing to hide");
+    }
+
+    #[test]
+    fn json_escaped_secret_form_is_redacted() {
+        // Assertion actuals are JSON.stringify'd before redaction; a secret containing a quote
+        // appears escaped (`a"b` -> `a\"b`). The escaped form must be in the token set too.
+        let r = RedactionSet::from_auth(&Auth::Bearer { token: "a\"b".into() });
+        // raw form still caught
+        assert_eq!(r.redact_str("a\"b"), "***REDACTED***");
+        // how a bodyEq actual carries it: serde_json::to_string("a\"b") == "\"a\\\"b\""
+        let actual = serde_json::to_string("a\"b").unwrap();
+        let red = r.redact_str(&actual);
+        assert!(!red.contains("a\\\"b"), "JSON-escaped secret leaked: {red}");
+        assert!(red.contains("***REDACTED***"), "redaction marker present: {red}");
     }
 }

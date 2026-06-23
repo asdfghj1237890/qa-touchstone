@@ -234,3 +234,33 @@ async fn junit_has_one_testsuite_per_data_iteration() {
     // 2 iterations × 2 requests × 1 assertion each = 4 testcases
     assert_eq!(doc.descendants().filter(|n| n.has_tag_name("testcase")).count(), 4, "{xml}");
 }
+
+#[tokio::test]
+async fn secret_with_quote_redacted_in_json_stringified_actual() {
+    // Regression for the JSON-escaped-secret leak (codex): an endpoint reflects a
+    // quote-containing bearer token in its JSON body; bodyEq's actual is JSON.stringify'd,
+    // so the secret surfaces ESCAPED (SEC\"RET). Both raw and escaped forms must be redacted.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/x")).respond_with(
+        ResponseTemplate::new(200).set_body_string("{\"echo\":\"SEC\\\"RET\"}")
+    ).mount(&server).await;
+    let cfg = format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"a","auth":{{"type":"bearer","token":"SEC\"RET"}}}}],
+      "requests":[{{"id":"r","method":"GET","url":"{base}/x",
+        "assertions":[{{"type":"bodyEq","path":"echo","value":"MISMATCH"}}]}}],
+      "collections":[{{"id":"c","requests":["r"]}}]
+    }}"#, base = server.uri());
+    let cfgp = write_temp("q.json", &cfg);
+    let junit = write_temp("q.xml", "");
+    let out = bin().args([
+        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
+        "--json","--junit",junit.to_str().unwrap(),
+    ]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let xml = std::fs::read_to_string(&junit).unwrap();
+    assert!(!stdout.contains("SEC\"RET"), "raw secret leaked (json): {stdout}");
+    assert!(!stdout.contains("SEC\\\"RET"), "escaped secret leaked (json): {stdout}");
+    assert!(!xml.contains("SEC\"RET"), "raw secret leaked (junit): {xml}");
+    assert!(!xml.contains("SEC\\\"RET"), "escaped secret leaked (junit): {xml}");
+}
