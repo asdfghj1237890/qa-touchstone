@@ -1,0 +1,241 @@
+{
+  "denySet": [
+    401,
+    403,
+    404
+  ],
+  "outcome": [
+    {
+      "name": "ok200",
+      "status": 200,
+      "expected": "allowed"
+    },
+    {
+      "name": "denied403",
+      "status": 403,
+      "expected": "denied"
+    },
+    {
+      "name": "notfound404",
+      "status": 404,
+      "expected": "denied"
+    },
+    {
+      "name": "server500",
+      "status": 500,
+      "expected": "other"
+    },
+    {
+      "name": "null",
+      "status": null,
+      "expected": "other"
+    }
+  ],
+  "resp": [
+    {
+      "name": "clean",
+      "status": 200,
+      "body": {
+        "id": 1
+      },
+      "expected": "allowed"
+    },
+    {
+      "name": "soft_error_field",
+      "status": 200,
+      "body": {
+        "error": "Access denied"
+      },
+      "expected": "denied"
+    },
+    {
+      "name": "soft_status_token",
+      "status": 200,
+      "body": {
+        "status": "forbidden"
+      },
+      "expected": "denied"
+    },
+    {
+      "name": "soft_phrase_message",
+      "status": 200,
+      "body": {
+        "message": "you don't have permission"
+      },
+      "expected": "denied"
+    },
+    {
+      "name": "generic_error_other",
+      "status": 200,
+      "body": {
+        "error": "boom"
+      },
+      "expected": "other"
+    },
+    {
+      "name": "nested_depth",
+      "status": 200,
+      "body": {
+        "a": {
+          "b": {
+            "c": {
+              "error": "forbidden"
+            }
+          }
+        }
+      },
+      "expected": "denied"
+    },
+    {
+      "name": "forbidden_city_title_clean",
+      "status": 200,
+      "body": {
+        "title": "Forbidden City"
+      },
+      "expected": "allowed"
+    },
+    {
+      "name": "hard_403",
+      "status": 403,
+      "body": {},
+      "expected": "denied"
+    }
+  ],
+  "verdict": [
+    {
+      "name": "allow_allowed",
+      "expectation": "allow",
+      "outcome": "allowed",
+      "expected": "pass"
+    },
+    {
+      "name": "allow_denied",
+      "expectation": "allow",
+      "outcome": "denied",
+      "expected": "fail"
+    },
+    {
+      "name": "allow_other",
+      "expectation": "allow",
+      "outcome": "other",
+      "expected": "inconclusive"
+    },
+    {
+      "name": "deny_allowed",
+      "expectation": "deny",
+      "outcome": "allowed",
+      "expected": "vuln"
+    },
+    {
+      "name": "deny_denied",
+      "expectation": "deny",
+      "outcome": "denied",
+      "expected": "pass"
+    },
+    {
+      "name": "deny_other",
+      "expectation": "deny",
+      "outcome": "other",
+      "expected": "inconclusive"
+    },
+    {
+      "name": "skip_allowed",
+      "expectation": "skip",
+      "outcome": "allowed",
+      "expected": null
+    },
+    {
+      "name": "skip_denied",
+      "expectation": "skip",
+      "outcome": "denied",
+      "expected": null
+    },
+    {
+      "name": "skip_other",
+      "expectation": "skip",
+      "outcome": "other",
+      "expected": null
+    }
+  ],
+  "endpoint": [
+    {
+      "name": "get_plain",
+      "method": "GET",
+      "path": "/u",
+      "expected": false
+    },
+    {
+      "name": "delete",
+      "method": "DELETE",
+      "path": "/u",
+      "expected": true
+    },
+    {
+      "name": "admin_path",
+      "method": "GET",
+      "path": "/admin/x",
+      "expected": true
+    },
+    {
+      "name": "manage_token",
+      "method": "GET",
+      "path": "/v1/manage",
+      "expected": true
+    }
+  ],
+  "defaultExpect": [
+    {
+      "name": "anon",
+      "identity": {
+        "auth": {
+          "type": "none"
+        }
+      },
+      "endpoint": {
+        "method": "GET",
+        "path": "/u"
+      },
+      "expected": "deny"
+    },
+    {
+      "name": "priv_endpoint_nonpriv_id",
+      "identity": {
+        "auth": {
+          "type": "bearer"
+        }
+      },
+      "endpoint": {
+        "method": "DELETE",
+        "path": "/u"
+      },
+      "expected": "deny"
+    },
+    {
+      "name": "priv_endpoint_priv_id",
+      "identity": {
+        "auth": {
+          "type": "bearer"
+        },
+        "privileged": true
+      },
+      "endpoint": {
+        "method": "DELETE",
+        "path": "/u"
+      },
+      "expected": "allow"
+    },
+    {
+      "name": "plain",
+      "identity": {
+        "auth": {
+          "type": "bearer"
+        }
+      },
+      "endpoint": {
+        "method": "GET",
+        "path": "/u"
+      },
+      "expected": "allow"
+    }
+  ]
+}

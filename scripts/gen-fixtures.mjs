@@ -159,3 +159,37 @@ const coercion = [
 ].map(c => ({ name:c.name, value:c.value, expected: String(c.value) }));
 writeFileSync(join(OUT, 'coercion.json'), JSON.stringify(coercion, null, 2) + '\n');
 console.log(`wrote coercion.json (${coercion.length} cases)`);
+
+const { classifyOutcome: czO, classifyResponseOutcome: cRO, verdictFor: vF, defaultExpectation: dE, classifyEndpoint: cE } = await import('./_authz-bridge.mjs');
+_i = 0;
+const azDeny = [401,403,404];
+const azOutcome = [
+  { name:'ok200', status:200 }, { name:'denied403', status:403 }, { name:'notfound404', status:404 },
+  { name:'server500', status:500 }, { name:'null', status:null },
+].map(c => ({ ...c, expected: czO(c.status, azDeny) }));
+const azResp = [
+  { name:'clean', status:200, body:{id:1} },
+  { name:'soft_error_field', status:200, body:{error:'Access denied'} },
+  { name:'soft_status_token', status:200, body:{status:'forbidden'} },
+  { name:'soft_phrase_message', status:200, body:{message:"you don't have permission"} },
+  { name:'generic_error_other', status:200, body:{error:'boom'} },
+  { name:'nested_depth', status:200, body:{a:{b:{c:{error:'forbidden'}}}} },
+  { name:'forbidden_city_title_clean', status:200, body:{title:'Forbidden City'} },
+  { name:'hard_403', status:403, body:{} },
+].map(c => ({ ...c, expected: cRO({ status:c.status, body:c.body }, azDeny) }));
+const azVerdict = [];
+for (const e of ['allow','deny','skip']) for (const o of ['allowed','denied','other'])
+  azVerdict.push({ name:`${e}_${o}`, expectation:e, outcome:o, expected: vF(e, o) ?? null });
+const azEndpoint = [
+  { name:'get_plain', method:'GET', path:'/u' }, { name:'delete', method:'DELETE', path:'/u' },
+  { name:'admin_path', method:'GET', path:'/admin/x' }, { name:'manage_token', method:'GET', path:'/v1/manage' },
+].map(c => ({ ...c, expected: cE(c.method, c.path).privileged }));
+const azDefault = [
+  { name:'anon', identity:{ auth:{type:'none'} }, endpoint:{ method:'GET', path:'/u' } },
+  { name:'priv_endpoint_nonpriv_id', identity:{ auth:{type:'bearer'} }, endpoint:{ method:'DELETE', path:'/u' } },
+  { name:'priv_endpoint_priv_id', identity:{ auth:{type:'bearer'}, privileged:true }, endpoint:{ method:'DELETE', path:'/u' } },
+  { name:'plain', identity:{ auth:{type:'bearer'} }, endpoint:{ method:'GET', path:'/u' } },
+].map(c => ({ ...c, expected: dE(c.identity, c.endpoint) }));
+writeFileSync(join(OUT, 'security_authz.json'), JSON.stringify(
+  { denySet: azDeny, outcome: azOutcome, resp: azResp, verdict: azVerdict, endpoint: azEndpoint, defaultExpect: azDefault }, null, 2) + '\n');
+console.log(`wrote security_authz.json`);
