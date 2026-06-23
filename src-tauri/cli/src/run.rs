@@ -121,7 +121,13 @@ pub async fn run_collection(
     }
 
     let report = RunReport::build(collection_id, identity_id, count, results);
-    let _ = (junit_path, use_json); // JUnit (Task 4) + JSON (Task 5) reporters land next; human for now
+    if let Some(path) = junit_path {
+        if let Err(e) = std::fs::write(&path, crate::report::to_junit(&report)) {
+            eprintln!("error: cannot write junit `{path}`: {e}");
+            return ExitCode::from(1);
+        }
+    }
+    let _ = use_json; // JSON reporter lands in Task 5
     crate::report::print_human(&report);
 
     if report.ok { ExitCode::SUCCESS } else { ExitCode::from(4) }
