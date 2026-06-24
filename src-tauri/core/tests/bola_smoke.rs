@@ -88,16 +88,22 @@ async fn bola_templated_url_resolves() {
 async fn bola_error_message_masks_idvalue() {
     // A BOLA attack to an unreachable host produces an EngineError whose message carries the
     // resolved URL (idValue in the path). The idValue must be MASKED — it may be PII and is NOT
-    // in scan's auth-secret redaction set.
+    // in scan's auth-secret redaction set. idValues here contain a space so they are percent-
+    // encoded (`ord%20ALICE`) in the URL: the masking must cover BOTH the raw and encoded forms.
     let cfg = r#"{ "version":1,"environments":[],
       "identities":[{"id":"alice","auth":{"type":"none"}},{"id":"bob","auth":{"type":"none"}}],
       "requests":[{"id":"getOrder","method":"GET","url":"http://127.0.0.1:1/orders/PLACEHOLDER"}],
       "security":{"bola":{"tests":[{"id":"t1","request":"getOrder","idLocation":{"kind":"path","index":1},
-        "idValues":{"alice":"ordAAA","bob":"ordBBB"}}]}} }"#;
+        "idValues":{"alice":"ord ALICE","bob":"ord BOB"}}]}} }"#;
     let c = load_config(cfg, &|_| None).unwrap();
     let (_findings, errors) = run_bola(&c, None).await;
     assert!(!errors.is_empty(), "unreachable host → errors");
+    // sanity: the error must actually carry the resolved URL, else the masking assertions are vacuous
+    assert!(errors.iter().any(|e| e.message.contains("127.0.0.1")), "error should reference the target URL: {errors:?}");
     for e in &errors {
-        assert!(!e.message.contains("ordAAA") && !e.message.contains("ordBBB"), "idValue leaked in error message: {}", e.message);
+        // raw form
+        assert!(!e.message.contains("ord ALICE") && !e.message.contains("ord BOB"), "raw idValue leaked: {}", e.message);
+        // percent-encoded form (the regression: masking must cover transform forms)
+        assert!(!e.message.contains("ord%20ALICE") && !e.message.contains("ord%20BOB"), "encoded idValue leaked: {}", e.message);
     }
 }

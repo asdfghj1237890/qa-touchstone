@@ -52,6 +52,14 @@ impl RedactionSet {
         self.add_raw(vals);
     }
 
+    /// Extend with arbitrary sensitive values (e.g. BOLA idValues), each added in every
+    /// transform form (raw / percent-encoded / JSON-escaped / lowercased). Like data-row
+    /// values, idValues are substituted into requests and can resurface in a resolved URL
+    /// or an executor error string, so each form must be a redaction token.
+    pub fn extend_with_values<I: IntoIterator<Item = String>>(&mut self, values: I) {
+        self.add_raw(values.into_iter().collect());
+    }
+
     fn add_raw(&mut self, raws: Vec<String>) {
         for secret in raws {
             if secret.is_empty() {
@@ -205,5 +213,15 @@ mod tests {
         let red = r.redact_str(&actual);
         assert!(!red.contains("a\\\"b"), "JSON-escaped secret leaked: {red}");
         assert!(red.contains("***REDACTED***"), "redaction marker present: {red}");
+    }
+
+    #[test]
+    fn extend_with_values_covers_raw_and_encoded() {
+        // BOLA idValues are fed in via extend_with_values; a value with a space must be redacted
+        // both raw and percent-encoded (the latter is how it appears in a resolved URL / error).
+        let mut r = RedactionSet::default();
+        r.extend_with_values(["ord A".to_string()]);
+        assert_eq!(r.redact_str("/orders/ord A"), "/orders/***REDACTED***");
+        assert_eq!(r.redact_str("/orders/ord%20A"), "/orders/***REDACTED***");
     }
 }

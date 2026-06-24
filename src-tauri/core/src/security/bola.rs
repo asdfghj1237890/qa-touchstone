@@ -196,6 +196,26 @@ pub fn apply_id_location(req: &Request, loc: &IdLocation, value: &Value) -> Resu
             out.url = url.to_string();
         }
         IdLocation::Query { key } => {
+            // Drop any same-key pair already in the resolved URL's own query string: build_request
+            // appends Request.query with `&`, so a leftover `?key=old` would survive next to the
+            // injected `key=new` and a first-wins server could defeat the test. (The TS mutates
+            // structured params, which dedupe by key.)
+            if out.url.contains('?') {
+                if let Ok(mut url) = reqwest::Url::parse(&out.url) {
+                    let kept: Vec<(String, String)> = url.query_pairs()
+                        .filter(|(k, _)| k.as_ref() != key.as_str())
+                        .map(|(k, val)| (k.into_owned(), val.into_owned()))
+                        .collect();
+                    if kept.is_empty() {
+                        url.set_query(None);
+                    } else {
+                        let mut qp = url.query_pairs_mut();
+                        qp.clear();
+                        for (k, val) in &kept { qp.append_pair(k, val); }
+                    }
+                    out.url = url.to_string();
+                }
+            }
             if let Some(kv) = out.query.iter_mut().find(|kv| &kv.key == key) { kv.value = v; }
             else { out.query.push(Kv { key: key.clone(), value: v }); }
         }
@@ -212,24 +232,13 @@ pub fn apply_id_location(req: &Request, loc: &IdLocation, value: &Value) -> Resu
 use crate::config::{Config, Identity};
 use crate::engine::{qa_substitute, qa_var_map, RealDynamics};
 use crate::buildreq::{build_request, exec_opts_for};
+use crate::redact::RedactionSet;
 use crate::step::{run_step, StepResult};
 use crate::security::finding::{EngineError, EngineId, Finding};
 use std::collections::BTreeMap;
 
 fn idval_nonempty(v: &Value) -> bool {
     match v { Value::Null => false, Value::String(s) => !s.is_empty(), _ => true }
-}
-
-/// Mask every (non-empty) idValue of `test` in an error message. BOLA errors can carry the
-/// resolved URL (with the id) from the executor's error string; idValues may be PII, so they
-/// must never reach output — masked here at construction (the scan union set holds only auth secrets).
-fn mask_idvals(msg: &str, test: &crate::config::BolaTest) -> String {
-    let mut out = msg.to_string();
-    for v in test.id_values.values() {
-        let s = js_string(v);
-        if !s.is_empty() { out = out.replace(&s, "(id redacted)"); }
-    }
-    out
 }
 
 /// Build the mutated+resolved prepared request for one (test, identity, id_value).
@@ -263,28 +272,46 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
             eprintln!("warn: bola test `{}` skipped: needs >= 2 identities with non-empty idValues", test.id);
             continue;
         }
-        let err = |idy: String, msg: String| EngineError { engine: EngineId::Bola, endpoint: Some(test.id.clone()), identity: Some(idy), message: mask_idvals(&msg, test) };
+        // idValues may be PII and are NOT in scan's auth-secret union set; redact every transform
+        // form (raw / percent-encoded / JSON / lowercased) of them from error messages, which can
+        // carry the resolved URL (with the id) from the executor. Masked here at construction.
+        let mut idred = RedactionSet::default();
+        idred.extend_with_values(test.id_values.values().map(js_string));
+        let err = |idy: String, msg: String| EngineError { engine: EngineId::Bola, endpoint: Some(test.id.clone()), identity: Some(idy), message: idred.redact_str(&msg) };
 
-        // Reference phase — each owner runs its OWN id.
+        // Reference phase — each owner runs its OWN id. Surface execution failures as errors
+        // (matrix-parity: a reference that cannot run must not let the scan report a false clean).
         let mut reference: BTreeMap<&str, StepResult> = BTreeMap::new();
         for o in &owners {
             match build_bola_request(req, o, &test.id_values[&o.id], &test.id_location, &var_map) {
-                Ok(rd) => { reference.insert(o.id.as_str(), run_step(&rd, &[], exec_opts_for(&o.auth)).await); }
+                Ok(rd) => {
+                    let step = run_step(&rd, &[], exec_opts_for(&o.auth)).await;
+                    if !step.success {
+                        errors.push(err(o.id.clone(), format!("bola `{}` reference {} failed: {}", test.id, o.id, step.error.as_deref().unwrap_or("request failed"))));
+                    }
+                    reference.insert(o.id.as_str(), step);
+                }
                 Err(e) => errors.push(err(o.id.clone(), format!("bola `{}` reference build failed: {e}", test.id))),
             }
         }
         let ref_ok = |id: &str| reference.get(id).map(|r| r.success && (200..=299).contains(&r.status)).unwrap_or(false);
 
-        // Negative control (opt-in).
+        // Negative control (opt-in). Surface build/exec failures as errors too.
         let mut control_failed = false;
         if test.negative_control {
             let co = owners[0];
             let synth = synthetic_id_for(&test.id_values[&co.id]);
-            if let Ok(rd) = build_bola_request(req, co, &Value::String(synth.clone()), &test.id_location, &var_map) {
-                let step = run_step(&rd, &[], exec_opts_for(&co.auth)).await;
-                let matched = step.success && ref_ok(&co.id)
-                    && control_suggests_ignored_id(&step.body, &reference[co.id.as_str()].body, &test.id_values[&co.id], &synth);
-                control_failed = negative_control_failed(if step.success { Some(step.status) } else { None }, &deny_set, matched);
+            match build_bola_request(req, co, &Value::String(synth.clone()), &test.id_location, &var_map) {
+                Ok(rd) => {
+                    let step = run_step(&rd, &[], exec_opts_for(&co.auth)).await;
+                    if !step.success {
+                        errors.push(err(co.id.clone(), format!("bola `{}` negative-control failed: {}", test.id, step.error.as_deref().unwrap_or("request failed"))));
+                    }
+                    let matched = step.success && ref_ok(&co.id)
+                        && control_suggests_ignored_id(&step.body, &reference[co.id.as_str()].body, &test.id_values[&co.id], &synth);
+                    control_failed = negative_control_failed(if step.success { Some(step.status) } else { None }, &deny_set, matched);
+                }
+                Err(e) => errors.push(err(co.id.clone(), format!("bola `{}` negative-control build failed: {e}", test.id))),
             }
         }
 
@@ -356,6 +383,11 @@ mod tests {
         // query upsert
         let r = apply_id_location(&mk("https://x/o", vec![], None), &IdLocation::Query{key:"id".into()}, &json!(7)).unwrap();
         assert_eq!(r.query[0].value, "7");
+        // query id REPLACES a same-key param already in the URL string (no `id=alice&id=bob` dup)
+        let r = apply_id_location(&mk("https://x/o?id=alice&page=2", vec![], None), &IdLocation::Query{key:"id".into()}, &json!("bob")).unwrap();
+        assert!(!r.url.contains("id=alice"), "stale URL id stripped: {}", r.url);
+        assert!(r.url.contains("page=2"), "other URL params kept: {}", r.url);
+        assert_eq!(r.query.iter().find(|kv| kv.key=="id").unwrap().value, "bob");
         // body dot-path preserves number type
         let r = apply_id_location(&mk("https://x/o", vec![], Some(r#"{"order":{"id":1}}"#)), &IdLocation::Body{path:"order.id".into()}, &json!(9)).unwrap();
         assert!(r.body.unwrap().content.contains("\"id\":9"));
