@@ -2,4 +2,5 @@
 pub mod authz;
 pub mod bola;
 pub mod finding;
+pub mod ratelimit;
 pub mod runner;

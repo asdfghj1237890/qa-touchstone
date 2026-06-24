@@ -230,3 +230,33 @@ const synthCases = [
 writeFileSync(join(OUT, 'security_bola.json'), JSON.stringify(
   { denySet: bolaDeny, match: matchCases, classify: classifyCases, ncf: ncfCases, control: controlCases, idKey: idKeyCases, synth: synthCases }, null, 2) + '\n');
 console.log('wrote security_bola.json');
+
+const { detectThrottleSignal: dTS, analyzeThrottle: aT, rateLimitStrength: rLS, classifyRateLimit: cRL, rateLimitSeverity: rLSev } = await import('./_ratelimit-bridge.mjs');
+_i = 0;
+// response-array driven cases: detect + analyze + strength derived from the SAME responses.
+const rlResponses = [
+  { name:'empty',          responses: [] },
+  { name:'all_2xx_no_sig', responses: [ {status:200,headers:{}}, {status:200,headers:{}}, {status:200,headers:{}} ] },
+  { name:'429_early',      responses: [ {status:200,headers:{}}, {status:429,headers:{}}, {status:429,headers:{}} ] },
+  { name:'429_late_weak',  responses: Array.from({length:30}, (_,i) => i < 25 ? {status:200,headers:{}} : {status:429,headers:{}}) },
+  { name:'headers_only',   responses: [ {status:200,headers:{'RateLimit-Limit':'100'}}, {status:200,headers:{'RateLimit-Remaining':'0'}} ] },
+  { name:'retry_after_2xx',responses: [ {status:200,headers:{'Retry-After':'5'}} ] },
+  { name:'net_errors',     responses: [ {status:null,headers:{}}, {status:0,headers:{}} ] },
+  { name:'mixed_4xx_5xx',  responses: [ {status:400,headers:{}}, {status:500,headers:{}}, {status:200,headers:{}} ] },
+];
+const rlCases = rlResponses.map(c => {
+  const detect = dTS(c.responses);
+  const analyze = aT(c.responses);
+  const strength = rLS(analyze);
+  return { name: c.name, responses: c.responses, detect, analyze, strength };
+});
+const rlClassify = [
+  { throttled:true,  completed:5 }, { throttled:false, completed:5 }, { throttled:false, completed:0 },
+].map(c => ({ ...c, expected: cRL({ throttled: c.throttled }, c.completed) }));
+const rlSeverity = [
+  { sensitivity:'sensitive', verdict:'vuln' }, { sensitivity:'normal', verdict:'vuln' },
+  { sensitivity:'sensitive', verdict:'pass' }, { sensitivity:null, verdict:'vuln' },
+].map(c => ({ ...c, expected: rLSev(c.sensitivity, c.verdict) ?? null }));
+writeFileSync(join(OUT, 'security_ratelimit.json'), JSON.stringify(
+  { cases: rlCases, classify: rlClassify, severity: rlSeverity }, null, 2) + '\n');
+console.log('wrote security_ratelimit.json');

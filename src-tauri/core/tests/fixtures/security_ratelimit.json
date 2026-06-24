@@ -1,0 +1,392 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "responses": [],
+      "detect": {
+        "throttled": false,
+        "saw429": false,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 0,
+        "ok2xx": 0,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": false,
+        "throttled": false,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 0
+      },
+      "strength": "none"
+    },
+    {
+      "name": "all_2xx_no_sig",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": false,
+        "saw429": false,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 3,
+        "ok2xx": 3,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": false,
+        "throttled": false,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 3
+      },
+      "strength": "none"
+    },
+    {
+      "name": "429_early",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": true,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 3,
+        "ok2xx": 1,
+        "c429": 2,
+        "saw429": true,
+        "headerHit": false,
+        "throttled": true,
+        "firstThrottledIndex": 1,
+        "allowedBeforeThrottle": 1
+      },
+      "strength": "strong"
+    },
+    {
+      "name": "429_late_weak",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": true,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 30,
+        "ok2xx": 25,
+        "c429": 5,
+        "saw429": true,
+        "headerHit": false,
+        "throttled": true,
+        "firstThrottledIndex": 25,
+        "allowedBeforeThrottle": 25
+      },
+      "strength": "weak"
+    },
+    {
+      "name": "headers_only",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {
+            "RateLimit-Limit": "100"
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "RateLimit-Remaining": "0"
+          }
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": false,
+        "headerHit": true
+      },
+      "analyze": {
+        "completed": 2,
+        "ok2xx": 2,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": true,
+        "throttled": true,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 2
+      },
+      "strength": "weak"
+    },
+    {
+      "name": "retry_after_2xx",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {
+            "Retry-After": "5"
+          }
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": false,
+        "headerHit": true
+      },
+      "analyze": {
+        "completed": 1,
+        "ok2xx": 1,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": true,
+        "throttled": true,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 1
+      },
+      "strength": "weak"
+    },
+    {
+      "name": "net_errors",
+      "responses": [
+        {
+          "status": null,
+          "headers": {}
+        },
+        {
+          "status": 0,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": false,
+        "saw429": false,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 0,
+        "ok2xx": 0,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": false,
+        "throttled": false,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 0
+      },
+      "strength": "none"
+    },
+    {
+      "name": "mixed_4xx_5xx",
+      "responses": [
+        {
+          "status": 400,
+          "headers": {}
+        },
+        {
+          "status": 500,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": false,
+        "saw429": false,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 3,
+        "ok2xx": 1,
+        "c429": 0,
+        "saw429": false,
+        "headerHit": false,
+        "throttled": false,
+        "firstThrottledIndex": -1,
+        "allowedBeforeThrottle": 1
+      },
+      "strength": "none"
+    }
+  ],
+  "classify": [
+    {
+      "throttled": true,
+      "completed": 5,
+      "expected": "pass"
+    },
+    {
+      "throttled": false,
+      "completed": 5,
+      "expected": "vuln"
+    },
+    {
+      "throttled": false,
+      "completed": 0,
+      "expected": "inconclusive"
+    }
+  ],
+  "severity": [
+    {
+      "sensitivity": "sensitive",
+      "verdict": "vuln",
+      "expected": "high"
+    },
+    {
+      "sensitivity": "normal",
+      "verdict": "vuln",
+      "expected": "low"
+    },
+    {
+      "sensitivity": "sensitive",
+      "verdict": "pass",
+      "expected": null
+    },
+    {
+      "sensitivity": null,
+      "verdict": "vuln",
+      "expected": "low"
+    }
+  ]
+}
