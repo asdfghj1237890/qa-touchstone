@@ -1,9 +1,8 @@
-//! `scan` command: run the security suite (SP2a: matrix), redact (union of all identity
+//! `scan` command: run the security suite (matrix -> bola), redact (union of all identity
 //! secrets), emit findings (JSON/human), exit 3 on any finding >= high, exit 1 on errors.
 use qa_touchstone_core::config::load_config;
 use qa_touchstone_core::redact::RedactionSet;
 use qa_touchstone_core::security::finding::{EngineError, EngineId, Finding, Severity};
-use qa_touchstone_core::security::runner::run_matrix;
 use serde::Serialize;
 use std::process::ExitCode;
 
@@ -50,19 +49,30 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
     if let Some(eng) = &engine {
         if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
     }
-    // bola/ratelimit are wired in SP2b/SP2c; warn so a requested-but-unimplemented engine
+    // ratelimit is wired in SP2c; warn so a requested-but-unimplemented engine
     // doesn't silently report "0 findings" (which could mask a typo or a missing engine).
-    if matches!(engine.as_deref(), Some("bola") | Some("ratelimit")) {
+    if matches!(engine.as_deref(), Some("ratelimit")) {
         eprintln!("warn: engine `{}` is not yet implemented; no findings reported", engine.as_deref().unwrap());
     }
 
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
 
-    // Run engines (SP2a: matrix only; bola/ratelimit in SP2b/c). --engine filters.
+    // Run engines (suite order: matrix -> bola; ratelimit in SP2c). --engine filters.
     let want = |e: &str| engine.as_deref().map(|x| x == e).unwrap_or(true);
-    let (findings, errors): (Vec<Finding>, Vec<EngineError>) =
-        if want("matrix") { run_matrix(&cfg, env.as_deref()).await } else { (Vec::new(), Vec::new()) };
+    let mut findings: Vec<Finding> = Vec::new();
+    let mut errors: Vec<EngineError> = Vec::new();
+    let mut engines: Vec<EngineSummary> = Vec::new();
+    if want("matrix") {
+        let (f, e) = qa_touchstone_core::security::runner::run_matrix(&cfg, env.as_deref()).await;
+        engines.push(EngineSummary { engine: "matrix".into(), ran: true, findings: f.len(), errors: e.len() });
+        findings.extend(f); errors.extend(e);
+    }
+    if want("bola") {
+        let (f, e) = qa_touchstone_core::security::bola::run_bola(&cfg, env.as_deref()).await;
+        engines.push(EngineSummary { engine: "bola".into(), ran: true, findings: f.len(), errors: e.len() });
+        findings.extend(f); errors.extend(e);
+    }
 
     let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0, errors: errors.len() };
     let rfs: Vec<RFinding> = findings.iter().map(|f| {
@@ -80,8 +90,6 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
         identity: e.identity.clone(),
         message: red.redact_str(&e.message),
     }).collect();
-
-    let engines = vec![EngineSummary { engine: "matrix".into(), ran: want("matrix"), findings: findings.len(), errors: errors.len() }];
 
     let gated = findings.iter().any(|f| f.severity >= Severity::High);
     let ok = !gated && errors.is_empty();
