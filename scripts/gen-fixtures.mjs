@@ -239,6 +239,11 @@ const rlResponses = [
   { name:'all_2xx_no_sig', responses: [ {status:200,headers:{}}, {status:200,headers:{}}, {status:200,headers:{}} ] },
   { name:'429_early',      responses: [ {status:200,headers:{}}, {status:429,headers:{}}, {status:429,headers:{}} ] },
   { name:'429_late_weak',  responses: Array.from({length:30}, (_,i) => i < 25 ? {status:200,headers:{}} : {status:429,headers:{}}) },
+  // strength budget boundary (pins the `<=` in rate_limit_strength): budget = max(20, ceil(completed*0.5)).
+  // 20 successes then a 429 → completed 21, budget 20, allowed 20 == budget → STRONG.
+  { name:'at_budget_strong', responses: Array.from({length:21}, (_,i) => i < 20 ? {status:200,headers:{}} : {status:429,headers:{}}) },
+  // 21 successes then a 429 → completed 22, budget 20, allowed 21 > budget → WEAK (one over).
+  { name:'over_budget_weak', responses: Array.from({length:22}, (_,i) => i < 21 ? {status:200,headers:{}} : {status:429,headers:{}}) },
   { name:'headers_only',   responses: [ {status:200,headers:{'RateLimit-Limit':'100'}}, {status:200,headers:{'RateLimit-Remaining':'0'}} ] },
   { name:'retry_after_2xx',responses: [ {status:200,headers:{'Retry-After':'5'}} ] },
   { name:'net_errors',     responses: [ {status:null,headers:{}}, {status:0,headers:{}} ] },

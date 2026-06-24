@@ -228,6 +228,220 @@
       "strength": "weak"
     },
     {
+      "name": "at_budget_strong",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": true,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 21,
+        "ok2xx": 20,
+        "c429": 1,
+        "saw429": true,
+        "headerHit": false,
+        "throttled": true,
+        "firstThrottledIndex": 20,
+        "allowedBeforeThrottle": 20
+      },
+      "strength": "strong"
+    },
+    {
+      "name": "over_budget_weak",
+      "responses": [
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 200,
+          "headers": {}
+        },
+        {
+          "status": 429,
+          "headers": {}
+        }
+      ],
+      "detect": {
+        "throttled": true,
+        "saw429": true,
+        "headerHit": false
+      },
+      "analyze": {
+        "completed": 22,
+        "ok2xx": 21,
+        "c429": 1,
+        "saw429": true,
+        "headerHit": false,
+        "throttled": true,
+        "firstThrottledIndex": 21,
+        "allowedBeforeThrottle": 21
+      },
+      "strength": "weak"
+    },
+    {
       "name": "headers_only",
       "responses": [
         {
