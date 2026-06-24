@@ -97,18 +97,6 @@ async fn main() -> std::process::ExitCode {
 }
 
 
-/// ExecOptions for an identity: mark its api-key header sensitive so it is stripped
-/// on cross-origin redirects (Authorization/Cookie/x-amz-* are already built in).
-pub(crate) fn exec_opts_for(auth: &qa_touchstone_core::config::Auth) -> ExecOptions {
-    let sensitive_header_names = match auth {
-        qa_touchstone_core::config::Auth::ApiKey {
-            key, location: qa_touchstone_core::config::ApiKeyIn::Header, ..
-        } => vec![key.clone()],
-        _ => vec![],
-    };
-    ExecOptions { sensitive_header_names, ..Default::default() }
-}
-
 async fn run_send(
     config_path: String,
     request_id: String,
@@ -177,7 +165,7 @@ async fn run_send(
     };
 
     // Step 6: execute + measure wall-clock ms
-    let exec_opts = exec_opts_for(&identity.auth);
+    let exec_opts = qa_touchstone_core::buildreq::exec_opts_for(&identity.auth);
 
     // Steps 6-9: execute, adapt, and assert via run_step (no printing/redaction inside).
     let step = qa_touchstone_core::step::run_step(&rd, &req.assertions, exec_opts).await;

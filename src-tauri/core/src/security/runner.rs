@@ -2,28 +2,16 @@
 use crate::buildreq::build_request;
 use crate::config::{Auth, Config, Expectation, Identity, Request};
 use crate::engine::{qa_var_map, RealDynamics};
-use crate::executor::ExecOptions;
 use crate::security::authz::{classify_response_outcome, default_expectation, endpoint_privileged, verdict_for, Verdict};
 use crate::security::finding::{EngineError, EngineId, Finding, Severity};
 use crate::step::{run_step, StepResult};
-
-fn exec_opts_for(auth: &Auth) -> ExecOptions {
-    // Bearer/Basic `Authorization` + `Cookie` are covered by the executor's built-in
-    // sensitive-header list; here we additionally mark a custom api-key-in-header so it is
-    // stripped on cross-origin redirects.
-    let sensitive_header_names = match auth {
-        Auth::ApiKey { key, location: crate::config::ApiKeyIn::Header, .. } => vec![key.clone()],
-        _ => vec![],
-    };
-    ExecOptions { sensitive_header_names, ..Default::default() }
-}
 
 /// Run one (request, identity): build with that identity's auth, execute, NO assertions.
 pub async fn run_security_step(cfg: &Config, req: &Request, identity: &Identity, env: Option<&str>) -> StepResult {
     let scoped = cfg.scoped_vars();
     let map = qa_var_map(&scoped, env, None, None);
     match build_request(req, identity, &map, &mut RealDynamics) {
-        Ok(rd) => run_step(&rd, &[], exec_opts_for(&identity.auth)).await,
+        Ok(rd) => run_step(&rd, &[], crate::buildreq::exec_opts_for(&identity.auth)).await,
         Err(e) => StepResult { success: false, status: 0, ms: 0, final_url: String::new(),
             error: Some(e), headers: serde_json::Value::Null, body: serde_json::Value::Null, results: vec![] },
     }

@@ -3,6 +3,7 @@
 //! `executor::execute_request` consumes. SP0b: absolute URLs only; auth = none/bearer/apiKey/basic.
 use crate::config::{Auth, ApiKeyIn, BodyMode, Identity, Request};
 use crate::engine::{qa_substitute, Dynamics};
+use crate::executor::ExecOptions;
 use percent_encoding::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -12,6 +13,16 @@ const ENCODE_URI_COMPONENT: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'-').remove(b'_').remove(b'.').remove(b'!').remove(b'~')
     .remove(b'*').remove(b'\'').remove(b'(').remove(b')');
 pub fn enc(s: &str) -> String { utf8_percent_encode(s, ENCODE_URI_COMPONENT).to_string() }
+
+/// ExecOptions for an identity's auth: mark a custom api-key-in-header sensitive so it is
+/// stripped on cross-origin redirects (Authorization/Cookie/x-amz-* are built into the executor).
+pub fn exec_opts_for(auth: &crate::config::Auth) -> ExecOptions {
+    let sensitive_header_names = match auth {
+        crate::config::Auth::ApiKey { key, location: crate::config::ApiKeyIn::Header, .. } => vec![key.clone()],
+        _ => vec![],
+    };
+    ExecOptions { sensitive_header_names, ..Default::default() }
+}
 
 /// The `Authorization: Basic ...` header VALUE for the given credentials.
 /// Shared between `apply_auth` (which sets the header) and the CLI redaction

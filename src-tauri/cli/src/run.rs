@@ -91,7 +91,7 @@ pub async fn run_collection(
                     final_url: None, error: Some(red.redact_str(&e)), assertions: vec![],
                 }),
                 Ok(rd) => {
-                    let step = run_step(&rd, &req.assertions, crate::exec_opts_for(&identity.auth)).await;
+                    let step = run_step(&rd, &req.assertions, qa_touchstone_core::buildreq::exec_opts_for(&identity.auth)).await;
                     if !step.success {
                         results.push(ResultRow {
                             iter, request: req_id.clone(), status: step.status, ms: step.ms,
