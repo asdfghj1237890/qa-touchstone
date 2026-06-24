@@ -3,8 +3,8 @@ use crate::buildreq::build_request;
 use crate::config::{Auth, Config, Expectation, Identity, Request};
 use crate::engine::{qa_var_map, RealDynamics};
 use crate::executor::ExecOptions;
-use crate::security::authz::{classify_response_outcome, default_expectation, endpoint_privileged, verdict_for, Outcome, Verdict};
-use crate::security::finding::{EngineId, Finding, Severity};
+use crate::security::authz::{classify_response_outcome, default_expectation, endpoint_privileged, verdict_for, Verdict};
+use crate::security::finding::{EngineError, EngineId, Finding, Severity};
 use crate::step::{run_step, StepResult};
 
 fn exec_opts_for(auth: &Auth) -> ExecOptions {
@@ -31,23 +31,37 @@ pub async fn run_security_step(cfg: &Config, req: &Request, identity: &Identity,
 
 /// run_matrix: each endpoint × identity → verdict; a Vuln cell → a Finding.
 /// Mirrors authz.ts runMatrix (skip Expectation::Skip; fill missing cells with defaults).
-pub async fn run_matrix(cfg: &Config, env: Option<&str>) -> Vec<Finding> {
-    let sec = match cfg.security.as_ref().and_then(|s| s.matrix.as_ref()) { Some(m) => m, None => return vec![] };
+/// Returns `(findings, errors)`: errors are per-cell build/exec failures (not vulnerabilities).
+pub async fn run_matrix(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<EngineError>) {
+    let sec = match cfg.security.as_ref().and_then(|s| s.matrix.as_ref()) { Some(m) => m, None => return (vec![], vec![]) };
     // Trust the config layer: MatrixConfig.deny_set defaults to [401,403,404] when absent, and an
     // explicit `denySet:[]` (user says no status is a hard-deny) is honored as-is.
     let deny_set = sec.deny_set.as_slice();
     let endpoint_ids: Vec<&String> = if sec.endpoints.is_empty() { cfg.requests.iter().map(|r| &r.id).collect() } else { sec.endpoints.iter().collect() };
     let mut findings = Vec::new();
+    let mut errors: Vec<EngineError> = Vec::new();
     for eid in endpoint_ids {
         let req = match cfg.requests.iter().find(|r| &r.id == eid) { Some(r) => r, None => continue };
-        let ep_priv = endpoint_privileged(req.privileged, &req.method, &req.url);
+        // classify on the URL PATH only — a host like `admin.example.com` must NOT mark the endpoint privileged.
+        let path = reqwest::Url::parse(&req.url).map(|u| u.path().to_string()).unwrap_or_else(|_| req.url.clone());
+        let ep_priv = endpoint_privileged(req.privileged, &req.method, &path);
         for identity in &cfg.identities {
             let auth_none = matches!(identity.auth, Auth::None);
             let expectation = sec.expect.get(eid).and_then(|row| row.get(&identity.id)).copied()
                 .unwrap_or_else(|| default_expectation(auth_none, identity.privileged, ep_priv));
             if expectation == Expectation::Skip { continue; } // skip: no run (avoid a wasted HTTP call)
             let step = run_security_step(cfg, req, identity, env).await;
-            let outcome = if step.success { classify_response_outcome(Some(step.status), &step.body, deny_set) } else { Outcome::Other };
+            if !step.success {
+                errors.push(EngineError {
+                    engine: EngineId::Matrix,
+                    endpoint: Some(eid.clone()),
+                    identity: Some(identity.id.clone()),
+                    // method+eid only here; step.error may carry the resolved URL → redacted at scan output.
+                    message: format!("{} {}: {}", req.method.to_uppercase(), eid, step.error.as_deref().unwrap_or("request failed")),
+                });
+                continue;
+            }
+            let outcome = classify_response_outcome(Some(step.status), &step.body, deny_set);
             if let Some(Verdict::Vuln) = verdict_for(expectation, outcome) {
                 let method = req.method.to_uppercase();
                 // SP2 definition: write method → Critical, read → High (both ≥ High → gate).
@@ -62,5 +76,5 @@ pub async fn run_matrix(cfg: &Config, env: Option<&str>) -> Vec<Finding> {
             }
         }
     }
-    findings
+    (findings, errors)
 }

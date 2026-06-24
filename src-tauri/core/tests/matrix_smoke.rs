@@ -12,7 +12,7 @@ async fn matrix_flags_deny_bypass() {
       "requests":[{{"id":"sec","method":"GET","url":"{base}/secret"}}],
       "security":{{"matrix":{{"endpoints":["sec"]}}}} }}"#, base=server.uri());
     let c = load_config(&cfg, &|_| None).unwrap();
-    let findings = run_matrix(&c, None).await;
+    let (findings, _errors) = run_matrix(&c, None).await;
     assert_eq!(findings.len(), 1, "anon defaults to deny; 200 → vuln");
     assert_eq!(findings[0].rule_id, "matrix.deny-bypass");
     assert_eq!(findings[0].severity, qa_touchstone_core::security::finding::Severity::High);
@@ -27,7 +27,8 @@ async fn matrix_soft_deny_is_pass() {
       "requests":[{{"id":"sec","method":"GET","url":"{base}/secret"}}],
       "security":{{"matrix":{{"endpoints":["sec"]}}}} }}"#, base=server.uri());
     let c = load_config(&cfg, &|_| None).unwrap();
-    assert!(run_matrix(&c, None).await.is_empty(), "soft-deny 200 → denied → pass (no finding)");
+    let (findings, _errors) = run_matrix(&c, None).await;
+    assert!(findings.is_empty(), "soft-deny 200 → denied → pass (no finding)");
 }
 
 #[tokio::test]
@@ -39,5 +40,19 @@ async fn matrix_hard_deny_is_pass() {
       "requests":[{{"id":"sec","method":"GET","url":"{base}/secret"}}],
       "security":{{"matrix":{{"endpoints":["sec"]}}}} }}"#, base=server.uri());
     let c = load_config(&cfg, &|_| None).unwrap();
-    assert!(run_matrix(&c, None).await.is_empty(), "403 default-deny-set → denied → pass");
+    let (findings, _errors) = run_matrix(&c, None).await;
+    assert!(findings.is_empty(), "403 default-deny-set → denied → pass");
+}
+
+#[tokio::test]
+async fn matrix_request_error_is_tracked() {
+    // Unreachable endpoint → the cell is an ERROR, not a finding.
+    let cfg = r#"{ "version":1,"environments":[],
+      "identities":[{"id":"anon","auth":{"type":"none"}}],
+      "requests":[{"id":"down","method":"GET","url":"http://127.0.0.1:1/x"}],
+      "security":{"matrix":{"endpoints":["down"]}} }"#;
+    let c = qa_touchstone_core::config::load_config(cfg, &|_| None).unwrap();
+    let (findings, errors) = run_matrix(&c, None).await;
+    assert!(findings.is_empty(), "a failed request is not a vuln");
+    assert_eq!(errors.len(), 1, "the failed request is tracked as an error");
 }

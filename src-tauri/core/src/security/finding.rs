@@ -25,6 +25,18 @@ pub struct Finding {
     #[serde(skip_serializing_if = "Option::is_none")] pub identity: Option<String>,
 }
 
+/// A per-cell build/exec failure tracked by an engine — not a vulnerability finding.
+/// Emitted when a request could not be constructed or executed (DNS failure, bad URL,
+/// connection refused, etc.) so callers can distinguish "scan ran clean" from "scan
+/// couldn't run at all".
+#[derive(Debug, Clone, Serialize)]
+pub struct EngineError {
+    pub engine: EngineId,
+    #[serde(skip_serializing_if = "Option::is_none")] pub endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub identity: Option<String>,
+    pub message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

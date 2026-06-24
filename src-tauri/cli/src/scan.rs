@@ -1,16 +1,18 @@
 //! `scan` command: run the security suite (SP2a: matrix), redact (union of all identity
-//! secrets), emit findings (JSON/human), exit 3 on any finding >= high.
+//! secrets), emit findings (JSON/human), exit 3 on any finding >= high, exit 1 on errors.
 use qa_touchstone_core::config::load_config;
 use qa_touchstone_core::redact::RedactionSet;
-use qa_touchstone_core::security::finding::{EngineId, Finding, Severity};
+use qa_touchstone_core::security::finding::{EngineError, EngineId, Finding, Severity};
 use qa_touchstone_core::security::runner::run_matrix;
 use serde::Serialize;
 use std::process::ExitCode;
 
 #[derive(Serialize)]
-struct ScanReport { findings: Vec<RFinding>, totals: Totals, ok: bool }
+struct ScanReport { engines: Vec<EngineSummary>, findings: Vec<RFinding>, errors: Vec<RError>, totals: Totals, ok: bool }
 #[derive(Serialize)]
-struct Totals { critical: usize, high: usize, medium: usize, low: usize, info: usize }
+struct EngineSummary { engine: String, ran: bool, findings: usize, errors: usize }
+#[derive(Serialize)]
+struct Totals { critical: usize, high: usize, medium: usize, low: usize, info: usize, errors: usize }
 #[derive(Serialize)]
 struct RFinding {
     engine: String, severity: String, rule_id: String, oracle: String,
@@ -18,6 +20,13 @@ struct RFinding {
     #[serde(skip_serializing_if = "Option::is_none")] method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] endpoint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")] identity: Option<String>,
+}
+#[derive(Serialize)]
+struct RError {
+    engine: String,
+    #[serde(skip_serializing_if = "Option::is_none")] endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] identity: Option<String>,
+    message: String,
 }
 
 fn sev_str(s: Severity) -> &'static str {
@@ -52,10 +61,10 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
 
     // Run engines (SP2a: matrix only; bola/ratelimit in SP2b/c). --engine filters.
     let want = |e: &str| engine.as_deref().map(|x| x == e).unwrap_or(true);
-    let mut findings: Vec<Finding> = Vec::new();
-    if want("matrix") { findings.extend(run_matrix(&cfg, env.as_deref()).await); }
+    let (findings, errors): (Vec<Finding>, Vec<EngineError>) =
+        if want("matrix") { run_matrix(&cfg, env.as_deref()).await } else { (Vec::new(), Vec::new()) };
 
-    let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0 };
+    let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0, errors: errors.len() };
     let rfs: Vec<RFinding> = findings.iter().map(|f| {
         match f.severity { Severity::Critical=>totals.critical+=1, Severity::High=>totals.high+=1, Severity::Medium=>totals.medium+=1, Severity::Low=>totals.low+=1, Severity::Info=>totals.info+=1 }
         RFinding {
@@ -64,8 +73,19 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
             method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
         }
     }).collect();
+
+    let rerrors: Vec<RError> = errors.iter().map(|e| RError {
+        engine: engine_str(e.engine).into(),
+        endpoint: e.endpoint.clone(),
+        identity: e.identity.clone(),
+        message: red.redact_str(&e.message),
+    }).collect();
+
+    let engines = vec![EngineSummary { engine: "matrix".into(), ran: want("matrix"), findings: findings.len(), errors: errors.len() }];
+
     let gated = findings.iter().any(|f| f.severity >= Severity::High);
-    let report = ScanReport { findings: rfs, ok: !gated, totals };
+    let ok = !gated && errors.is_empty();
+    let report = ScanReport { engines, findings: rfs, errors: rerrors, totals, ok };
 
     if let Some(path) = out {
         if let Err(e) = std::fs::write(&path, serde_json::to_string_pretty(&report).unwrap()) {
@@ -74,8 +94,9 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
     }
     if use_json { println!("{}", serde_json::to_string(&report).unwrap()); }
     else {
-        println!("security scan: {} finding(s) — {}C {}H {}M {}L {}I", report.findings.len(), report.totals.critical, report.totals.high, report.totals.medium, report.totals.low, report.totals.info);
+        println!("security scan: {} finding(s), {}E — {}C {}H {}M {}L {}I", report.findings.len(), report.totals.errors, report.totals.critical, report.totals.high, report.totals.medium, report.totals.low, report.totals.info);
         for f in &report.findings { println!("  [{}] {}  {}  — {}", f.severity, f.engine, f.path, f.evidence); }
+        for e in &report.errors { println!("  ERROR {} {} — {}", e.engine, e.endpoint.as_deref().unwrap_or("?"), e.message); }
     }
-    if gated { ExitCode::from(3) } else { ExitCode::SUCCESS }
+    if gated { ExitCode::from(3) } else if !errors.is_empty() { ExitCode::from(1) } else { ExitCode::SUCCESS }
 }

@@ -57,6 +57,19 @@ async fn scan_redacts_identity_secret() {
 }
 
 #[tokio::test]
+async fn scan_request_error_exits_1() {
+    // No findings, but a request couldn't execute → exit 1 (scan incomplete), NOT exit 0.
+    let cfg = write_temp("err.json", r#"{ "version":1,"environments":[],
+      "identities":[{"id":"anon","auth":{"type":"none"}}],
+      "requests":[{"id":"down","method":"GET","url":"http://127.0.0.1:1/x"}],
+      "security":{"matrix":{"endpoints":["down"]}} }"#);
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1), "a non-run must not report clean (exit 0)");
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("\"errors\""), "engines/errors surfaced in JSON");
+}
+
+#[tokio::test]
 async fn scan_out_file_written_and_redacted() {
     // --out writes the same redacted report to a file.
     let server = MockServer::start().await;
