@@ -57,6 +57,57 @@
       "owner": "",
       "idv": "ownerX",
       "expected": true
+    },
+    {
+      "name": "jaccard_3of5_miss",
+      "attack": {
+        "a": "1",
+        "b": "2",
+        "c": "3",
+        "d": "X",
+        "e": "Y"
+      },
+      "owner": {
+        "a": "1",
+        "b": "2",
+        "c": "3",
+        "f": "9",
+        "g": "8"
+      },
+      "idv": "no",
+      "expected": false
+    },
+    {
+      "name": "jaccard_2of4_miss",
+      "attack": {
+        "a": "x",
+        "b": "y",
+        "c": "A",
+        "d": "B"
+      },
+      "owner": {
+        "a": "x",
+        "b": "y",
+        "e": "C",
+        "f": "D"
+      },
+      "idv": "no",
+      "expected": false
+    },
+    {
+      "name": "jaccard_same_values_diff_keys",
+      "attack": {
+        "p": "x",
+        "q": "y",
+        "r": "z"
+      },
+      "owner": {
+        "a": "x",
+        "b": "y",
+        "c": "z"
+      },
+      "idv": "no",
+      "expected": true
     }
   ],
   "classify": [
@@ -145,6 +196,33 @@
       },
       "owner": {
         "id": "realA"
+      },
+      "idv": "realA",
+      "synth": "999999999",
+      "expected": false
+    },
+    {
+      "name": "structural_mismatch",
+      "control": {
+        "id": "realA",
+        "extra": "x"
+      },
+      "owner": {
+        "id": "realA"
+      },
+      "idv": "realA",
+      "synth": "999999999",
+      "expected": false
+    },
+    {
+      "name": "synth_in_leaves",
+      "control": {
+        "id": "realA",
+        "other": "999999999"
+      },
+      "owner": {
+        "id": "realA",
+        "other": "z"
       },
       "idv": "realA",
       "synth": "999999999",

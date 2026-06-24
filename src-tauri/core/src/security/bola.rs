@@ -154,19 +154,23 @@ pub fn synthetic_id_for(sample_value: &Value) -> String {
 
 // ── id mutation on the CLI config Request (NOT TS-fixtured — a documented adaptation) ──
 fn set_at_path(obj: &mut Value, path: &str, value: Value) -> bool {
-    let norm = array_index_re_dot(); // [n] -> .n
-    let dotted = norm.replace_all(path, ".$1");
+    let dotted = array_index_re_dot().replace_all(path, ".$1");
     let keys: Vec<&str> = dotted.split('.').filter(|s| !s.is_empty()).collect();
     if keys.is_empty() { return false; }
     let mut cur = obj;
     for k in &keys[..keys.len() - 1] {
-        match cur {
-            Value::Object(m) if m.contains_key(*k) => cur = m.get_mut(*k).unwrap(),
+        cur = match cur {
+            Value::Object(m) if m.contains_key(*k) => m.get_mut(*k).unwrap(),
+            Value::Array(a) => match k.parse::<usize>() { Ok(i) if i < a.len() => &mut a[i], _ => return false },
             _ => return false,
-        }
+        };
     }
     let last = keys[keys.len() - 1];
-    match cur { Value::Object(m) if m.contains_key(last) => { m.insert(last.to_string(), value); true } _ => false }
+    match cur {
+        Value::Object(m) if m.contains_key(last) => { m.insert(last.to_string(), value); true }
+        Value::Array(a) => match last.parse::<usize>() { Ok(i) if i < a.len() => { a[i] = value; true } _ => false },
+        _ => false,
+    }
 }
 fn array_index_re_dot() -> &'static Regex { static R: OnceLock<Regex> = OnceLock::new(); R.get_or_init(|| Regex::new(r"\[(\d+)\]").unwrap()) }
 
@@ -238,6 +242,9 @@ mod tests {
         assert_eq!(r.query[0].value, "7");
         // body dot-path preserves number type
         let r = apply_id_location(&mk("https://x/o", vec![], Some(r#"{"order":{"id":1}}"#)), &IdLocation::Body{path:"order.id".into()}, &json!(9)).unwrap();
+        assert!(r.body.unwrap().content.contains("\"id\":9"));
+        // body dot-path through an array parent (matches TS setAtPath's `in` semantics)
+        let r = apply_id_location(&mk("https://x/o", vec![], Some(r#"{"items":[{"id":1}]}"#)), &IdLocation::Body{path:"items[0].id".into()}, &json!(9)).unwrap();
         assert!(r.body.unwrap().content.contains("\"id\":9"));
     }
 }

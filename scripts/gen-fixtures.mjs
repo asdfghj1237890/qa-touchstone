@@ -203,6 +203,12 @@ const matchCases = [
   { name:'jaccard_hit', attack:{a:'x',b:'y',c:'z'}, owner:{a:'x',b:'y',c:'z'}, idv:'no' },
   { name:'jaccard_miss', attack:{a:'x'}, owner:{a:'x',b:'y',c:'z'}, idv:'no' },
   { name:'string_body_contains', attack:'...ownerX...', owner:'', idv:'ownerX' },
+  // Jaccard boundary: 3-of-5 shared (inter=3, union=7 → 3/7 ≈ 0.43 < 0.6 → false)
+  { name:'jaccard_3of5_miss', attack:{a:'1',b:'2',c:'3',d:'X',e:'Y'}, owner:{a:'1',b:'2',c:'3',f:'9',g:'8'}, idv:'no' },
+  // 2-of-4 shared (inter=2, union=4 → 0.5 < 0.6 → false)
+  { name:'jaccard_2of4_miss', attack:{a:'x',b:'y',c:'A',d:'B'}, owner:{a:'x',b:'y',e:'C',f:'D'}, idv:'no' },
+  // 3-of-3 perfect overlap between different-keyed objects sharing all same scalar values
+  { name:'jaccard_same_values_diff_keys', attack:{p:'x',q:'y',r:'z'}, owner:{a:'x',b:'y',c:'z'}, idv:'no' },
 ].map(c => ({ ...c, expected: mO({ body:c.attack }, { body:c.owner }, c.idv) }));
 const classifyCases = [];
 for (const [st, m] of [[403,false],[404,true],[200,true],[200,false],[500,false],[null,false]])
@@ -211,6 +217,10 @@ const ncfCases = [[403,true],[200,true],[200,false],[500,true]].map(([st,m]) => 
 const controlCases = [
   { name:'ignored', control:{id:'realA',n:1}, owner:{id:'realA',n:1}, idv:'realA', synth:'999999999' },
   { name:'object_scoped', control:{id:'999999999'}, owner:{id:'realA'}, idv:'realA', synth:'999999999' },
+  // structural_mismatch: control shape differs from owner → expect false
+  { name:'structural_mismatch', control:{id:'realA',extra:'x'}, owner:{id:'realA'}, idv:'realA', synth:'999999999' },
+  // synth_in_leaves: synthetic id present in control leaves → expect false
+  { name:'synth_in_leaves', control:{id:'realA',other:'999999999'}, owner:{id:'realA',other:'z'}, idv:'realA', synth:'999999999' },
 ].map(c => ({ ...c, expected: cSI({ body:c.control }, { body:c.owner }, c.idv, c.synth) }));
 const idKeyCases = ['id','userId','owner_id','user-id','uuid','page','name','accountId'].map(k => ({ name:k, key:k, expected: iIK(k) }));
 const synthCases = [

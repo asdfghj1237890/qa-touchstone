@@ -569,4 +569,15 @@ mod tests {
           "security":{"bola":{"tests":[{"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{"ghost":"x"}}]}} }"#;
         assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
     }
+
+    #[test]
+    fn bola_rejects_duplicate_test_id() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"bola":{"tests":[
+            {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}},
+            {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}}
+          ]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+    }
 }
