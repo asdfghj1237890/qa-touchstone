@@ -83,3 +83,21 @@ async fn bola_templated_url_resolves() {
     assert!(errors.is_empty(), "templated url must resolve, not error: {errors:?}");
     assert_eq!(findings.len(), 2, "cross-object confirmed on a templated-URL config");
 }
+
+#[tokio::test]
+async fn bola_error_message_masks_idvalue() {
+    // A BOLA attack to an unreachable host produces an EngineError whose message carries the
+    // resolved URL (idValue in the path). The idValue must be MASKED — it may be PII and is NOT
+    // in scan's auth-secret redaction set.
+    let cfg = r#"{ "version":1,"environments":[],
+      "identities":[{"id":"alice","auth":{"type":"none"}},{"id":"bob","auth":{"type":"none"}}],
+      "requests":[{"id":"getOrder","method":"GET","url":"http://127.0.0.1:1/orders/PLACEHOLDER"}],
+      "security":{"bola":{"tests":[{"id":"t1","request":"getOrder","idLocation":{"kind":"path","index":1},
+        "idValues":{"alice":"ordAAA","bob":"ordBBB"}}]}} }"#;
+    let c = load_config(cfg, &|_| None).unwrap();
+    let (_findings, errors) = run_bola(&c, None).await;
+    assert!(!errors.is_empty(), "unreachable host → errors");
+    for e in &errors {
+        assert!(!e.message.contains("ordAAA") && !e.message.contains("ordBBB"), "idValue leaked in error message: {}", e.message);
+    }
+}

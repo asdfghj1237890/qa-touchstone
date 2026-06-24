@@ -220,6 +220,18 @@ fn idval_nonempty(v: &Value) -> bool {
     match v { Value::Null => false, Value::String(s) => !s.is_empty(), _ => true }
 }
 
+/// Mask every (non-empty) idValue of `test` in an error message. BOLA errors can carry the
+/// resolved URL (with the id) from the executor's error string; idValues may be PII, so they
+/// must never reach output — masked here at construction (the scan union set holds only auth secrets).
+fn mask_idvals(msg: &str, test: &crate::config::BolaTest) -> String {
+    let mut out = msg.to_string();
+    for v in test.id_values.values() {
+        let s = js_string(v);
+        if !s.is_empty() { out = out.replace(&s, "(id redacted)"); }
+    }
+    out
+}
+
 /// Build the mutated+resolved prepared request for one (test, identity, id_value).
 /// Substitutes {{vars}} in the URL FIRST so apply_id_location's Path branch can parse an
 /// otherwise-templated URL; applies the id at idLocation; then build_request (auth + final shape).
@@ -251,7 +263,7 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
             eprintln!("warn: bola test `{}` skipped: needs >= 2 identities with non-empty idValues", test.id);
             continue;
         }
-        let err = |idy: String, msg: String| EngineError { engine: EngineId::Bola, endpoint: Some(test.id.clone()), identity: Some(idy), message: msg };
+        let err = |idy: String, msg: String| EngineError { engine: EngineId::Bola, endpoint: Some(test.id.clone()), identity: Some(idy), message: mask_idvals(&msg, test) };
 
         // Reference phase — each owner runs its OWN id.
         let mut reference: BTreeMap<&str, StepResult> = BTreeMap::new();
