@@ -163,6 +163,10 @@ pub async fn run_burst(req: &Request, identity: &Identity, n: i64, concurrency: 
     while let Some(joined) = set.join_next().await {
         if let Ok(pairs) = joined { for (i, cell) in pairs { slots[i] = Some(cell); } }
     }
+    // The worker pool collectively claims every index 0..n exactly once, so all slots are filled.
+    // In debug/test builds this catches a worker that panicked (a real bug); release stays fail-safe
+    // (flatten() would merely undercount a missing slot, never false-clean).
+    debug_assert!(slots.iter().all(Option::is_some), "run_burst: a launch index was left unfilled");
     slots.into_iter().flatten().collect()
 }
 
