@@ -131,10 +131,33 @@ pub struct MatrixConfig {
 }
 fn default_deny_set() -> Vec<i64> { vec![401, 403, 404] }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
+pub enum IdLocation {
+    Path { index: usize },
+    Query { key: String },
+    Body { path: String },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BolaTest {
+    pub id: String,
+    pub request: String,
+    #[serde(rename = "idLocation")] pub id_location: IdLocation,
+    #[serde(default, rename = "idValues")] pub id_values: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default, rename = "negativeControl")] pub negative_control: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BolaConfig { #[serde(default)] pub tests: Vec<BolaTest> }
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default)] pub matrix: Option<MatrixConfig>,
+    #[serde(default)] pub bola: Option<BolaConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -239,8 +262,8 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
         }
     }
     if let Some(sec) = &cfg.security {
+        let id_ids: std::collections::HashSet<&str> = cfg.identities.iter().map(|i| i.id.as_str()).collect();
         if let Some(m) = &sec.matrix {
-            let id_ids: std::collections::HashSet<&str> = cfg.identities.iter().map(|i| i.id.as_str()).collect();
             for e in &m.endpoints {
                 if !req_ids.contains(e.as_str()) { return Err(format!("security.matrix endpoint references unknown request `{e}`")); }
             }
@@ -248,6 +271,19 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                 if !req_ids.contains(rid.as_str()) { return Err(format!("security.matrix.expect references unknown request `{rid}`")); }
                 for idid in row.keys() {
                     if !id_ids.contains(idid.as_str()) { return Err(format!("security.matrix.expect references unknown identity `{idid}`")); }
+                }
+            }
+        }
+        if let Some(b) = &sec.bola {
+            let mut seen = std::collections::HashSet::new();
+            for t in &b.tests {
+                if !seen.insert(t.id.clone()) { return Err(format!("duplicate bola test `{}`", t.id)); }
+                if !req_ids.contains(t.request.as_str()) { return Err(format!("bola test `{}` references unknown request `{}`", t.id, t.request)); }
+                for (idid, v) in &t.id_values {
+                    if !id_ids.contains(idid.as_str()) { return Err(format!("bola test `{}` idValues references unknown identity `{}`", t.id, idid)); }
+                    if !(v.is_string() || v.is_number() || v.is_boolean()) {
+                        return Err(format!("bola test `{}` idValue for `{}` must be a string/number/bool", t.id, idid));
+                    }
                 }
             }
         }
@@ -487,6 +523,50 @@ mod tests {
         let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
           "requests":[{"id":"r","method":"GET","url":"https://x"}],
           "security":{"matrix":{"endpoints":["r"],"expect":{"r":{"ghost":"deny"}}}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
+    }
+
+    const WITH_BOLA: &str = r#"{
+      "version":1,"environments":[],
+      "identities":[{"id":"alice","auth":{"type":"none"}},{"id":"bob","auth":{"type":"none"}}],
+      "requests":[{"id":"getOrder","method":"GET","url":"https://x/orders/1"}],
+      "security":{"bola":{"tests":[
+        {"id":"t1","request":"getOrder","idLocation":{"kind":"path","index":1},
+         "idValues":{"alice":"ordA","bob":2},"negativeControl":true}
+      ]}}
+    }"#;
+
+    #[test]
+    fn parses_bola_config() {
+        let c = load_config(WITH_BOLA, &|_| None).unwrap();
+        let t = &c.security.unwrap().bola.unwrap().tests[0];
+        assert_eq!(t.id, "t1"); assert_eq!(t.request, "getOrder");
+        assert!(t.negative_control);
+        assert_eq!(t.id_values["alice"], serde_json::json!("ordA"));
+        assert_eq!(t.id_values["bob"], serde_json::json!(2)); // numeric id preserved
+        match &t.id_location { IdLocation::Path { index } => assert_eq!(*index, 1), _ => panic!() }
+    }
+
+    #[test]
+    fn bola_rejects_unknown_request() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[],"security":{"bola":{"tests":[{"id":"t","request":"ghost","idLocation":{"kind":"query","key":"id"},"idValues":{}}]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
+    }
+
+    #[test]
+    fn bola_rejects_non_scalar_idvalue() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"bola":{"tests":[{"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{"a":[1,2]}}]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("idvalue"));
+    }
+
+    #[test]
+    fn bola_rejects_unknown_idvalue_identity() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"bola":{"tests":[{"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{"ghost":"x"}}]}} }"#;
         assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
     }
 }
