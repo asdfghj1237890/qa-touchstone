@@ -107,6 +107,141 @@ pub fn rate_limit_severity(sensitivity: Option<&str>, verdict: RateLimitVerdict)
     Some(if sensitivity == Some("sensitive") { Severity::High } else { Severity::Low })
 }
 
+use crate::config::{Auth, Config, Identity, Request};
+use crate::engine::{qa_var_map, RealDynamics};
+use crate::buildreq::{build_request, exec_opts_for};
+use crate::step::{run_step, StepResult};
+use crate::security::finding::{EngineError, EngineId, Finding};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// clampInt parity (ratelimit.ts:105-109): missing → lo; otherwise clamp into [lo, hi].
+fn clamp_int(v: Option<i64>, lo: i64, hi: i64) -> i64 { v.unwrap_or(lo).max(lo).min(hi) }
+
+fn cell_from_step(step: StepResult) -> BurstResponse {
+    if step.success {
+        // A 0/non-positive status is the transport-error sentinel → null (bucketed as net). (ratelimit.ts:140)
+        BurstResponse { status: if step.status > 0 { Some(step.status) } else { None }, headers: step.headers, time_ms: step.ms, error: None }
+    } else {
+        BurstResponse { status: None, headers: Value::Null, time_ms: 0, error: step.error }
+    }
+}
+
+/// Fire `n` (clamp 1..=200) requests at `concurrency` (clamp 1..=10) in flight via a tokio
+/// JoinSet worker-pool (mirrors the TS Array.from({length:min(c,n)}, worker) pattern). Each
+/// response is collected at its LAUNCH index `i` (NOT completion order) so allowed_before_throttle
+/// analyzes in launch order. Never panics out of the burst; build/transport failures become net cells.
+pub async fn run_burst(req: &Request, identity: &Identity, n: i64, concurrency: i64, var_map: &BTreeMap<String, String>) -> Vec<BurstResponse> {
+    let n = clamp_int(Some(n), 1, MAX_N);
+    let c = clamp_int(Some(concurrency), 1, MAX_CONCURRENCY);
+    let counter = Arc::new(AtomicUsize::new(0));
+    let mut set = tokio::task::JoinSet::new();
+    let workers = c.min(n) as usize;
+    for _ in 0..workers {
+        let req = req.clone();
+        let identity = identity.clone();
+        let var_map = var_map.clone();
+        let counter = counter.clone();
+        let n_usize = n as usize;
+        set.spawn(async move {
+            let mut out: Vec<(usize, BurstResponse)> = Vec::new();
+            loop {
+                let i = counter.fetch_add(1, Ordering::Relaxed);
+                if i >= n_usize { break; }
+                let mut dyn_ = RealDynamics;
+                let cell = match build_request(&req, &identity, &var_map, &mut dyn_) {
+                    Ok(rd) => cell_from_step(run_step(&rd, &[], exec_opts_for(&identity.auth)).await),
+                    Err(e) => BurstResponse { status: None, headers: Value::Null, time_ms: 0, error: Some(e) },
+                };
+                out.push((i, cell));
+            }
+            out
+        });
+    }
+    let mut slots: Vec<Option<BurstResponse>> = (0..n as usize).map(|_| None).collect();
+    while let Some(joined) = set.join_next().await {
+        if let Ok(pairs) = joined { for (i, cell) in pairs { slots[i] = Some(cell); } }
+    }
+    slots.into_iter().flatten().collect()
+}
+
+/// Build a Finding from a completed burst (rlFindingFor, ratelimit.ts:192-220). None when the
+/// endpoint is strongly protected or nothing landed. idValue masking is N/A (no idValues here).
+fn rl_finding_for(test: &crate::config::RateLimitTest, req: &Request, idy: &str, responses: &[BurstResponse]) -> Option<Finding> {
+    let a = analyze_throttle(responses);
+    if a.completed == 0 { return None; } // inconclusive — nothing actually landed
+    let sent = responses.len();
+    let method = req.method.to_uppercase();
+    let path = format!("{method} {}", test.request);
+    let sensitive = test.sensitivity.as_deref() == Some("sensitive");
+    match rate_limit_strength(&a) {
+        Strength::None => {
+            let severity = rate_limit_severity(test.sensitivity.as_deref(), RateLimitVerdict::Vuln)?;
+            Some(Finding {
+                engine: EngineId::RateLimit, severity, rule_id: "ratelimit.none".into(), oracle: "rate-limit".into(),
+                title: "No rate limiting detected".into(), path,
+                evidence: format!("{sent} requests, no 429/rate-limit headers"),
+                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(idy.to_string()),
+            })
+        }
+        Strength::Weak => {
+            let severity = if sensitive { Severity::Medium } else { Severity::Low };
+            let evidence = if a.saw429 {
+                format!("{} of {} requests succeeded before the first 429 — throttling engages late", a.allowed_before_throttle, sent)
+            } else {
+                format!("rate-limit headers present but no 429 enforced across {sent} requests")
+            };
+            Some(Finding {
+                engine: EngineId::RateLimit, severity, rule_id: "ratelimit.weak".into(), oracle: "rate-limit".into(),
+                title: "Weak rate limiting".into(), path, evidence,
+                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(idy.to_string()),
+            })
+        }
+        Strength::Strong => None,
+    }
+}
+
+/// Run rate-limit tests. Each test fires one burst at its request as its identity (or anon).
+/// Returns (findings, errors). A burst that completes 0 requests → EngineError (no-false-clean).
+pub async fn run_ratelimit(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<EngineError>) {
+    let rcfg = match cfg.security.as_ref().and_then(|s| s.rate_limit.as_ref()) { Some(r) => r, None => return (vec![], vec![]) };
+    let scoped = cfg.scoped_vars();
+    let var_map = qa_var_map(&scoped, env, None, None);
+    let anon = Identity { id: "(none)".into(), auth: Auth::None, privileged: false };
+    let mut findings = Vec::new();
+    let mut errors: Vec<EngineError> = Vec::new();
+
+    for test in &rcfg.tests {
+        let req = match cfg.requests.iter().find(|r| r.id == test.request) { Some(r) => r, None => continue };
+        // identity: Some → that identity (validated to exist); None → local anonymous.
+        let identity = match &test.identity {
+            Some(id) => match cfg.identities.iter().find(|i| &i.id == id) { Some(i) => i, None => continue },
+            None => &anon,
+        };
+        let idy = identity.id.clone();
+        // clamp with a stderr note (spec Nit) so a typo'd huge n/concurrency is visible.
+        let n = clamp_int(test.n, 1, MAX_N);
+        let c = clamp_int(test.concurrency, 1, MAX_CONCURRENCY);
+        if test.n.map(|v| v != n).unwrap_or(false) { eprintln!("warn: rateLimit test `{}` n clamped to {}", test.id, n); }
+        if test.concurrency.map(|v| v != c).unwrap_or(false) { eprintln!("warn: rateLimit test `{}` concurrency clamped to {}", test.id, c); }
+
+        let responses = run_burst(req, identity, n, c, &var_map).await;
+        let completed = responses.iter().filter(|r| r.status.map(|s| s > 0).unwrap_or(false)).count();
+        if completed == 0 {
+            // The burst could not run (all net errors / build failures) — surface, don't false-pass.
+            // Message carries only the test id + counts (never the resolved URL / reqwest error).
+            errors.push(EngineError {
+                engine: EngineId::RateLimit, endpoint: Some(test.request.clone()), identity: Some(idy.clone()),
+                message: format!("rate-limit test `{}`: no requests completed ({} sent, all net errors)", test.id, responses.len()),
+            });
+            continue;
+        }
+        if let Some(f) = rl_finding_for(test, req, &idy, &responses) { findings.push(f); }
+    }
+    (findings, errors)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
