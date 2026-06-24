@@ -155,9 +155,28 @@ pub struct BolaConfig { #[serde(default)] pub tests: Vec<BolaTest> }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RateLimitTest {
+    pub id: String,
+    pub request: String,
+    #[serde(default)] pub identity: Option<String>,
+    /// Burst size; clamped to 1..=200 at runtime (TS clampInt parity), not rejected.
+    #[serde(default)] pub n: Option<i64>,
+    /// Max requests in flight; clamped to 1..=10 at runtime, not rejected.
+    #[serde(default)] pub concurrency: Option<i64>,
+    /// `"sensitive"` raises a no-protection finding to High (else Low). Free-form per TS.
+    #[serde(default)] pub sensitivity: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RateLimitConfig { #[serde(default)] pub tests: Vec<RateLimitTest> }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default)] pub matrix: Option<MatrixConfig>,
     #[serde(default)] pub bola: Option<BolaConfig>,
+    #[serde(default, rename = "rateLimit")] pub rate_limit: Option<RateLimitConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -284,6 +303,16 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                     if !(v.is_string() || v.is_number() || v.is_boolean()) {
                         return Err(format!("bola test `{}` idValue for `{}` must be a string/number/bool", t.id, idid));
                     }
+                }
+            }
+        }
+        if let Some(rl) = &sec.rate_limit {
+            let mut seen = std::collections::HashSet::new();
+            for t in &rl.tests {
+                if !seen.insert(t.id.clone()) { return Err(format!("duplicate rateLimit test `{}`", t.id)); }
+                if !req_ids.contains(t.request.as_str()) { return Err(format!("rateLimit test `{}` references unknown request `{}`", t.id, t.request)); }
+                if let Some(idid) = &t.identity {
+                    if !id_ids.contains(idid.as_str()) { return Err(format!("rateLimit test `{}` references unknown identity `{}`", t.id, idid)); }
                 }
             }
         }
@@ -578,6 +607,60 @@ mod tests {
             {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}},
             {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}}
           ]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+    }
+
+    const WITH_RATELIMIT: &str = r#"{
+      "version":1,"environments":[],
+      "identities":[{"id":"anon","auth":{"type":"none"}}],
+      "requests":[{"id":"login","method":"POST","url":"https://x/login"}],
+      "security":{"rateLimit":{"tests":[
+        {"id":"r1","request":"login","identity":"anon","n":50,"concurrency":5,"sensitivity":"sensitive"}
+      ]}}
+    }"#;
+
+    #[test]
+    fn parses_ratelimit_config() {
+        let c = load_config(WITH_RATELIMIT, &|_| None).unwrap();
+        let t = &c.security.unwrap().rate_limit.unwrap().tests[0];
+        assert_eq!(t.id, "r1");
+        assert_eq!(t.request, "login");
+        assert_eq!(t.identity.as_deref(), Some("anon"));
+        assert_eq!(t.n, Some(50));
+        assert_eq!(t.concurrency, Some(5));
+        assert_eq!(t.sensitivity.as_deref(), Some("sensitive"));
+    }
+
+    #[test]
+    fn ratelimit_defaults_optional_fields() {
+        let j = r#"{ "version":1,"environments":[],"identities":[],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"rateLimit":{"tests":[{"id":"t","request":"r"}]}} }"#;
+        let c = load_config(j, &|_| None).unwrap();
+        let t = &c.security.unwrap().rate_limit.unwrap().tests[0];
+        assert!(t.n.is_none() && t.concurrency.is_none() && t.identity.is_none() && t.sensitivity.is_none());
+    }
+
+    #[test]
+    fn ratelimit_rejects_unknown_request() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[],"security":{"rateLimit":{"tests":[{"id":"t","request":"ghost"}]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
+    }
+
+    #[test]
+    fn ratelimit_rejects_unknown_identity() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"rateLimit":{"tests":[{"id":"t","request":"r","identity":"ghost"}]}} }"#;
+        assert!(load_config(bad, &|_| None).unwrap_err().contains("ghost"));
+    }
+
+    #[test]
+    fn ratelimit_rejects_duplicate_test_id() {
+        let bad = r#"{ "version":1,"environments":[],"identities":[],
+          "requests":[{"id":"r","method":"GET","url":"https://x"}],
+          "security":{"rateLimit":{"tests":[{"id":"t","request":"r"},{"id":"t","request":"r"}]}} }"#;
         assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
     }
 }
