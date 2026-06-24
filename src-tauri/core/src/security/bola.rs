@@ -174,6 +174,10 @@ fn set_at_path(obj: &mut Value, path: &str, value: Value) -> bool {
 }
 fn array_index_re_dot() -> &'static Regex { static R: OnceLock<Regex> = OnceLock::new(); R.get_or_init(|| Regex::new(r"\[(\d+)\]").unwrap()) }
 
+/// NOTE: for `IdLocation::Path`, `req.url` must already be variable-RESOLVED (absolute) —
+/// `run_bola`'s `build_bola_request` substitutes `{{vars}}` in the URL before calling, so a
+/// templated `{{apiHost}}/orders/1` config works. (Mirrors the TS, where the page resolves first.)
+///
 /// Mutate the config Request so the object id at `loc` becomes `value`, BEFORE build_request.
 /// path → the (parsed, absolute) URL's path segments (CLI adaptation); query → upsert Kv;
 /// body → JSON dot-path. Err if it cannot apply (out-of-range index / missing body path / non-JSON body).
@@ -203,6 +207,106 @@ pub fn apply_id_location(req: &Request, loc: &IdLocation, value: &Value) -> Resu
         }
     }
     Ok(out)
+}
+
+use crate::config::{Config, Identity};
+use crate::engine::{qa_substitute, qa_var_map, RealDynamics};
+use crate::buildreq::{build_request, exec_opts_for};
+use crate::step::{run_step, StepResult};
+use crate::security::finding::{EngineError, EngineId, Finding};
+use std::collections::BTreeMap;
+
+fn idval_nonempty(v: &Value) -> bool {
+    match v { Value::Null => false, Value::String(s) => !s.is_empty(), _ => true }
+}
+
+/// Build the mutated+resolved prepared request for one (test, identity, id_value).
+/// Substitutes {{vars}} in the URL FIRST so apply_id_location's Path branch can parse an
+/// otherwise-templated URL; applies the id at idLocation; then build_request (auth + final shape).
+fn build_bola_request(
+    req: &Request, identity: &Identity, id_value: &Value, loc: &IdLocation, var_map: &BTreeMap<String, String>,
+) -> Result<Value, String> {
+    let mut r = req.clone();
+    r.url = qa_substitute(&r.url, var_map, &mut RealDynamics); // resolve {{vars}} so Path can parse
+    let mutated = apply_id_location(&r, loc, id_value)?;
+    build_request(&mutated, identity, var_map, &mut RealDynamics)
+}
+
+/// Run object-level authz (BOLA) tests. Mirrors bola.ts runBola: reference -> optional
+/// negative control -> attacker x owner attack. Returns (findings, errors). Findings carry
+/// NO idValue (masked); detection uses the raw idValue internally only.
+pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<EngineError>) {
+    let bcfg = match cfg.security.as_ref().and_then(|s| s.bola.as_ref()) { Some(b) => b, None => return (vec![], vec![]) };
+    let deny_set = crate::security::authz::DEFAULT_DENY_SET;
+    let scoped = cfg.scoped_vars();
+    let var_map = qa_var_map(&scoped, env, None, None);
+    let mut findings = Vec::new();
+    let mut errors: Vec<EngineError> = Vec::new();
+
+    for test in &bcfg.tests {
+        let req = match cfg.requests.iter().find(|r| r.id == test.request) { Some(r) => r, None => continue };
+        let owners: Vec<&Identity> = cfg.identities.iter()
+            .filter(|i| test.id_values.get(&i.id).map(idval_nonempty).unwrap_or(false)).collect();
+        if owners.len() < 2 {
+            eprintln!("warn: bola test `{}` skipped: needs >= 2 identities with non-empty idValues", test.id);
+            continue;
+        }
+        let err = |idy: String, msg: String| EngineError { engine: EngineId::Bola, endpoint: Some(test.id.clone()), identity: Some(idy), message: msg };
+
+        // Reference phase — each owner runs its OWN id.
+        let mut reference: BTreeMap<&str, StepResult> = BTreeMap::new();
+        for o in &owners {
+            match build_bola_request(req, o, &test.id_values[&o.id], &test.id_location, &var_map) {
+                Ok(rd) => { reference.insert(o.id.as_str(), run_step(&rd, &[], exec_opts_for(&o.auth)).await); }
+                Err(e) => errors.push(err(o.id.clone(), format!("bola `{}` reference build failed: {e}", test.id))),
+            }
+        }
+        let ref_ok = |id: &str| reference.get(id).map(|r| r.success && (200..=299).contains(&r.status)).unwrap_or(false);
+
+        // Negative control (opt-in).
+        let mut control_failed = false;
+        if test.negative_control {
+            let co = owners[0];
+            let synth = synthetic_id_for(&test.id_values[&co.id]);
+            if let Ok(rd) = build_bola_request(req, co, &Value::String(synth.clone()), &test.id_location, &var_map) {
+                let step = run_step(&rd, &[], exec_opts_for(&co.auth)).await;
+                let matched = step.success && ref_ok(&co.id)
+                    && control_suggests_ignored_id(&step.body, &reference[co.id.as_str()].body, &test.id_values[&co.id], &synth);
+                control_failed = negative_control_failed(if step.success { Some(step.status) } else { None }, &deny_set, matched);
+            }
+        }
+
+        // Attack phase — attacker A uses owner O's id.
+        for a in &owners {
+            for o in &owners {
+                if a.id == o.id { continue; }
+                let rd = match build_bola_request(req, a, &test.id_values[&o.id], &test.id_location, &var_map) {
+                    Ok(rd) => rd,
+                    Err(e) => { errors.push(err(format!("{}→{}", a.id, o.id), format!("bola `{}` attack build failed: {e}", test.id))); continue; }
+                };
+                let step = run_step(&rd, &[], exec_opts_for(&a.auth)).await;
+                if !step.success {
+                    errors.push(err(format!("{}→{}", a.id, o.id), format!("bola `{}` attack {}→{} failed: {}", test.id, a.id, o.id, step.error.as_deref().unwrap_or("request failed"))));
+                    continue;
+                }
+                if control_failed { continue; } // endpoint not object-scoped → demote (no finding)
+                let matched = ref_ok(&o.id) && matches_owner(&step.body, &reference[o.id.as_str()].body, &test.id_values[&o.id]);
+                let verdict = classify_bola(Some(step.status), matched, &deny_set);
+                if let Some(sev) = bola_severity(&req.method, verdict) {
+                    let title = if verdict == BolaVerdict::Vuln { "Cross-object access confirmed" } else { "Cross-object access (unconfirmed)" };
+                    let method = req.method.to_uppercase();
+                    findings.push(Finding {
+                        engine: EngineId::Bola, severity: sev, rule_id: "bola.cross-object".into(), oracle: "object-authz".into(),
+                        title: title.into(),
+                        path: format!("{method} {}", test.request),
+                        evidence: format!("as `{}` reached `{}`'s object (id redacted)", a.id, o.id), // idValue MASKED
+                        method: Some(method), endpoint: Some(test.request.clone()), identity: Some(format!("{}→{}", a.id, o.id)),
+                    });
+                }
+            }
+        }
+    }
+    (findings, errors)
 }
 
 #[cfg(test)]
