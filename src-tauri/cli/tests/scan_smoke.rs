@@ -84,3 +84,41 @@ async fn scan_out_file_written_and_redacted() {
     let written = std::fs::read_to_string(&outfile).unwrap();
     assert!(written.contains("matrix.deny-bypass"), "findings written to --out file");
 }
+
+async fn idor_server() -> MockServer {
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).respond_with(|req: &wiremock::Request| {
+        let seg = req.url.path_segments().and_then(|mut p| { p.next(); p.next() }).unwrap_or("").to_string();
+        ResponseTemplate::new(200).set_body_string(format!("{{\"id\":\"{}\"}}", seg))
+    }).mount(&s).await;
+    s
+}
+
+#[tokio::test]
+async fn scan_bola_vuln_exits_3() {
+    let s = idor_server().await;
+    let cfg = write_temp("bv.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"alice","auth":{{"type":"none"}}}},{{"id":"bob","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"getOrder","method":"GET","url":"{base}/orders/PLACEHOLDER"}}],
+      "security":{{"bola":{{"tests":[{{"id":"t1","request":"getOrder","idLocation":{{"kind":"path","index":1}},
+        "idValues":{{"alice":"ordA","bob":"ordB"}}}}]}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bola","--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "cross-object access = vuln >= high → exit 3");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("bola.cross-object"));
+    // idValue must NOT leak (masked at evidence construction)
+    assert!(!stdout.contains("ordA") && !stdout.contains("ordB"), "idValue leaked: {stdout}");
+}
+
+#[tokio::test]
+async fn scan_bola_denied_exits_0() {
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).respond_with(ResponseTemplate::new(403)).mount(&s).await;
+    let cfg = write_temp("bd.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"alice","auth":{{"type":"none"}}}},{{"id":"bob","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"getOrder","method":"GET","url":"{base}/orders/PLACEHOLDER"}}],
+      "security":{{"bola":{{"tests":[{{"id":"t1","request":"getOrder","idLocation":{{"kind":"path","index":1}},
+        "idValues":{{"alice":"ordA","bob":"ordB"}}}}]}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bola"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "403 → pass → exit 0");
+}
