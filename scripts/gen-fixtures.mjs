@@ -193,3 +193,30 @@ const azDefault = [
 writeFileSync(join(OUT, 'security_authz.json'), JSON.stringify(
   { denySet: azDeny, outcome: azOutcome, resp: azResp, verdict: azVerdict, endpoint: azEndpoint, defaultExpect: azDefault }, null, 2) + '\n');
 console.log(`wrote security_authz.json`);
+
+const { matchesOwner: mO, classifyBola: cB, negativeControlFailed: nCF, controlSuggestsIgnoredId: cSI, isIdentityKey: iIK, syntheticIdFor: sIF } = await import('./_bola-bridge.mjs');
+_i = 0;
+const bolaDeny = [401,403,404];
+const matchCases = [
+  { name:'id_echo', attack:{userId:'ownerX'}, owner:{}, idv:'ownerX' },
+  { name:'id_echo_nonidentity_key', attack:{page:'1'}, owner:{}, idv:'1' },
+  { name:'jaccard_hit', attack:{a:'x',b:'y',c:'z'}, owner:{a:'x',b:'y',c:'z'}, idv:'no' },
+  { name:'jaccard_miss', attack:{a:'x'}, owner:{a:'x',b:'y',c:'z'}, idv:'no' },
+  { name:'string_body_contains', attack:'...ownerX...', owner:'', idv:'ownerX' },
+].map(c => ({ ...c, expected: mO({ body:c.attack }, { body:c.owner }, c.idv) }));
+const classifyCases = [];
+for (const [st, m] of [[403,false],[404,true],[200,true],[200,false],[500,false],[null,false]])
+  classifyCases.push({ name:`s${st}_m${m}`, status:st, matched:m, expected: cB(undefined, st, m, bolaDeny) });
+const ncfCases = [[403,true],[200,true],[200,false],[500,true]].map(([st,m]) => ({ name:`s${st}_m${m}`, status:st, matched:m, expected: nCF(st, bolaDeny, m) }));
+const controlCases = [
+  { name:'ignored', control:{id:'realA',n:1}, owner:{id:'realA',n:1}, idv:'realA', synth:'999999999' },
+  { name:'object_scoped', control:{id:'999999999'}, owner:{id:'realA'}, idv:'realA', synth:'999999999' },
+].map(c => ({ ...c, expected: cSI({ body:c.control }, { body:c.owner }, c.idv, c.synth) }));
+const idKeyCases = ['id','userId','owner_id','user-id','uuid','page','name','accountId'].map(k => ({ name:k, key:k, expected: iIK(k) }));
+const synthCases = [
+  { name:'num', sample:42 }, { name:'uuid', sample:'550e8400-e29b-41d4-a716-446655440000' },
+  { name:'hex24', sample:'0123456789abcdef01234567' }, { name:'other', sample:'abc' }, { name:'null', sample:null },
+].map(c => ({ ...c, expected: sIF(undefined, c.sample) }));
+writeFileSync(join(OUT, 'security_bola.json'), JSON.stringify(
+  { denySet: bolaDeny, match: matchCases, classify: classifyCases, ncf: ncfCases, control: controlCases, idKey: idKeyCases, synth: synthCases }, null, 2) + '\n');
+console.log('wrote security_bola.json');

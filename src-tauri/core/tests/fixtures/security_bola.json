@@ -1,0 +1,223 @@
+{
+  "denySet": [
+    401,
+    403,
+    404
+  ],
+  "match": [
+    {
+      "name": "id_echo",
+      "attack": {
+        "userId": "ownerX"
+      },
+      "owner": {},
+      "idv": "ownerX",
+      "expected": true
+    },
+    {
+      "name": "id_echo_nonidentity_key",
+      "attack": {
+        "page": "1"
+      },
+      "owner": {},
+      "idv": "1",
+      "expected": false
+    },
+    {
+      "name": "jaccard_hit",
+      "attack": {
+        "a": "x",
+        "b": "y",
+        "c": "z"
+      },
+      "owner": {
+        "a": "x",
+        "b": "y",
+        "c": "z"
+      },
+      "idv": "no",
+      "expected": true
+    },
+    {
+      "name": "jaccard_miss",
+      "attack": {
+        "a": "x"
+      },
+      "owner": {
+        "a": "x",
+        "b": "y",
+        "c": "z"
+      },
+      "idv": "no",
+      "expected": false
+    },
+    {
+      "name": "string_body_contains",
+      "attack": "...ownerX...",
+      "owner": "",
+      "idv": "ownerX",
+      "expected": true
+    }
+  ],
+  "classify": [
+    {
+      "name": "s403_mfalse",
+      "status": 403,
+      "matched": false,
+      "expected": "pass"
+    },
+    {
+      "name": "s404_mtrue",
+      "status": 404,
+      "matched": true,
+      "expected": "pass"
+    },
+    {
+      "name": "s200_mtrue",
+      "status": 200,
+      "matched": true,
+      "expected": "vuln"
+    },
+    {
+      "name": "s200_mfalse",
+      "status": 200,
+      "matched": false,
+      "expected": "unconfirmed"
+    },
+    {
+      "name": "s500_mfalse",
+      "status": 500,
+      "matched": false,
+      "expected": "inconclusive"
+    },
+    {
+      "name": "snull_mfalse",
+      "status": null,
+      "matched": false,
+      "expected": "inconclusive"
+    }
+  ],
+  "ncf": [
+    {
+      "name": "s403_mtrue",
+      "status": 403,
+      "matched": true,
+      "expected": false
+    },
+    {
+      "name": "s200_mtrue",
+      "status": 200,
+      "matched": true,
+      "expected": true
+    },
+    {
+      "name": "s200_mfalse",
+      "status": 200,
+      "matched": false,
+      "expected": false
+    },
+    {
+      "name": "s500_mtrue",
+      "status": 500,
+      "matched": true,
+      "expected": false
+    }
+  ],
+  "control": [
+    {
+      "name": "ignored",
+      "control": {
+        "id": "realA",
+        "n": 1
+      },
+      "owner": {
+        "id": "realA",
+        "n": 1
+      },
+      "idv": "realA",
+      "synth": "999999999",
+      "expected": true
+    },
+    {
+      "name": "object_scoped",
+      "control": {
+        "id": "999999999"
+      },
+      "owner": {
+        "id": "realA"
+      },
+      "idv": "realA",
+      "synth": "999999999",
+      "expected": false
+    }
+  ],
+  "idKey": [
+    {
+      "name": "id",
+      "key": "id",
+      "expected": true
+    },
+    {
+      "name": "userId",
+      "key": "userId",
+      "expected": true
+    },
+    {
+      "name": "owner_id",
+      "key": "owner_id",
+      "expected": true
+    },
+    {
+      "name": "user-id",
+      "key": "user-id",
+      "expected": true
+    },
+    {
+      "name": "uuid",
+      "key": "uuid",
+      "expected": true
+    },
+    {
+      "name": "page",
+      "key": "page",
+      "expected": false
+    },
+    {
+      "name": "name",
+      "key": "name",
+      "expected": false
+    },
+    {
+      "name": "accountId",
+      "key": "accountId",
+      "expected": true
+    }
+  ],
+  "synth": [
+    {
+      "name": "num",
+      "sample": 42,
+      "expected": "999999999"
+    },
+    {
+      "name": "uuid",
+      "sample": "550e8400-e29b-41d4-a716-446655440000",
+      "expected": "ffffffff-eeee-4ddd-8ccc-bbbbaaaa9999"
+    },
+    {
+      "name": "hex24",
+      "sample": "0123456789abcdef01234567",
+      "expected": "ffffffffffffffffffffffff"
+    },
+    {
+      "name": "other",
+      "sample": "abc",
+      "expected": "qa-nonexistent-2c1f9a"
+    },
+    {
+      "name": "null",
+      "sample": null,
+      "expected": "qa-nonexistent-2c1f9a"
+    }
+  ]
+}
