@@ -1,4 +1,4 @@
-//! `scan` command: run the security suite (matrix -> bola), redact (union of all identity
+//! `scan` command: run the security suite (matrix -> bola -> ratelimit), redact (union of all identity
 //! secrets), emit findings (JSON/human), exit 3 on any finding >= high, exit 1 on errors.
 use qa_touchstone_core::config::load_config;
 use qa_touchstone_core::redact::RedactionSet;
@@ -49,16 +49,10 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
     if let Some(eng) = &engine {
         if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
     }
-    // ratelimit is wired in SP2c; warn so a requested-but-unimplemented engine
-    // doesn't silently report "0 findings" (which could mask a typo or a missing engine).
-    if matches!(engine.as_deref(), Some("ratelimit")) {
-        eprintln!("warn: engine `{}` is not yet implemented; no findings reported", engine.as_deref().unwrap());
-    }
-
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
 
-    // Run engines (suite order: matrix -> bola; ratelimit in SP2c). --engine filters.
+    // Run engines (suite order: matrix -> bola -> ratelimit). --engine filters.
     let want = |e: &str| engine.as_deref().map(|x| x == e).unwrap_or(true);
     let mut findings: Vec<Finding> = Vec::new();
     let mut errors: Vec<EngineError> = Vec::new();
@@ -71,6 +65,11 @@ pub async fn run_scan(config_path: String, engine: Option<String>, env: Option<S
     if want("bola") {
         let (f, e) = qa_touchstone_core::security::bola::run_bola(&cfg, env.as_deref()).await;
         engines.push(EngineSummary { engine: "bola".into(), ran: true, findings: f.len(), errors: e.len() });
+        findings.extend(f); errors.extend(e);
+    }
+    if want("ratelimit") {
+        let (f, e) = qa_touchstone_core::security::ratelimit::run_ratelimit(&cfg, env.as_deref()).await;
+        engines.push(EngineSummary { engine: "ratelimit".into(), ran: true, findings: f.len(), errors: e.len() });
         findings.extend(f); errors.extend(e);
     }
 

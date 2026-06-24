@@ -122,3 +122,30 @@ async fn scan_bola_denied_exits_0() {
     let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bola"]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "403 → pass → exit 0");
 }
+
+#[tokio::test]
+async fn scan_ratelimit_vuln_exits_3() {
+    // sensitive endpoint with NO throttling → ratelimit.none High → exit 3.
+    let s = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(ResponseTemplate::new(200)).mount(&s).await;
+    let cfg = write_temp("rv.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"login","method":"POST","url":"{base}/login"}}],
+      "security":{{"rateLimit":{{"tests":[{{"id":"r1","request":"login","identity":"anon","n":6,"concurrency":2,"sensitivity":"sensitive"}}]}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","ratelimit","--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "no protection on a sensitive endpoint → High → exit 3");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("ratelimit.none"));
+}
+
+#[tokio::test]
+async fn scan_ratelimit_throttled_exits_0() {
+    // immediate 429 → strong protection → no finding → exit 0.
+    let s = MockServer::start().await;
+    Mock::given(method("POST")).respond_with(ResponseTemplate::new(429)).mount(&s).await;
+    let cfg = write_temp("rt.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"login","method":"POST","url":"{base}/login"}}],
+      "security":{{"rateLimit":{{"tests":[{{"id":"r1","request":"login","identity":"anon","n":6,"concurrency":2,"sensitivity":"sensitive"}}]}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","ratelimit"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "strong throttling → exit 0");
+}
