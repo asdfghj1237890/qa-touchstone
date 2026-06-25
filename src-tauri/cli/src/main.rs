@@ -64,6 +64,14 @@ enum Command {
         #[arg(long)] env: Option<String>,
         #[arg(long)] json: bool,
         #[arg(long)] out: Option<String>,
+        /// Path to a baseline snapshot JSON file (absent or empty => bootstrap / all-new).
+        #[arg(long)] baseline: Option<String>,
+        /// Overwrite the baseline file with this run's snapshot (requires --baseline; ignored on engine errors).
+        #[arg(long, requires = "baseline")] update_baseline: bool,
+        /// Gate threshold: critical|high|medium|low (default: high).
+        #[arg(long)] fail_on: Option<String>,
+        /// Write a SARIF 2.1.0 report to this file path.
+        #[arg(long)] sarif: Option<String>,
     },
 }
 
@@ -92,7 +100,9 @@ async fn main() -> std::process::ExitCode {
         Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
             run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
         }
-        Command::Scan { config, engine, env, json: use_json, out } => scan::run_scan(config, engine, env, use_json, out).await,
+        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif } => {
+            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif).await
+        }
     }
 }
 
