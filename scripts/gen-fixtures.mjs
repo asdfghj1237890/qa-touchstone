@@ -274,3 +274,15 @@ const sevCases = [ {sev:'high', ov:null}, {sev:'high', ov:'critical'}, {sev:'low
   .map(c => ({ ...c, expected: eS({ severity:c.sev }, c.ov ? { severityOverride:c.ov } : null) }));
 writeFileSync(join(OUT,'security_lifecycle.json'), JSON.stringify({ fnv: fnvCases, alias: aliasCases, sev: sevCases }, null, 2) + '\n');
 console.log('wrote security_lifecycle.json');
+
+const { reportToSarif: rS, sevToSarifLevel: sL, sarifBaselineState: bS, buildReport: bR } = await import('./_findings-bridge.mjs');
+const item = (o) => ({ fp:o.fp, effectiveSeverity:o.sev, engine:o.engine, ruleId:o.ruleId, path:o.path||'', locationLabel:o.loc||'', title:o.title||o.ruleId, evidence:o.evidence||'', dfp:o.dfp||'', count:o.count||1 });
+const cur = { fpVersion:1, runId:'r', items:[ item({fp:'aa',sev:'high',engine:'bola',ruleId:'bola.cross-object',loc:'GET getOrder @t1: alice→bob',title:'Cross-object access confirmed'}),
+  item({fp:'bb',sev:'critical',engine:'matrix',ruleId:'matrix.deny-bypass',loc:'DELETE delU @anon',title:'Access-control bypass'}) ] };
+const base = { fpVersion:1, runId:'b', items:[ item({fp:'bb',sev:'critical',engine:'matrix',ruleId:'matrix.deny-bypass',loc:'DELETE delU @anon',title:'Access-control bypass'}) ] };
+const model = bR(cur, base, { records:{} });
+const sarif = JSON.parse(rS(model));
+const sevLevel = ['critical','high','medium','low','info'].map(s => ({ s, expected: sL(s) }));
+const baseState = ['new','carried','resolved'].map(p => ({ p, expected: bS(p) }));
+writeFileSync(join(OUT,'security_report.json'), JSON.stringify({ sarif, sevLevel, baseState }, null, 2) + '\n');
+console.log('wrote security_report.json');

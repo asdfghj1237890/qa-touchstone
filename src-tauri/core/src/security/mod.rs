@@ -4,4 +4,5 @@ pub mod bola;
 pub mod finding;
 pub mod lifecycle;
 pub mod ratelimit;
+pub mod report;
 pub mod runner;

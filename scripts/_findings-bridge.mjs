@@ -12,6 +12,8 @@ export default guard; export const loadJSON=()=>null; export const saveJSON=()=>
 const __dir = dirname(fileURLToPath(import.meta.url));
 const tmp = mkdtempSync(join(tmpdir(),'qa-find-'));
 process.on('exit', () => { try { rmSync(tmp, { recursive:true, force:true }); } catch {} });
+
+// --- findings.ts bundle ---
 const res = await build({ entryPoints:[join(__dir,'..','src','qa','findings.ts')], bundle:true, format:'esm', write:false, platform:'node', logLevel:'silent', plugins:[stub] });
 const file = join(tmp,'findings.mjs'); writeFileSync(file, res.outputFiles[0].text);
 const m = await import('file://' + file.replace(/\\/g,'/'));
@@ -23,3 +25,13 @@ export const diffDetail = m.diffDetail;
 export const snapshotOf = m.snapshotOf;
 export const gateCount = m.gateCount;
 export const effectiveSeverity = m.effectiveSeverity;
+
+// --- securityReport.ts bundle ---
+const res2 = await build({ entryPoints:[join(__dir,'..','src','qa','securityReport.ts')], bundle:true, format:'esm', write:false, platform:'node', logLevel:'silent', plugins:[stub] });
+const file2 = join(tmp,'securityReport.mjs'); writeFileSync(file2, res2.outputFiles[0].text);
+const mr = await import('file://' + file2.replace(/\\/g,'/'));
+if (typeof mr.reportToSarif !== 'function') throw new Error('reportToSarif not exported from securityReport.ts bundle');
+export const reportToSarif = mr.reportToSarif;
+export const sevToSarifLevel = mr.sevToSarifLevel;
+export const sarifBaselineState = mr.sarifBaselineState;
+export const buildReport = mr.buildReport;
