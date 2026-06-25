@@ -1,0 +1,67 @@
+{
+  "fnv": [
+    {
+      "s": "",
+      "expected": "811c9dc5"
+    },
+    {
+      "s": "a",
+      "expected": "e40c292c"
+    },
+    {
+      "s": "matrix|matrix.deny-bypass|GET /u @anon|GET /u",
+      "expected": "7e8c4494"
+    },
+    {
+      "s": "café",
+      "expected": "3308be7c"
+    },
+    {
+      "s": "a😀b",
+      "expected": "8fca8501"
+    }
+  ],
+  "alias": [
+    {
+      "id": "jwt-in-response",
+      "expected": "jwt"
+    },
+    {
+      "id": "jwt-leakage",
+      "expected": "jwt"
+    },
+    {
+      "id": "aws-access-key",
+      "expected": "aws-key"
+    },
+    {
+      "id": "object-authz-bola",
+      "expected": "object-authz"
+    },
+    {
+      "id": "bola.cross-object",
+      "expected": "bola.cross-object"
+    },
+    {
+      "id": "unknown",
+      "expected": "unknown"
+    }
+  ],
+  "sev": [
+    {
+      "sev": "high",
+      "ov": null,
+      "expected": "high"
+    },
+    {
+      "sev": "high",
+      "ov": "critical",
+      "expected": "critical"
+    },
+    {
+      "sev": "low",
+      "ov": "bogus",
+      "expected": "low"
+    }
+  ]
+}

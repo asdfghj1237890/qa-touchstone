@@ -1,13 +1,13 @@
 //! Security finding model — emitted by the engines, consumed by `scan` reporters.
 //! ≈ TS UnionFinding (types.ts) minus lifecycle/raw (those are SP3). Carries only
 //! SAFE strings (no raw bodies/headers); `scan` redacts them on output.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity { Info, Low, Medium, High, Critical } // Ord: Critical is greatest
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EngineId { Matrix, Bola, RateLimit }
 

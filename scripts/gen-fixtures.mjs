@@ -265,3 +265,12 @@ const rlSeverity = [
 writeFileSync(join(OUT, 'security_ratelimit.json'), JSON.stringify(
   { cases: rlCases, classify: rlClassify, severity: rlSeverity }, null, 2) + '\n');
 console.log('wrote security_ratelimit.json');
+
+const { fnv1a: fH, canonicalRuleId: cR, effectiveSeverity: eS } = await import('./_findings-bridge.mjs');
+_i = 0;
+const fnvCases = ['', 'a', 'matrix|matrix.deny-bypass|GET /u @anon|GET /u', 'café', 'a😀b'].map(s => ({ s, expected: fH(s) }));
+const aliasCases = ['jwt-in-response','jwt-leakage','aws-access-key','object-authz-bola','bola.cross-object','unknown'].map(id => ({ id, expected: cR(id) }));
+const sevCases = [ {sev:'high', ov:null}, {sev:'high', ov:'critical'}, {sev:'low', ov:'bogus'} ]
+  .map(c => ({ ...c, expected: eS({ severity:c.sev }, c.ov ? { severityOverride:c.ov } : null) }));
+writeFileSync(join(OUT,'security_lifecycle.json'), JSON.stringify({ fnv: fnvCases, alias: aliasCases, sev: sevCases }, null, 2) + '\n');
+console.log('wrote security_lifecycle.json');
