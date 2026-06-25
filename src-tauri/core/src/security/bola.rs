@@ -339,7 +339,7 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
                         title: title.into(),
                         path: format!("{method} {}", test.request),
                         evidence: format!("as `{}` reached `{}`'s object (id redacted)", a.id, o.id), // idValue MASKED
-                        method: Some(method), endpoint: Some(test.request.clone()), identity: Some(format!("{}→{}", a.id, o.id)),
+                        method: Some(method), endpoint: Some(test.request.clone()), identity: Some(format!("{}: {}→{}", test.id, a.id, o.id)),
                     });
                 }
             }

@@ -186,7 +186,7 @@ fn rl_finding_for(test: &crate::config::RateLimitTest, req: &Request, idy: &str,
                 engine: EngineId::RateLimit, severity, rule_id: "ratelimit.none".into(), oracle: "rate-limit".into(),
                 title: "No rate limiting detected".into(), path,
                 evidence: format!("{sent} requests, no 429/rate-limit headers"),
-                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(idy.to_string()),
+                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(format!("{}: {}", test.id, idy)),
             })
         }
         Strength::Weak => {
@@ -199,7 +199,7 @@ fn rl_finding_for(test: &crate::config::RateLimitTest, req: &Request, idy: &str,
             Some(Finding {
                 engine: EngineId::RateLimit, severity, rule_id: "ratelimit.weak".into(), oracle: "rate-limit".into(),
                 title: "Weak rate limiting".into(), path, evidence,
-                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(idy.to_string()),
+                method: Some(method), endpoint: Some(test.request.clone()), identity: Some(format!("{}: {}", test.id, idy)),
             })
         }
         Strength::Strong => None,
