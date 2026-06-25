@@ -40,6 +40,17 @@ fn engine_str(e: EngineId) -> &'static str {
     match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::RateLimit=>"ratelimit" }
 }
 
+/// Explicit, stable wire tokens for scope-descriptor enums (NOT Debug — a code-shape detail
+/// that could silently shift the scopeHash on a derive change).
+fn expectation_token(e: &qa_touchstone_core::config::Expectation) -> &'static str {
+    use qa_touchstone_core::config::Expectation;
+    match e { Expectation::Allow => "allow", Expectation::Deny => "deny", Expectation::Skip => "skip" }
+}
+fn id_location_token(l: &qa_touchstone_core::config::IdLocation) -> String {
+    use qa_touchstone_core::config::IdLocation;
+    match l { IdLocation::Path { index } => format!("path:{index}"), IdLocation::Query { key } => format!("query:{key}"), IdLocation::Body { path } => format!("body:{path}") }
+}
+
 /// Canonical, sorted, secret-free descriptor of the scanned surface, for scope-drift detection.
 fn build_scope_descriptor(cfg: &Config) -> String {
     use serde_json::{json, Map, Value};
@@ -48,14 +59,14 @@ fn build_scope_descriptor(cfg: &Config) -> String {
     if let Some(m) = sec.and_then(|s| s.matrix.as_ref()) {
         let mut eps: Vec<String> = m.endpoints.clone(); eps.sort();
         let mut deny = m.deny_set.clone(); deny.sort();
-        let mut expect: Vec<Value> = m.expect.iter().flat_map(|(rid, row)| row.iter().map(move |(idid, exp)| json!([rid, idid, format!("{exp:?}")]))).collect();
+        let mut expect: Vec<Value> = m.expect.iter().flat_map(|(rid, row)| row.iter().map(move |(idid, exp)| json!([rid, idid, expectation_token(exp)]))).collect();
         expect.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
         root.insert("matrix".into(), json!({ "endpoints": eps, "denySet": deny, "expect": expect }));
     }
     if let Some(b) = sec.and_then(|s| s.bola.as_ref()) {
         let mut tests: Vec<Value> = b.tests.iter().map(|t| {
             let mut owners: Vec<String> = t.id_values.keys().cloned().collect(); owners.sort();
-            json!({ "id": t.id, "request": t.request, "idLocation": format!("{:?}", t.id_location), "owners": owners })
+            json!({ "id": t.id, "request": t.request, "idLocation": id_location_token(&t.id_location), "owners": owners })
         }).collect();
         tests.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
         root.insert("bola".into(), Value::Array(tests));
@@ -102,6 +113,12 @@ pub async fn run_scan(
     }
     if let Some(eng) = &engine {
         if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
+    }
+    // A single-engine run produces a partial finding set; blessing it would write a baseline
+    // missing the other engines' findings (which the next full run would then flag as New).
+    if update_baseline && engine.is_some() {
+        eprintln!("error: --update-baseline cannot be combined with --engine (a partial-engine bless corrupts the baseline)");
+        return ExitCode::from(2);
     }
 
     // Parse --fail-on early so bad input exits before running engines.
@@ -173,7 +190,8 @@ pub async fn run_scan(
                 Ok(_) => { eprintln!("error: baseline `{path}` fpVersion mismatch (expected {FP_VERSION})"); return ExitCode::from(2); }
                 Err(e) => { eprintln!("error: corrupt baseline `{path}`: {e}"); return ExitCode::from(2); }
             },
-            Err(_) => None, // absent file => bootstrap
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => None, // absent file => bootstrap / all-new
+            Err(e) => { eprintln!("error: cannot read baseline `{path}`: {e}"); return ExitCode::from(2); }
         }
     } else { None };
     let baseline_items: Vec<_> = baseline_snapshot.as_ref().map(|s| s.items.clone()).unwrap_or_default();

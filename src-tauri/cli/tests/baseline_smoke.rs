@@ -68,3 +68,29 @@ async fn baseline_secret_is_redacted() {
     assert_eq!(out.status.code(), Some(0), "bless exits 0: {}", String::from_utf8_lossy(&out.stderr));
     assert!(!std::fs::read_to_string(&bl).unwrap().contains("SUPERSECRET"), "secret must never reach the baseline file");
 }
+
+#[tokio::test]
+async fn update_baseline_refuses_with_engine_filter() {
+    // A single-engine bless would write a PARTIAL baseline (missing the other engines' findings),
+    // which the next full run would then flag as new => refuse the combo (exit 2), don't write.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/s")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    let cfg = write_temp("ef.json", &matrix_cfg(&server.uri()));
+    let bl = write_temp("ef_base.json", "");
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--baseline",bl.to_str().unwrap(),"--update-baseline","--engine","matrix"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2), "--engine + --update-baseline must be rejected: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(std::fs::read_to_string(&bl).unwrap().is_empty(), "baseline not written when refused");
+}
+
+#[tokio::test]
+async fn unreadable_baseline_is_input_error() {
+    // A baseline path that EXISTS but can't be read as a file (a directory) is NOT 'absent' —
+    // it must be a bad-input error (exit 2), never a silent bootstrap.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/s")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    let cfg = write_temp("ub.json", &matrix_cfg(&server.uri()));
+    let mut dir = std::env::temp_dir(); dir.push(format!("qa_bl_dir_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--baseline",dir.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2), "unreadable (directory) baseline => exit 2, not bootstrap");
+}
