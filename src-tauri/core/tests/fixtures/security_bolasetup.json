@@ -1,0 +1,201 @@
+[
+  {
+    "name": "path_numeric_after_plural",
+    "req": {
+      "url": "/orders/42",
+      "params": [],
+      "body": null
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "path",
+          "index": 1
+        },
+        "value": "42",
+        "confidence": "high",
+        "why": "path segment 1 (numeric, after /orders)"
+      }
+    ]
+  },
+  {
+    "name": "path_uuid_no_plural",
+    "req": {
+      "url": "/item/550e8400-e29b-41d4-a716-446655440000",
+      "params": [],
+      "body": null
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "path",
+          "index": 1
+        },
+        "value": "550e8400-e29b-41d4-a716-446655440000",
+        "confidence": "high",
+        "why": "path segment 1 (uuid)"
+      }
+    ]
+  },
+  {
+    "name": "query_id_key_numeric",
+    "req": {
+      "url": "/search",
+      "params": [
+        {
+          "key": "user_id",
+          "value": "99",
+          "on": true
+        }
+      ],
+      "body": null
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "query",
+          "key": "user_id"
+        },
+        "value": "99",
+        "confidence": "medium",
+        "why": "query key user_id"
+      }
+    ]
+  },
+  {
+    "name": "query_id_key_uuid",
+    "req": {
+      "url": "/items",
+      "params": [
+        {
+          "key": "userId",
+          "value": "550e8400-e29b-41d4-a716-446655440000",
+          "on": true
+        }
+      ],
+      "body": null
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "query",
+          "key": "userId"
+        },
+        "value": "550e8400-e29b-41d4-a716-446655440000",
+        "confidence": "high",
+        "why": "query key userId"
+      }
+    ]
+  },
+  {
+    "name": "body_id_field_numeric",
+    "req": {
+      "url": "/create",
+      "params": [],
+      "body": "{\"orderId\":77}"
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "body",
+          "path": "orderId"
+        },
+        "value": "77",
+        "confidence": "medium",
+        "why": "body field orderId"
+      }
+    ]
+  },
+  {
+    "name": "body_id_field_hex24",
+    "req": {
+      "url": "/update",
+      "params": [],
+      "body": "{\"documentId\":\"0123456789abcdef01234567\"}"
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "body",
+          "path": "documentId"
+        },
+        "value": "0123456789abcdef01234567",
+        "confidence": "medium",
+        "why": "body field documentId"
+      }
+    ]
+  },
+  {
+    "name": "denylist_key_excluded",
+    "req": {
+      "url": "/list",
+      "params": [
+        {
+          "key": "page",
+          "value": "2",
+          "on": true
+        }
+      ],
+      "body": null
+    },
+    "expected": []
+  },
+  {
+    "name": "non_id_key_ignored",
+    "req": {
+      "url": "/list",
+      "params": [
+        {
+          "key": "name",
+          "value": "alice",
+          "on": true
+        }
+      ],
+      "body": null
+    },
+    "expected": []
+  },
+  {
+    "name": "non_json_body_skipped",
+    "req": {
+      "url": "/upload",
+      "params": [],
+      "body": "not-json"
+    },
+    "expected": []
+  },
+  {
+    "name": "multi_candidate_order",
+    "req": {
+      "url": "/users/550e8400-e29b-41d4-a716-446655440000",
+      "params": [
+        {
+          "key": "account_id",
+          "value": "7",
+          "on": true
+        }
+      ],
+      "body": null
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "path",
+          "index": 1
+        },
+        "value": "550e8400-e29b-41d4-a716-446655440000",
+        "confidence": "high",
+        "why": "path segment 1 (uuid, after /users)"
+      },
+      {
+        "idLocation": {
+          "kind": "query",
+          "key": "account_id"
+        },
+        "value": "7",
+        "confidence": "medium",
+        "why": "query key account_id"
+      }
+    ]
+  }
+]

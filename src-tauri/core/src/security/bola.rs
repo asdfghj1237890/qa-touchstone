@@ -152,6 +152,162 @@ pub fn synthetic_id_for(sample_value: &Value) -> String {
     "qa-nonexistent-2c1f9a".into()
 }
 
+// ── detect_id_location — port of bolaSetup.ts:detectIdLocation ──────────────
+
+const ID_DENYLIST_WORDS: [&str; 10] = [
+    "count", "page", "limit", "size", "offset",
+    "total", "per_page", "perpage", "page_size", "pagesize",
+];
+
+fn detect_uuid_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap())
+}
+fn detect_hex24_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)^[0-9a-f]{24}$").unwrap())
+}
+fn detect_num_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"^\d+$").unwrap())
+}
+fn id_key_suffix_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)_id$").unwrap())
+}
+fn id_key_camel_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"[a-z]Id$").unwrap())
+}
+fn id_key_uuid_org_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)(^|_)(uuid|tenant|account|org)(_|$)").unwrap())
+}
+fn plural_re() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)^[a-z].*(s|es)$").unwrap())
+}
+
+/// bolaSetup.ts:isIdKey — distinct from is_identity_key (bola.ts variant).
+/// Lowercased key not in ID_DENYLIST AND:
+///   k_lower == "id"  OR  /_id$/i  OR  /[a-z]Id$/ (camelCase, case-sensitive)
+///   OR /(^|_)(uuid|tenant|account|org)(_|$)/i
+pub fn is_id_key(key: &str) -> bool {
+    let k_lower = key.to_lowercase();
+    if ID_DENYLIST_WORDS.contains(&k_lower.as_str()) { return false; }
+    if k_lower == "id" { return true; }
+    if id_key_suffix_re().is_match(key) { return true; }    // /_id$/i
+    if id_key_camel_re().is_match(key) { return true; }     // /[a-z]Id$/ — case-sensitive!
+    if id_key_uuid_org_re().is_match(key) { return true; }  // uuid/tenant/account/org
+    false
+}
+
+/// bolaSetup.ts:shapeScore → Some((score, shape_name)) or None.
+pub fn shape_score(v: &str) -> Option<(i64, &'static str)> {
+    if detect_uuid_re().is_match(v)  { return Some((90, "uuid")); }
+    if detect_hex24_re().is_match(v) { return Some((88, "hex24")); }
+    if detect_num_re().is_match(v)   { return Some((55, "numeric")); }
+    None
+}
+
+/// Minimal request shape detection needs (url = PATH-LIKE, e.g. "/orders/123").
+/// The bola-suggest CLI adapter is responsible for reducing the absolute config url
+/// to a pathname before constructing this struct. See §2 of the spec.
+#[derive(Debug, Clone)]
+pub struct DetectableRequest {
+    /// PATH-LIKE url (pathname only — NO scheme/host). E.g. "/orders/123".
+    pub url: String,
+    /// Resolved query (key, value) pairs — merged inline-url ?query + structured query.
+    pub params: Vec<(String, String)>,
+    /// Raw resolved body string (may be JSON or non-JSON).
+    pub body: Option<String>,
+}
+
+/// One ranked id-location candidate from detect_id_location.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BolaIdCandidate {
+    /// Reuses the existing config::IdLocation enum (path/query/body).
+    pub id_location: crate::config::IdLocation,
+    /// The resolved sample value found at this location.
+    pub value: String,
+    /// "high" (score >= 75), "medium" (>= 50), or "low".
+    pub confidence: String,
+    /// Human-readable explanation.
+    pub why: String,
+}
+
+/// Port of bolaSetup.ts:detectIdLocation.
+/// Takes a DetectableRequest whose `url` is PATH-LIKE (pathname only — no scheme/host)
+/// and returns candidates sorted by score descending.
+pub fn detect_id_location(req: &DetectableRequest) -> Vec<BolaIdCandidate> {
+    let mut cands: Vec<(crate::config::IdLocation, String, i64, String)> = Vec::new();
+
+    // ── path ──
+    let path_part = req.url.split('?').next().unwrap_or("");
+    let segs: Vec<&str> = path_part.split('/').filter(|s| !s.is_empty()).collect();
+    for (i, seg) in segs.iter().enumerate() {
+        if let Some((base_score, shape)) = shape_score(seg) {
+            let prev = if i > 0 { segs[i - 1] } else { "" };
+            let plural = plural_re().is_match(prev);
+            let boost = if plural {
+                if shape == "numeric" { 25 } else { 5 }
+            } else { 0 };
+            let score = base_score + boost;
+            let why = if plural {
+                format!("path segment {} ({}, after /{})", i, shape, prev)
+            } else {
+                format!("path segment {} ({})", i, shape)
+            };
+            cands.push((crate::config::IdLocation::Path { index: i }, seg.to_string(), score, why));
+        }
+    }
+
+    // ── query ──
+    for (key, value) in &req.params {
+        if is_id_key(key) {
+            let strong = detect_uuid_re().is_match(value) || detect_hex24_re().is_match(value);
+            let score = if strong { 78 } else { 55 };
+            let why = format!("query key {}", key);
+            cands.push((crate::config::IdLocation::Query { key: key.clone() }, value.clone(), score, why));
+        }
+    }
+
+    // ── body ──
+    if let Some(body_str) = &req.body {
+        if let Ok(body_val) = serde_json::from_str::<Value>(body_str) {
+            if body_val.is_object() || body_val.is_array() {
+                walk_json(&body_val, "", 0, &mut |path, key_opt, val| {
+                    if val.is_null() || val.is_object() || val.is_array() { return; }
+                    if let Some(k) = key_opt {
+                        if is_id_key(k) {
+                            // js_string for JS String(val) parity — NOT val.to_string()
+                            let v = js_string(val);
+                            let strong = detect_uuid_re().is_match(&v) || detect_hex24_re().is_match(&v);
+                            let score = if strong { 72 } else { 50 };
+                            let why = format!("body field {}", path);
+                            cands.push((crate::config::IdLocation::Body { path: path.to_string() }, v, score, why));
+                        }
+                    }
+                });
+            }
+        }
+        // non-JSON body → skip (no error)
+    }
+
+    // sort score descending (stable)
+    cands.sort_by(|a, b| b.2.cmp(&a.2));
+
+    cands.into_iter().map(|(loc, value, score, why)| {
+        let confidence = if score >= 75 { "high" } else if score >= 50 { "medium" } else { "low" };
+        BolaIdCandidate {
+            id_location: loc,
+            value,
+            confidence: confidence.to_string(),
+            why,
+        }
+    }).collect()
+}
+
 // ── id mutation on the CLI config Request (NOT TS-fixtured — a documented adaptation) ──
 fn set_at_path(obj: &mut Value, path: &str, value: Value) -> bool {
     let dotted = array_index_re_dot().replace_all(path, ".$1");
@@ -375,6 +531,69 @@ mod tests {
         assert_eq!(synthetic_id_for(&json!(42)), "999999999");
         assert_eq!(synthetic_id_for(&json!("550e8400-e29b-41d4-a716-446655440000")), "ffffffff-eeee-4ddd-8ccc-bbbbaaaa9999");
         assert_eq!(synthetic_id_for(&json!("abc")), "qa-nonexistent-2c1f9a");
+    }
+    #[test] fn is_id_key_denylist_excluded() {
+        for w in ["count","page","limit","size","offset","total","per_page","perpage","page_size","pagesize"] {
+            assert!(!is_id_key(w), "denylist word `{w}` must return false");
+        }
+    }
+    #[test] fn is_id_key_patterns() {
+        assert!(is_id_key("id"),         "bare 'id'");
+        assert!(is_id_key("user_id"),    "_id suffix");
+        assert!(is_id_key("USER_ID"),    "_id suffix case-insensitive");
+        assert!(is_id_key("userId"),     "camelCase Id");
+        assert!(is_id_key("accountId"),  "camelCase accountId");
+        assert!(is_id_key("uuid"),       "uuid org token");
+        assert!(is_id_key("tenant_id"),  "tenant token");
+        assert!(is_id_key("org_id"),     "org token");
+        assert!(!is_id_key("name"),      "plain 'name' is not an id key");
+        assert!(!is_id_key("email"),     "plain 'email' is not an id key");
+        assert!(!is_id_key("status"),    "plain 'status' is not an id key");
+    }
+    #[test] fn shape_score_variants() {
+        assert_eq!(shape_score("550e8400-e29b-41d4-a716-446655440000"), Some((90, "uuid")));
+        assert_eq!(shape_score("0123456789abcdef01234567"),             Some((88, "hex24")));
+        assert_eq!(shape_score("123"),                                  Some((55, "numeric")));
+        assert_eq!(shape_score("hello"),                                None);
+        assert_eq!(shape_score(""),                                     None);
+    }
+    #[test] fn detect_plural_noun_numeric_boost_reaches_high() {
+        // "/orders/42" → numeric 55 + plural-noun boost +25 = 80 → "high"
+        let req = DetectableRequest { url: "/orders/42".into(), params: vec![], body: None };
+        let cands = detect_id_location(&req);
+        assert!(!cands.is_empty(), "must detect a candidate");
+        let top = &cands[0];
+        assert_eq!(top.value, "42");
+        assert_eq!(top.confidence, "high", "plural-noun boost must push numeric to high");
+        match &top.id_location {
+            crate::config::IdLocation::Path { index } => assert_eq!(*index, 1),
+            other => panic!("expected path candidate, got {:?}", other),
+        }
+    }
+    #[test] fn detect_query_id_key() {
+        let req = DetectableRequest {
+            url: "/orders".into(),
+            params: vec![("user_id".into(), "42".into()), ("page".into(), "1".into())],
+            body: None,
+        };
+        let cands = detect_id_location(&req);
+        assert_eq!(cands.len(), 1, "only user_id matches; page is denylist");
+        assert_eq!(cands[0].value, "42");
+        match &cands[0].id_location {
+            crate::config::IdLocation::Query { key } => assert_eq!(key, "user_id"),
+            other => panic!("expected query candidate, got {:?}", other),
+        }
+    }
+    #[test] fn detect_body_id_field_js_string() {
+        // js_string(42) = "42" (NOT "42" quoted as `"42"`) — confirms we use js_string not to_string
+        let req = DetectableRequest {
+            url: "/items".into(),
+            params: vec![],
+            body: Some(r#"{"userId":42}"#.into()),
+        };
+        let cands = detect_id_location(&req);
+        assert!(!cands.is_empty());
+        assert_eq!(cands[0].value, "42"); // js_string(Number(42)) == "42"
     }
     #[test] fn apply_id_path_query_body() {
         let mk = |url: &str, q: Vec<Kv>, body: Option<&str>| Request { id:"r".into(), method:"GET".into(), url:url.into(),

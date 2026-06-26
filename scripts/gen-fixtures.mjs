@@ -369,3 +369,55 @@ const runBump = oRun({ status:200, response:{ body:{ id:1, name:'a', tags:['x'],
   .map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, path:f.path }));
 writeFileSync(join(OUT,'security_oracles.json'), JSON.stringify({ sensitive: sensOut, redact: redactCases, schema: schemaCases, runBump }, null, 2) + '\n');
 console.log('wrote security_oracles.json');
+
+// ── bolasetup: detect_id_location golden fixtures ────────────────────────────
+// url inputs are PATH-LIKE (pathname only — no scheme/host) to match the pure fn
+// and the CLI adapter behaviour. Each case must have DISTINCT candidate scores
+// (no exact ties) so the ordered-Vec compare is deterministic.
+const { detectIdLocation: dIdLoc } = await import('./_bolasetup-bridge.mjs');
+const bolasetupCases = [
+  // numeric path id after plural noun → score 55+25=80 → "high"
+  { name: 'path_numeric_after_plural',
+    req: { url: '/orders/42', params: [], body: null } },
+  // uuid path id without plural noun → score 90+0=90 → "high"
+  { name: 'path_uuid_no_plural',
+    req: { url: '/item/550e8400-e29b-41d4-a716-446655440000', params: [], body: null } },
+  // query key matching is_id_key with numeric value → score 55 → "medium"
+  { name: 'query_id_key_numeric',
+    req: { url: '/search', params: [{ key: 'user_id', value: '99', on: true }], body: null } },
+  // query key matching is_id_key with UUID value → score 78 → "high"
+  { name: 'query_id_key_uuid',
+    req: { url: '/items', params: [{ key: 'userId', value: '550e8400-e29b-41d4-a716-446655440000', on: true }], body: null } },
+  // body field with id key, numeric value → score 50 → "medium"
+  { name: 'body_id_field_numeric',
+    req: { url: '/create', params: [], body: JSON.stringify({ orderId: 77 }) } },
+  // body field with id key, hex24 value → score 72 → "medium"  (72 >= 50, < 75)
+  { name: 'body_id_field_hex24',
+    req: { url: '/update', params: [], body: JSON.stringify({ documentId: '0123456789abcdef01234567' }) } },
+  // denylist key in query → excluded → empty candidates
+  { name: 'denylist_key_excluded',
+    req: { url: '/list', params: [{ key: 'page', value: '2', on: true }], body: null } },
+  // non-id key in query → excluded → empty candidates
+  { name: 'non_id_key_ignored',
+    req: { url: '/list', params: [{ key: 'name', value: 'alice', on: true }], body: null } },
+  // non-JSON body → no body candidates
+  { name: 'non_json_body_skipped',
+    req: { url: '/upload', params: [], body: 'not-json' } },
+  // multi-candidate: path uuid + query id → ordered by score (uuid path 90 > query uuid 78)
+  { name: 'multi_candidate_order',
+    req: { url: '/users/550e8400-e29b-41d4-a716-446655440000',
+           params: [{ key: 'account_id', value: '7', on: true }],
+           body: null } },
+];
+// TS detectIdLocation takes the same DetectableRequest shape (url, params, body).
+// params items need on:true to not be filtered (the TS fn filters p.on !== false).
+// However the TS fn uses p.key / p.value directly — the on field is not checked in
+// detectIdLocation itself (it is checked by buildReq before calling detect). So we
+// pass them through directly (the TS fn only reads p.key and p.value).
+const bolasetupOut = bolasetupCases.map(c => ({
+  name: c.name,
+  req: c.req,
+  expected: dIdLoc(c.req),
+}));
+writeFileSync(join(OUT, 'security_bolasetup.json'), JSON.stringify(bolasetupOut, null, 2) + '\n');
+console.log(`wrote security_bolasetup.json (${bolasetupOut.length} cases)`);
