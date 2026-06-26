@@ -95,6 +95,23 @@ fn sanitize_path(path: &str) -> String {
     out
 }
 
+/// Scalar values of fields whose KEY matched a "secrets"-group rule (password/token/…). These are
+/// secret-by-NAME (not by format), so a value-regex would not catch them; if a server echoes such a
+/// value as a JSON key, it reappears as a path segment. run_oracles redacts these across all paths.
+fn secret_name_values(body: &Value) -> std::collections::BTreeSet<String> {
+    let mut vals: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let key_rules: Vec<&Regex> = rules().iter().filter(|r| r.group == "secrets").filter_map(|r| r.key.as_ref()).collect();
+    if key_rules.is_empty() { return vals; }
+    if body.is_object() || body.is_array() {
+        walk_json(body, "", 0, &mut |_p, k, v| {
+            if !k.is_empty() && key_rules.iter().any(|re| re.is_match(k)) {
+                if let Some(s) = value_to_match_str(v) { if !s.is_empty() { vals.insert(s); } }
+            }
+        });
+    }
+    vals
+}
+
 // Free fn (NOT a closure) so it can take &mut out/&mut seen without nested-closure borrow conflicts.
 #[allow(clippy::too_many_arguments)]
 fn emit(out: &mut Vec<Finding>, seen: &mut std::collections::BTreeSet<String>, cfg: &OracleConfig,
@@ -211,6 +228,20 @@ pub fn run_oracles(status: i64, body: &Value, headers: &Value, baseline: Option<
             }
         }
     }
+    // Final safety pass: redact secret-by-NAME values (e.g. a password value) wherever they appear
+    // as a path segment — covers a server that echoes such a value as a JSON key. Runs after the
+    // bump so path matching above is unaffected. (scan_sensitive/check_schema stay TS-faithful;
+    // this name-aware redaction lives only at the integration layer that produces output.)
+    let name_secrets = secret_name_values(body);
+    if !name_secrets.is_empty() {
+        let mut ordered: Vec<&String> = name_secrets.iter().collect();
+        ordered.sort_by_key(|s| std::cmp::Reverse(s.len())); // longest-first: redact superstrings before substrings
+        for f in &mut out {
+            for s in &ordered {
+                if f.path.contains(s.as_str()) { f.path = f.path.replace(s.as_str(), &redact(s)); }
+            }
+        }
+    }
     out
 }
 
@@ -249,5 +280,17 @@ mod tests {
         let fs = scan_sensitive(&json!({"password": null}), &json!({}), &OracleConfig::default());
         let f = fs.iter().find(|f| f.rule_id == "secret-name").expect("secret-name finding");
         assert_eq!(f.evidence, "••••••••", "null value redacts as 8 bullets like TS String('[object]')");
+    }
+    #[test] fn secret_name_value_reused_as_key_is_masked_in_path() {
+        // A secret-by-NAME value (a password value) that the server also uses as an object key must
+        // not leak via child finding paths — covers BOTH sensitive (email) and schema (undeclared).
+        let body = json!({"password":"hunter2longvalue","hunter2longvalue":{"email":"x@y.com"}});
+        let baseline = infer_contract(&json!({"password":"x"}));
+        let fs = run_oracles(200, &body, &json!({}), Some(&baseline), &OracleConfig::default());
+        for f in &fs {
+            assert!(!f.path.contains("hunter2longvalue"), "secret value reused as key leaked in {} path: {}", f.rule_id, f.path);
+        }
+        assert!(fs.iter().any(|f| f.rule_id == "email"), "email finding present");
+        assert!(fs.iter().any(|f| f.rule_id.starts_with("schema:")), "schema finding present");
     }
 }
