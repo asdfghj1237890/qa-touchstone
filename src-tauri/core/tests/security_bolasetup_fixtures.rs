@@ -68,6 +68,10 @@ fn bolasetup_matches_ts() {
             why: g.why.clone(),
         }).collect();
 
+        // Ordered compare (the candidate list IS a ranking). Every fixture case uses DISTINCT
+        // candidate scores, so order is deterministic across TS object-insertion vs Rust
+        // serde_json key order; for EQUAL-score candidates the relative order is unspecified
+        // (non-contract) — the cases deliberately avoid such ties.
         assert_eq!(
             got_cmp, c.expected,
             "bolasetup case `{}`: Rust detect_id_location output must match TS detectIdLocation output",

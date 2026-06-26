@@ -21,10 +21,12 @@ fn build_detectable(
     req: &qa_touchstone_core::config::Request,
     var_map: &std::collections::BTreeMap<String, String>,
 ) -> DetectableRequest {
-    // Substitute {{vars}} in url, query values, and body content.
+    // Substitute {{vars}} in url, query keys + values, and body content (a templated query KEY
+    // like `{{idParam}}` must resolve so detection + the merge use the same resolved key the
+    // built request would have).
     let resolved_url = qa_substitute(&req.url, var_map, &mut RealDynamics);
     let resolved_query: Vec<(String, String)> = req.query.iter()
-        .map(|kv| (kv.key.clone(), qa_substitute(&kv.value, var_map, &mut RealDynamics)))
+        .map(|kv| (qa_substitute(&kv.key, var_map, &mut RealDynamics), qa_substitute(&kv.value, var_map, &mut RealDynamics)))
         .collect();
     let resolved_body: Option<String> = req.body.as_ref().map(|b| {
         qa_substitute(&b.content, var_map, &mut RealDynamics)
@@ -177,7 +179,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
         println!("{}", red.redact_str(&serde_json::to_string(&results).unwrap()));
     } else {
         for r in &results {
-            println!("request: {}", r.request);
+            println!("request: {}", red.redact_str(&r.request));
             if let Some(note) = &r.note {
                 println!("  note: {}", note);
             } else {
