@@ -1,0 +1,160 @@
+{
+  "sensitive": [
+    {
+      "name": "jwt",
+      "findings": [
+        {
+          "ruleId": "jwt",
+          "oracle": "sensitive-data",
+          "severity": "high",
+          "path": "token",
+          "evidence": "eyJ…<redacted>…EF"
+        },
+        {
+          "ruleId": "secret-name",
+          "oracle": "sensitive-data",
+          "severity": "critical",
+          "path": "token",
+          "evidence": "eyJ…<redacted>…EF"
+        }
+      ]
+    },
+    {
+      "name": "aws-key",
+      "findings": [
+        {
+          "ruleId": "aws-key",
+          "oracle": "sensitive-data",
+          "severity": "high",
+          "path": "key",
+          "evidence": "AKI…<redacted>…LE"
+        }
+      ]
+    },
+    {
+      "name": "private-key",
+      "findings": [
+        {
+          "ruleId": "private-key",
+          "oracle": "sensitive-data",
+          "severity": "critical",
+          "path": "pem",
+          "evidence": "---…<redacted>…xx"
+        }
+      ]
+    },
+    {
+      "name": "secret-name",
+      "findings": [
+        {
+          "ruleId": "secret-name",
+          "oracle": "sensitive-data",
+          "severity": "critical",
+          "path": "password",
+          "evidence": "•••••••"
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "findings": [
+        {
+          "ruleId": "email",
+          "oracle": "sensitive-data",
+          "severity": "medium",
+          "path": "contact",
+          "evidence": "use…<redacted>…om"
+        }
+      ]
+    },
+    {
+      "name": "card_luhn_ok",
+      "findings": [
+        {
+          "ruleId": "card",
+          "oracle": "sensitive-data",
+          "severity": "high",
+          "path": "pan",
+          "evidence": "411…<redacted>…11"
+        }
+      ]
+    },
+    {
+      "name": "card_luhn_no",
+      "findings": []
+    },
+    {
+      "name": "internal",
+      "findings": [
+        {
+          "ruleId": "internal",
+          "oracle": "sensitive-data",
+          "severity": "medium",
+          "path": "stack_trace",
+          "evidence": "••••"
+        }
+      ]
+    },
+    {
+      "name": "leaky_header",
+      "findings": [
+        {
+          "ruleId": "leaky-header",
+          "oracle": "sensitive-data",
+          "severity": "medium",
+          "path": "header:Server",
+          "evidence": "ngi…<redacted>….2"
+        }
+      ]
+    },
+    {
+      "name": "secret_as_key",
+      "findings": [
+        {
+          "ruleId": "jwt",
+          "oracle": "sensitive-data",
+          "severity": "high",
+          "path": "eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123",
+          "evidence": "eyJ…<redacted>…23"
+        }
+      ]
+    },
+    {
+      "name": "dedup",
+      "findings": [
+        {
+          "ruleId": "email",
+          "oracle": "sensitive-data",
+          "severity": "medium",
+          "path": "a.email",
+          "evidence": "•••••••"
+        },
+        {
+          "ruleId": "email",
+          "oracle": "sensitive-data",
+          "severity": "medium",
+          "path": "b.email",
+          "evidence": "•••••••"
+        }
+      ]
+    }
+  ],
+  "redact": [
+    {
+      "s": "",
+      "expected": ""
+    },
+    {
+      "s": "short",
+      "expected": "•••••"
+    },
+    {
+      "s": "abcdefgh",
+      "expected": "••••••••"
+    },
+    {
+      "s": "eyJverylongsecretvalue99",
+      "expected": "eyJ…<redacted>…99"
+    }
+  ]
+}

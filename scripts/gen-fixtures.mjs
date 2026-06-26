@@ -288,3 +288,22 @@ const sevLevel = ['critical','high','medium','low','info'].map(s => ({ s, expect
 const baseState = ['new','carried','resolved'].map(p => ({ p, expected: bS(p) }));
 writeFileSync(join(OUT,'security_report.json'), JSON.stringify({ sarif, junit, sevLevel, baseState }, null, 2) + '\n');
 console.log('wrote security_report.json');
+
+const { scanSensitive: oScan, redact: oRedact } = await import('./_oracles-bridge.mjs');
+const sensCases = [
+  { name:'jwt',          resp:{ status:200, headers:{}, body:{ token:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdEF' } } },
+  { name:'aws-key',      resp:{ status:200, headers:{}, body:{ key:'AKIAIOSFODNN7EXAMPLE' } } },
+  { name:'private-key',  resp:{ status:200, headers:{}, body:{ pem:'-----BEGIN RSA PRIVATE KEY-----xxxx' } } },
+  { name:'secret-name',  resp:{ status:200, headers:{}, body:{ password:'hunter2', other:'ok' } } },
+  { name:'email',        resp:{ status:200, headers:{}, body:{ contact:'user@example.com' } } },
+  { name:'card_luhn_ok', resp:{ status:200, headers:{}, body:{ pan:'4111 1111 1111 1111' } } },
+  { name:'card_luhn_no', resp:{ status:200, headers:{}, body:{ pan:'4111 1111 1111 1112' } } },
+  { name:'internal',     resp:{ status:200, headers:{}, body:{ stack_trace:'at x' } } },
+  { name:'leaky_header', resp:{ status:200, headers:{ Server:'nginx/1.2' }, body:{} } },
+  { name:'secret_as_key',resp:{ status:200, headers:{}, body:{ 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123':'eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123' } } },
+  { name:'dedup',        resp:{ status:200, headers:{}, body:{ a:{ email:'x@y.com' }, b:{ email:'x@y.com' } } } },
+];
+const sensOut = sensCases.map(c => ({ name:c.name, findings: oScan(c.resp).map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, path:f.path, evidence:f.evidence })) }));
+const redactCases = ['', 'short', 'abcdefgh', 'eyJverylongsecretvalue99'].map(s => ({ s, expected: oRedact(s) }));
+writeFileSync(join(OUT,'security_oracles.json'), JSON.stringify({ sensitive: sensOut, redact: redactCases }, null, 2) + '\n');
+console.log('wrote security_oracles.json');

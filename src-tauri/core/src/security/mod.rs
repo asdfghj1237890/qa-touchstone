@@ -3,6 +3,7 @@ pub mod authz;
 pub mod bola;
 pub mod finding;
 pub mod lifecycle;
+pub mod oracles;
 pub mod ratelimit;
 pub mod report;
 pub mod runner;
