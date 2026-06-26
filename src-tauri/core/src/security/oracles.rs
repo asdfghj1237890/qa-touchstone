@@ -78,16 +78,35 @@ fn value_to_match_str(v: &Value) -> Option<String> { // rules match strings + nu
     match v { Value::String(s) => Some(s.clone()), Value::Number(n) => Some(n.to_string()), _ => None }
 }
 
+/// Redact secret-VALUE patterns (jwt/aws-key/private-key/email/card) anywhere in a finding path —
+/// covers a secret used as a JSON *key* (an ancestor of the matched field), which would otherwise
+/// reach JSON/SARIF/HTML/baseline output (the CLI redaction set only covers identity-auth secrets).
+/// Internal dedup/fingerprint keys use the RAW path; only the emitted Finding.path is sanitized.
+fn sanitize_path(path: &str) -> String {
+    let mut out = path.to_string();
+    for rule in rules() {
+        let Some(re) = &rule.value else { continue };
+        let hits: Vec<String> = re.find_iter(&out)
+            .filter(|m| !rule.luhn || luhn_valid(m.as_str()))
+            .map(|m| m.as_str().to_string())
+            .collect();
+        for h in hits { out = out.replace(&h, &redact(&h)); }
+    }
+    out
+}
+
 // Free fn (NOT a closure) so it can take &mut out/&mut seen without nested-closure borrow conflicts.
 #[allow(clippy::too_many_arguments)]
 fn emit(out: &mut Vec<Finding>, seen: &mut std::collections::BTreeSet<String>, cfg: &OracleConfig,
-        id: &str, group: &str, sev: Severity, title: &str, raw_path: &str, matched: Option<&str>, value: &Value) {
+        id: &str, group: &str, sev: Severity, title: &str, raw_path: &str, value: &Value) {
     let k = format!("{id}@{raw_path}");
     if !seen.insert(k) { return; }                 // BTreeSet::insert → false if already present
-    // path-secret masking: replace the matched substring within `path` with redact()
-    let path = match matched { Some(m) if raw_path.contains(m) => raw_path.replace(m, &redact(m)), _ => raw_path.to_string() };
-    let ev_src = match value { Value::Object(_) | Value::Array(_) => "[object]".to_string(),
-        Value::String(s) => s.clone(), Value::Number(n) => n.to_string(), Value::Bool(b) => b.to_string(), Value::Null => String::new() };
+    // Redact any secret value that appears in the path (e.g. a secret used as an ancestor key).
+    let path = sanitize_path(raw_path);
+    // TS parity (oracles.ts:120): a key-rule on an object/array/null value pushes "[object]";
+    // value-rules only ever match strings/numbers, so they carry their own value here.
+    let ev_src = match value { Value::Object(_) | Value::Array(_) | Value::Null => "[object]".to_string(),
+        Value::String(s) => s.clone(), Value::Number(n) => n.to_string(), Value::Bool(b) => b.to_string() };
     let severity = cfg.severity_overrides.get(group).copied().unwrap_or(sev);
     out.push(Finding { engine: EngineId::Oracle, severity, rule_id: id.into(), oracle: "sensitive-data".into(),
         title: title.into(), path, evidence: redact(&ev_src), method: None, endpoint: None, identity: None });
@@ -104,7 +123,7 @@ pub fn scan_sensitive(body: &Value, headers: &Value, cfg: &OracleConfig) -> Vec<
         for (hk, hv) in h {
             if lh.is_match(hk) {
                 let hvs = hv.as_str().map(|s| s.to_string()).unwrap_or_else(|| hv.to_string());
-                emit(&mut out, &mut seen, cfg, "leaky-header", "internal", Severity::Medium, "Server/version header", &format!("header:{hk}"), None, &Value::String(hvs));
+                emit(&mut out, &mut seen, cfg, "leaky-header", "internal", Severity::Medium, "Server/version header", &format!("header:{hk}"), &Value::String(hvs));
             }
         }
     }
@@ -118,7 +137,7 @@ pub fn scan_sensitive(body: &Value, headers: &Value, cfg: &OracleConfig) -> Vec<
         for rule in rules() {
             if let Some(kre) = &rule.key {
                 if !key.is_empty() && kre.is_match(key) {
-                    emit(&mut out, &mut seen, cfg, rule.id, rule.group, rule.severity, rule.title, path, None, value);
+                    emit(&mut out, &mut seen, cfg, rule.id, rule.group, rule.severity, rule.title, path, value);
                     continue;
                 }
             }
@@ -126,7 +145,7 @@ pub fn scan_sensitive(body: &Value, headers: &Value, cfg: &OracleConfig) -> Vec<
                 if let Some(s) = value_to_match_str(value) {
                     if let Some(m) = vre.find(&s) {
                         if rule.luhn && !luhn_valid(m.as_str()) { continue; }
-                        emit(&mut out, &mut seen, cfg, rule.id, rule.group, rule.severity, rule.title, path, Some(m.as_str()), value);
+                        emit(&mut out, &mut seen, cfg, rule.id, rule.group, rule.severity, rule.title, path, value);
                     }
                 }
             }
@@ -161,7 +180,7 @@ pub fn check_schema(body: &Value, contract: &Contract, cfg: &OracleConfig) -> Ve
     }
     let mk = |rule: &str, sev: Severity, title: &str, path: &str, ev: String| Finding {
         engine: EngineId::Oracle, severity: sev, rule_id: rule.into(), oracle: "schema".into(),
-        title: title.into(), path: path.into(), evidence: ev, method: None, endpoint: None, identity: None };
+        title: title.into(), path: sanitize_path(path), evidence: ev, method: None, endpoint: None, identity: None };
     for (p, ty) in &present {
         match contract.get(p) {
             None => out.push(mk("schema:undeclared", Severity::Low, "Undeclared field", p, String::new())),
@@ -210,5 +229,25 @@ mod tests {
     #[test] fn walk_depth_cap_no_panic() {
         let mut v = json!("x"); for _ in 0..200 { v = json!({"a": v}); }
         let _ = scan_sensitive(&v, &json!({}), &OracleConfig::default());
+    }
+    #[test] fn secret_in_ancestor_key_is_masked_in_path() {
+        // A secret used as an object KEY (ancestor of the matched field) must not leak into the path.
+        let body = json!({"AKIAIOSFODNN7EXAMPLE": {"token": "eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123"}});
+        let fs = scan_sensitive(&body, &json!({}), &OracleConfig::default());
+        let jwt = fs.iter().find(|f| f.rule_id == "jwt").expect("jwt finding");
+        assert!(!jwt.path.contains("AKIAIOSFODNN7EXAMPLE"), "ancestor secret key must be redacted in path: {}", jwt.path);
+        assert!(jwt.path.contains("…<redacted>…"), "path should carry the redaction marker: {}", jwt.path);
+    }
+    #[test] fn schema_path_redacts_secret_key() {
+        // Schema findings must redact a secret used as a key too (raw path previously leaked it).
+        let fs = check_schema(&json!({"AKIAIOSFODNN7EXAMPLE": "v"}), &Contract::new(), &OracleConfig::default());
+        let f = fs.iter().find(|f| f.rule_id == "schema:undeclared").expect("undeclared finding");
+        assert!(!f.path.contains("AKIAIOSFODNN7EXAMPLE"), "schema path must redact a secret key: {}", f.path);
+    }
+    #[test] fn null_secret_field_evidence_is_object() {
+        // TS parity (typeof null === 'object'): a secret-named key with a null value → "[object]" → 8 bullets.
+        let fs = scan_sensitive(&json!({"password": null}), &json!({}), &OracleConfig::default());
+        let f = fs.iter().find(|f| f.rule_id == "secret-name").expect("secret-name finding");
+        assert_eq!(f.evidence, "••••••••", "null value redacts as 8 bullets like TS String('[object]')");
     }
 }

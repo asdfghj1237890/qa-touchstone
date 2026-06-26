@@ -22,6 +22,7 @@ fn resp_for(name: &str) -> (Value, Value) { // (body, headers) — mirrors gen-f
         "aws-key" => (json!({"key":"AKIAIOSFODNN7EXAMPLE"}), json!({})),
         "private-key" => (json!({"pem":"-----BEGIN RSA PRIVATE KEY-----xxxx"}), json!({})),
         "secret-name" => (json!({"password":"hunter2","other":"ok"}), json!({})),
+        "secret_null" => (json!({"password":null}), json!({})),
         "email" => (json!({"contact":"user@example.com"}), json!({})),
         "card_luhn_ok" => (json!({"pan":"4111 1111 1111 1111"}), json!({})),
         "card_luhn_no" => (json!({"pan":"4111 1111 1111 1112"}), json!({})),

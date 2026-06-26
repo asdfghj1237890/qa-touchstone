@@ -61,6 +61,19 @@
       ]
     },
     {
+      "name": "secret_null",
+      "findings": [
+        {
+          "ruleId": "secret-name",
+          "oracle": "sensitive-data",
+          "severity": "critical",
+          "title": "Secret-named field present",
+          "path": "password",
+          "evidence": "••••••••"
+        }
+      ]
+    },
+    {
       "name": "email",
       "findings": [
         {

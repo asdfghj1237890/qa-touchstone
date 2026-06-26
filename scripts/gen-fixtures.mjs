@@ -295,6 +295,7 @@ const sensCases = [
   { name:'aws-key',      resp:{ status:200, headers:{}, body:{ key:'AKIAIOSFODNN7EXAMPLE' } } },
   { name:'private-key',  resp:{ status:200, headers:{}, body:{ pem:'-----BEGIN RSA PRIVATE KEY-----xxxx' } } },
   { name:'secret-name',  resp:{ status:200, headers:{}, body:{ password:'hunter2', other:'ok' } } },
+  { name:'secret_null',  resp:{ status:200, headers:{}, body:{ password:null } } },
   { name:'email',        resp:{ status:200, headers:{}, body:{ contact:'user@example.com' } } },
   { name:'card_luhn_ok', resp:{ status:200, headers:{}, body:{ pan:'4111 1111 1111 1111' } } },
   { name:'card_luhn_no', resp:{ status:200, headers:{}, body:{ pan:'4111 1111 1111 1112' } } },

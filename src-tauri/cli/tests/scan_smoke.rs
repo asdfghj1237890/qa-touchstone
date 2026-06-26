@@ -233,3 +233,28 @@ async fn scan_oracles_disabled_no_finding() {
     let out = bin().args(["scan","--config",cfg.to_str().unwrap()]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "oracles disabled ⇒ no jwt finding ⇒ exit 0");
 }
+
+#[tokio::test]
+async fn scan_oracle_secret_as_key_not_leaked() {
+    // A secret used as a JSON object KEY (with a JWT child) must NOT leak into JSON or SARIF output.
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/u")).respond_with(ResponseTemplate::new(200)
+        .set_body_string(r#"{"AKIAIOSFODNN7EXAMPLE":{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ4In0.abcdEFsig"}}"#)).mount(&s).await;
+    let cfg = write_temp("orckey.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"u","method":"GET","url":"{base}/u"}}],
+      "security":{{"matrix":{{"endpoints":["u"],"expect":{{"u":{{"anon":"allow"}}}}}}}} }}"#, base=s.uri()));
+    let sarif = write_temp("orckey.sarif", "");
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--sarif",sarif.to_str().unwrap(),"--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "the JWT child of a secret-named key still gates");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let sf = std::fs::read_to_string(&sarif).unwrap();
+    for sink in [stdout.as_ref(), sf.as_str()] {
+        assert!(!sink.contains("AKIAIOSFODNN7EXAMPLE"), "secret-as-key must not leak into JSON/SARIF: {sink}");
+        assert!(!sink.contains("abcdEFsig"), "raw JWT value must not leak into JSON/SARIF");
+    }
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let jwt = v["findings"].as_array().unwrap().iter().find(|f| f["rule_id"] == "jwt").expect("jwt finding present");
+    assert_eq!(jwt["engine"], "oracle");
+    assert!(jwt["path"].as_str().unwrap().contains("…<redacted>…"), "the secret-as-key in the path must be redacted");
+}
