@@ -63,21 +63,41 @@ fn body_mode_token(m: &qa_touchstone_core::config::BodyMode) -> &'static str {
     match m { BodyMode::None => "none", BodyMode::Json => "json", BodyMode::Raw => "raw" }
 }
 
+/// Reduce a request url to its canonical drift surface — `scheme://host[:port]/path` — dropping
+/// userinfo (`user:pass@`), the `?query`, and the `#fragment`, ANY of which can carry a hardcoded
+/// literal secret that the baseline's FNV digest would otherwise expose to brute-force. Pure string
+/// ops so templated urls (e.g. `{{apiHost}}/x`) are handled too: no `://` => just strip query/fragment.
+fn scope_url(url: &str) -> String {
+    let before_frag = url.split('#').next().unwrap_or("");
+    let before_q = before_frag.split('?').next().unwrap_or("");
+    match before_q.find("://") {
+        Some(p) => {
+            let (scheme_sep, rest) = before_q.split_at(p + 3); // "scheme://"
+            let (authority, path) = match rest.find('/') {
+                Some(i) => (&rest[..i], &rest[i..]),
+                None => (rest, ""),
+            };
+            let host_port = authority.rsplit('@').next().unwrap_or(authority); // drop userinfo (after last '@')
+            format!("{scheme_sep}{host_port}{path}")
+        }
+        None => before_q.to_string(), // templated/relative: no authority to strip
+    }
+}
+
 /// Canonical, sorted, secret-free descriptor of the scanned surface, for scope-drift detection.
 fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     use serde_json::{json, Map, Value};
-    // Secret-safe shape: we hash header/query KEY names + method/url-without-query/body-mode/privileged,
-    // but NOT free-form header/query VALUES, body CONTENT, or the url's inline ?query string — any of
-    // those can hold a hardcoded literal secret the final FNV digest (stored in the baseline) would
-    // otherwise expose to brute-force. (scheme/host/path is retained for endpoint-drift detection.)
+    // Secret-safe shape: we hash header/query KEY names + method/canonical-url/body-mode/privileged,
+    // but NOT free-form header/query VALUES, body CONTENT, or any secret-bearing url part (userinfo,
+    // ?query, #fragment) — any can hold a hardcoded literal secret the final FNV digest (stored in the
+    // baseline) would otherwise expose to brute-force. (scheme/host/path kept for endpoint-drift.)
     let req_shape = |id: &str| -> Value {
         match cfg.requests.iter().find(|r| r.id == id) {
             Some(r) => {
                 let mut hk: Vec<String> = r.headers.iter().map(|k| k.key.clone()).collect(); hk.sort();
                 let mut qk: Vec<String> = r.query.iter().map(|k| k.key.clone()).collect(); qk.sort();
                 let body_mode = r.body.as_ref().map(|b| body_mode_token(&b.mode)).unwrap_or("none");
-                let url_base = r.url.split('?').next().unwrap_or("");
-                json!({ "method": r.method, "url": url_base, "privileged": r.privileged, "headerKeys": hk, "queryKeys": qk, "bodyMode": body_mode })
+                json!({ "method": r.method, "url": scope_url(&r.url), "privileged": r.privileged, "headerKeys": hk, "queryKeys": qk, "bodyMode": body_mode })
             }
             None => Value::Null,
         }
@@ -354,6 +374,18 @@ mod tests {
         let one = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r1","method":"GET","url":"https://h/r1"}],"security":{"matrix":{"endpoints":[]}}}"#, &|_| None).unwrap();
         let two = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r1","method":"GET","url":"https://h/r1"},{"id":"r2","method":"POST","url":"https://h/r2"}],"security":{"matrix":{"endpoints":[]}}}"#, &|_| None).unwrap();
         assert_ne!(build_scope_descriptor(&one, None), build_scope_descriptor(&two, None), "with empty endpoints, adding a request must flip the descriptor (all requests are scanned)");
+        // ...and r2's SHAPE (not just its id) is captured: changing r2's method must flip the hash.
+        let two_put = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r1","method":"GET","url":"https://h/r1"},{"id":"r2","method":"PUT","url":"https://h/r2"}],"security":{"matrix":{"endpoints":[]}}}"#, &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&two, None), build_scope_descriptor(&two_put, None), "with empty endpoints, changing a request's method must flip the descriptor (its shape is in `requests`)");
+    }
+
+    #[test]
+    fn scope_url_strips_userinfo_query_fragment() {
+        assert_eq!(scope_url("https://u:p@h:8080/x?q=1#frag"), "https://h:8080/x");
+        assert_eq!(scope_url("https://h/x"), "https://h/x");
+        assert_eq!(scope_url("https://h/a@b/c"), "https://h/a@b/c"); // '@' in the PATH is kept
+        assert_eq!(scope_url("{{apiHost}}/x?y#z"), "{{apiHost}}/x");  // templated: strip query + fragment
+        assert_eq!(scope_url("https://h"), "https://h");
     }
 
     #[test]
@@ -387,9 +419,9 @@ mod tests {
         use qa_touchstone_core::config::load_config;
         // Hardcoded secrets in a bearer token, a header value, a query value, and the url ?query —
         // none of these literals may appear anywhere in the descriptor string.
-        let cfg = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"bearer","token":"BEARER-SENTINEL"}}],"requests":[{"id":"r","method":"GET","url":"https://h/r?apikey=URLQ-SENTINEL","headers":[{"key":"X-Api-Key","value":"HDR-SENTINEL"}],"query":[{"key":"q","value":"QRY-SENTINEL"}]}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
+        let cfg = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"bearer","token":"BEARER-SENTINEL"}}],"requests":[{"id":"r","method":"GET","url":"https://u:USERINFO-SENTINEL@h/r?apikey=URLQ-SENTINEL#FRAG-SENTINEL","headers":[{"key":"X-Api-Key","value":"HDR-SENTINEL"}],"query":[{"key":"q","value":"QRY-SENTINEL"}]}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
         let d = build_scope_descriptor(&cfg, None);
-        for sentinel in ["BEARER-SENTINEL", "HDR-SENTINEL", "QRY-SENTINEL", "URLQ-SENTINEL"] {
+        for sentinel in ["BEARER-SENTINEL", "HDR-SENTINEL", "QRY-SENTINEL", "URLQ-SENTINEL", "USERINFO-SENTINEL", "FRAG-SENTINEL"] {
             assert!(!d.contains(sentinel), "descriptor must not contain literal secret `{sentinel}`: {d}");
         }
     }
