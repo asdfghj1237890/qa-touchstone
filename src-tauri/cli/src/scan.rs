@@ -259,7 +259,7 @@ pub async fn run_scan(
     let redacted: Vec<Finding> = findings.iter().map(|f| Finding {
         engine: f.engine, severity: f.severity, rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
         title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
-        method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
+        method: f.method.clone(), endpoint: f.endpoint.as_deref().map(|s| red.redact_str(s)), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
     }).collect();
     let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0, errors: errors.len() };
     let rfs: Vec<RFinding> = redacted.iter().map(|f| {
@@ -274,8 +274,8 @@ pub async fn run_scan(
 
     let rerrors: Vec<RError> = errors.iter().map(|e| RError {
         engine: engine_str(e.engine).into(),
-        endpoint: e.endpoint.clone(),
-        identity: e.identity.clone(),
+        endpoint: e.endpoint.as_deref().map(|s| red.redact_str(s)),
+        identity: e.identity.as_deref().map(|s| red.redact_str(s)),
         message: red.redact_str(&e.message),
     }).collect();
 

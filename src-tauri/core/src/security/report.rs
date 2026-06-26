@@ -244,7 +244,7 @@ pub fn build_report(
             Severity::Critical => s.critical += 1, Severity::High => s.high += 1, Severity::Medium => s.medium += 1,
             Severity::Low => s.low += 1, Severity::Info => s.info += 1,
         }
-        if f.presence == Presence::New && f.severity >= fail_on { s.gated += 1; }
+        if is_gate_failure(f, fail_on) { s.gated += 1; } // New ∧ sev>=fail_on ∧ !suppressed — matches the exit gate + JUnit
     }
     ReportModel { meta: ReportMeta { run_id: run_id.into(), scope_mismatch }, engines, summary: s, findings }
 }
@@ -567,6 +567,17 @@ mod tests {
         assert!(html.contains("bola.cross-object"));
         assert!(html.contains("1 new (\u{2265} high)"), "threshold-neutral gate label");
         assert!(html.contains("<!doctype html>"));
+    }
+    #[test] fn html_gate_headline_and_summary_exclude_suppressed() {
+        let cur = vec![ mk_item("aa", Severity::High, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t") ];
+        let m0 = build_report(&cur, &[], vec![], Severity::High, false, "cli", &Records::new());
+        assert_eq!(m0.summary.gated, 1);
+        assert!(report_to_html(&m0).contains("1 new (\u{2265} high)"));
+        let mut recs = Records::new();
+        recs.insert("aa".into(), LifecycleRecord { suppressed: true, ..Default::default() });
+        let m1 = build_report(&cur, &[], vec![], Severity::High, false, "cli", &recs);
+        assert_eq!(m1.summary.gated, 0, "suppressed New-high must not be counted as gated");
+        assert!(report_to_html(&m1).contains("0 new (\u{2265} high)"), "suppressed finding must not inflate the gate headline");
     }
     #[test] fn html_escapes_hostile_fields() {
         let cur = vec![ mk_item("a", Severity::High, EngineId::Matrix, "<script>x</script>", "GET u @anon", "<b>t</b>") ];
