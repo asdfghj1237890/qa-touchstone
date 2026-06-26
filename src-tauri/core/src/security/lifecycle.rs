@@ -163,7 +163,7 @@ pub fn gate_count(items: &[SnapshotItem], diff: &BTreeMap<String, Presence>, fai
 }
 
 /// scopeHashOf — ADAPTATION: fnv1a over a CANONICAL serialized descriptor (the caller builds a
-/// sorted, secret-free string). NOT the TS scopeHashOf (raw JSON.stringify).
+/// deterministic (insertion-ordered), secret-free string). NOT the TS scopeHashOf (raw JSON.stringify).
 pub fn scope_hash_of(canonical_descriptor_json: &str) -> String { fnv1a(canonical_descriptor_json) }
 
 #[cfg(test)]

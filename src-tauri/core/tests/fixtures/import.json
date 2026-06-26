@@ -144,6 +144,29 @@
             "auth": "none"
           }
         ]
+      },
+      {
+        "name": "orders",
+        "requests": [
+          {
+            "method": "POST",
+            "name": "Create order",
+            "path": "/orders",
+            "params": [],
+            "headers": [],
+            "body": "{\n  \"total\": 0\n}",
+            "auth": "none"
+          },
+          {
+            "method": "PUT",
+            "name": "Replace order",
+            "path": "/orders",
+            "params": [],
+            "headers": [],
+            "body": "{\n  \"note\": \"\"\n}",
+            "auth": "none"
+          }
+        ]
       }
     ]
   },

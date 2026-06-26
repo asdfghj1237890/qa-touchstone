@@ -44,8 +44,9 @@ pub struct ImportParsed {
 /// Port of qaDetectFormat. Returns None when the input is not a recognized format.
 pub fn qa_detect_format(obj: &Value) -> Option<Format> {
     let o = obj.as_object()?;
-    // Postman: has info AND (item OR _postman_id OR schema matching v2.[01])
-    if o.contains_key("info") {
+    // Postman: info is truthy AND (item OR _postman_id OR schema matching v2.[01]).
+    // TS: obj.info && (...) — null/false/etc. info must NOT be treated as Postman.
+    if o.get("info").map(js_truthy).unwrap_or(false) {
         let has_item = o.contains_key("item");
         let has_postman_id = o["info"].get("_postman_id").is_some();
         let schema_matches = o["info"].get("schema")
@@ -304,8 +305,9 @@ pub fn parse_postman(obj: &Value) -> ImportParsed {
                     .unwrap_or("none")
                     .to_string();
 
+                let fallback = format!("{} {}", method, path);
                 let name = it.get("name").and_then(|n| n.as_str())
-                    .unwrap_or(&format!("{} {}", method, path))
+                    .unwrap_or(&fallback)
                     .to_string();
 
                 bucket.push(ImportRequest { method, name, path, params, headers, body, auth });
@@ -378,23 +380,12 @@ pub fn parse_openapi(obj: &Value) -> ImportParsed {
                     if p.get("in").and_then(|i| i.as_str()) != Some("query") { return None; }
                     let key = p.get("name")?.as_str()?.to_string();
                     // TS: value: p.example != null ? String(p.example) : ''
-                    let value = if let Some(ex) = p.get("example") {
-                        if !ex.is_null() {
-                            // JS String() on a number → "20", on a string → the string
-                            ex.as_str().map(|s| s.to_string()).unwrap_or_else(|| {
-                                // For numbers, booleans etc. use to_string() on the raw JSON
-                                // but without quotes (JS String(20) = "20", not '"20"')
-                                match ex {
-                                    Value::Number(n) => n.to_string(),
-                                    Value::Bool(b) => b.to_string(),
-                                    _ => ex.to_string(),
-                                }
-                            })
-                        } else {
-                            String::new()
-                        }
-                    } else {
-                        String::new()
+                    // crate::datafile::js_string reproduces JS String() for every type,
+                    // incl. arrays ("1,2") and objects ("[object Object]"); the != null
+                    // guard keeps null → "" (not "null").
+                    let value = match p.get("example") {
+                        Some(ex) if !ex.is_null() => crate::datafile::js_string(ex),
+                        _ => String::new(),
                     };
                     let on = p.get("required").and_then(|r| r.as_bool()).unwrap_or(false);
                     Some(KvOn { key, value, on })
@@ -414,7 +405,9 @@ pub fn parse_openapi(obj: &Value) -> ImportParsed {
                 if let Some(rb) = rb {
                     let json_content = rb.get("application/json");
                     if let Some(jc) = json_content {
-                        if let Some(ex) = jc.get("example").filter(|e| !e.is_null()) {
+                        // TS: const ex = (...).example; if (ex) ... — JS-truthy, so
+                        // 0/false/"" fall through to schemaStub (not emitted literally).
+                        if let Some(ex) = jc.get("example").filter(|e| js_truthy(e)) {
                             Some(serde_json::to_string_pretty(ex).unwrap_or_default())
                         } else if let Some(schema) = jc.get("schema") {
                             let stub = schema_stub(schema);
@@ -426,7 +419,7 @@ pub fn parse_openapi(obj: &Value) -> ImportParsed {
 
             // TS: auth: op.security ? 'bearer' : 'none'
             // In JS, any non-null/undefined value (including []) is truthy.
-            let auth = if op.get("security").map(|s| js_truthy(s)).unwrap_or(false) {
+            let auth = if op.get("security").map(js_truthy).unwrap_or(false) {
                 "bearer".to_string()
             } else {
                 "none".to_string()

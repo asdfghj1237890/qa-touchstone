@@ -550,6 +550,35 @@ const SAMPLE_OPENAPI = JSON.stringify({
         parameters: [{ name: 'role', in: 'query', required: true }],
       },
     },
+    '/orders': {
+      // requestBody-LEVEL example truthiness (Bug A): TS `if (ex)` is JS-truthy, so a
+      // falsey requestBody example (0 / "") must FALL THROUGH to schemaStub — not be
+      // emitted as "0" / "". Each op carries a schema so the stub is observable.
+      post: {
+        summary: 'Create order',
+        tags: ['orders'],
+        requestBody: {
+          content: {
+            'application/json': {
+              example: 0,                                   // FALSY → fall through to schemaStub
+              schema: { type: 'object', properties: { total: { type: 'number' } } },
+            },
+          },
+        },
+      },
+      put: {
+        summary: 'Replace order',
+        tags: ['orders'],
+        requestBody: {
+          content: {
+            'application/json': {
+              example: '',                                  // FALSY → fall through to schemaStub
+              schema: { type: 'object', properties: { note: { type: 'string' } } },
+            },
+          },
+        },
+      },
+    },
   },
 });
 

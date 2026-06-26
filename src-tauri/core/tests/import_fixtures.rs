@@ -156,6 +156,18 @@ fn import_openapi_matches_ts() {
         "/users": {
           "get": { "summary": "List users", "tags": ["users"],
             "parameters": [{ "name": "role", "in": "query", "required": true }] }
+        },
+        "/orders": {
+          "post": { "summary": "Create order", "tags": ["orders"],
+            "requestBody": { "content": { "application/json": {
+              "example": 0,
+              "schema": { "type": "object", "properties": { "total": { "type": "number" } } }
+            } } } },
+          "put": { "summary": "Replace order", "tags": ["orders"],
+            "requestBody": { "content": { "application/json": {
+              "example": "",
+              "schema": { "type": "object", "properties": { "note": { "type": "string" } } }
+            } } } }
         }
       }
     }"#;
