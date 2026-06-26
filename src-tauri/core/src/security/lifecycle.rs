@@ -87,6 +87,28 @@ pub struct Snapshot {
     pub items: Vec<SnapshotItem>,
 }
 
+/// Per-finding lifecycle annotation (port of findings.ts BLANK_RECORD / LifecycleRecord),
+/// keyed by fingerprint in `Records`. Read-only for the CLI. GUI bookkeeping fields
+/// (createdAt/updatedAt/lastSeenAt/seenCount) are accepted-and-ignored (no deny_unknown_fields).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct LifecycleRecord {
+    #[serde(default)] pub suppressed: bool,
+    #[serde(default, rename = "suppressReason")] pub suppress_reason: String,
+    #[serde(default)] pub status: String,   // "" => "open" (normalized later in report::ann_of, per TS `r.status||'open'`)
+    #[serde(default)] pub owner: String,
+    #[serde(default)] pub note: String,
+    #[serde(default, rename = "severityOverride")] pub severity_override: Option<Severity>,
+}
+
+pub type Records = BTreeMap<String, LifecycleRecord>;
+
+/// The `scan --annotations <file>` JSON: `{ "fpVersion": 1, "records": { "<fp>": {...} } }`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AnnotationsFile {
+    #[serde(rename = "fpVersion", default)] pub fp_version: u32,
+    #[serde(default)] pub records: Records,
+}
+
 /// snapshotOf (findings.ts:112-140): dedup by fp, count repeats. effective_severity = severity
 /// (override deferred). Preserves first-seen order.
 pub fn snapshot_of(findings: &[Finding], run_id: &str, created_at: &str, scope_hash: &str) -> Snapshot {
@@ -167,4 +189,19 @@ mod tests {
         assert_eq!(gate_count(&items, &diff, Severity::High), 0);
     }
     #[test] fn fnv1a_is_deterministic() { assert_eq!(fnv1a("x"), fnv1a("x")); assert_ne!(fnv1a("a"), fnv1a("b")); }
+    #[test] fn annotations_parse_defaults_and_ignores_gui_fields() {
+        let j = r#"{ "fpVersion":1, "records": {
+            "aa": { "suppressed": true, "suppressReason": "ok", "severityOverride": "low",
+                    "createdAt": "x", "updatedAt": "y", "lastSeenAt": "z", "seenCount": 3 },
+            "bb": { "status": "acknowledged", "owner": "alice", "note": "n" },
+            "cc": {} } }"#;
+        let a: AnnotationsFile = serde_json::from_str(j).unwrap();
+        assert_eq!(a.fp_version, 1);
+        let aa = &a.records["aa"];
+        assert!(aa.suppressed && aa.suppress_reason == "ok" && aa.severity_override == Some(Severity::Low));
+        let bb = &a.records["bb"];
+        assert!(!bb.suppressed && bb.status == "acknowledged" && bb.owner == "alice" && bb.note == "n");
+        let cc = &a.records["cc"];
+        assert!(!cc.suppressed && cc.status.is_empty() && cc.severity_override.is_none()); // missing => defaults
+    }
 }
