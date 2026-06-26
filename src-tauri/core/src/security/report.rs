@@ -2,7 +2,7 @@
 //! for ReportModels whose ruleIds are NOT in SARIF_RULE_META (all of ours) — the rich rule
 //! catalog is deferred (SP3b). Fixture compares PARSED JSON (semantic), not bytes.
 use crate::security::finding::{EngineId, Severity};
-use crate::security::lifecycle::{diff_runs, Presence, SnapshotItem};
+use crate::security::lifecycle::{diff_runs, Presence, SnapshotItem, Records, LifecycleRecord};
 use crate::xml::{sanitize_xml, xml_attr_escape};
 use serde_json::{json, Value};
 
@@ -17,6 +17,11 @@ pub struct ReportFinding {
     pub path: String,
     pub count: u32,
     pub evidence: Option<String>,
+    pub suppressed: bool,
+    pub suppress_reason: String,
+    pub status: String,
+    pub owner: String,
+    pub note: String,
 }
 
 pub struct ReportMeta { pub run_id: String, pub scope_mismatch: bool }
@@ -149,16 +154,30 @@ pub fn location_to_uri(location: &str) -> String {
     )
 }
 
+/// annOf (securityReport.ts:17): annotation fields for a fp, with safe defaults. "" status => "open".
+fn ann_of(rec: Option<&LifecycleRecord>) -> (bool, String, String, String, String) {
+    match rec {
+        Some(r) => (
+            r.suppressed, r.suppress_reason.clone(),
+            if r.status.is_empty() { "open".into() } else { r.status.clone() },
+            r.owner.clone(), r.note.clone(),
+        ),
+        None => (false, String::new(), "open".into(), String::new(), String::new()),
+    }
+}
+
 /// buildReport (securityReport.ts:27-94) trimmed to SARIF needs: presence + sorted findings,
 /// default annotations (no lifecycle/suppressions). resolved appended; sort presence then sev desc.
 pub fn build_report(
     current: &[SnapshotItem], baseline: &[SnapshotItem],
     engines: Vec<EngineReport>, fail_on: Severity, scope_mismatch: bool, run_id: &str,
+    records: &Records,
 ) -> ReportModel {
     let diff = diff_runs(current, baseline);
     let mut findings: Vec<ReportFinding> = Vec::new();
     for it in current {
         let presence = *diff.get(&it.fp).unwrap_or(&Presence::New);
+        let (suppressed, suppress_reason, status, owner, note) = ann_of(records.get(&it.fp));
         findings.push(ReportFinding {
             fp: it.fp.clone(),
             presence,
@@ -178,6 +197,7 @@ pub fn build_report(
             } else {
                 Some(it.evidence.clone())
             },
+            suppressed, suppress_reason, status, owner, note,
         });
     }
     let cur_fps: std::collections::BTreeSet<&str> =
@@ -186,6 +206,7 @@ pub fn build_report(
         if cur_fps.contains(it.fp.as_str()) {
             continue;
         }
+        let (suppressed, suppress_reason, status, owner, note) = ann_of(records.get(&it.fp));
         findings.push(ReportFinding {
             fp: it.fp.clone(),
             presence: Presence::Resolved,
@@ -201,6 +222,7 @@ pub fn build_report(
             path: it.path.clone(),
             count: it.count,
             evidence: None,
+            suppressed, suppress_reason, status, owner, note,
         });
     }
     findings.sort_by(|a, b| {
@@ -289,7 +311,7 @@ pub fn report_to_sarif(model: &ReportModel) -> String {
                     .unwrap_or_default(),
                 f.location
             );
-            json!({
+            let mut result = json!({
                 "ruleId": f.rule_id,
                 "ruleIndex": rule_index[f.rule_id.as_str()],
                 "level": sev_to_sarif_level(f.severity),
@@ -309,11 +331,15 @@ pub fn report_to_sarif(model: &ReportModel) -> String {
                 "properties": {
                     "engine": engine_token(f.engine),
                     "severity": sev_token(f.severity),
-                    "owner": "",
-                    "status": "open",
+                    "owner": f.owner,
+                    "status": f.status,
                     "count": f.count
                 }
-            })
+            });
+            if f.suppressed {
+                result["suppressions"] = json!([{ "kind": "external", "justification": f.suppress_reason }]);
+            }
+            result
         })
         .collect();
     serde_json::to_string_pretty(&json!({
@@ -476,9 +502,9 @@ mod tests {
 
     #[test] fn junit_failure_set_follows_fail_on() {
         let cur = vec![ mk_item("a", Severity::Medium, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t") ];
-        let hi = build_report(&cur, &[], vec![], Severity::High, false, "r");
+        let hi = build_report(&cur, &[], vec![], Severity::High, false, "r", &Records::new());
         assert!(!report_to_junit(&hi).contains("<failure"));   // medium NEW does not fail at fail_on=high
-        let md = build_report(&cur, &[], vec![], Severity::Medium, false, "r");
+        let md = build_report(&cur, &[], vec![], Severity::Medium, false, "r", &Records::new());
         assert!(report_to_junit(&md).contains("<failure"));    // ...but does at fail_on=medium
     }
 
@@ -487,7 +513,7 @@ mod tests {
         // and a C0 control char (illegal in XML 1.0).
         let mut it = mk_item("a", Severity::High, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t");
         it.evidence = "danger ]]> mid \u{0007} end".into();
-        let model = build_report(&[it], &[], vec![], Severity::High, false, "r");
+        let model = build_report(&[it], &[], vec![], Severity::High, false, "r", &Records::new());
         let xml = report_to_junit(&model);
         assert!(xml.contains("]]]]><![CDATA[>"), "]]> must be split across CDATA sections");
         assert!(!xml.contains('\u{0007}'), "C0 control must be sanitized to U+FFFD");
@@ -507,7 +533,7 @@ mod tests {
             mk_item("bb", Severity::Critical, EngineId::Matrix, "matrix.deny-bypass",
                     "DELETE delU @anon", "Access-control bypass"),
         ];
-        let model = build_report(&cur, &base, vec![], Severity::High, false, "t");
+        let model = build_report(&cur, &base, vec![], Severity::High, false, "t", &Records::new());
         // bb is carried, aa is new; sort: presence(new=0,carried=1) then sev desc
         // new: aa(high), bb(critical) — wait: bb is carried not new
         // new findings: aa(high); carried: bb(critical)
@@ -523,7 +549,7 @@ mod tests {
 
     #[test] fn html_contains_findings_and_threshold_gate() {
         let cur = vec![ mk_item("a", Severity::High, EngineId::Bola, "bola.cross-object", "GET getOrder @t1", "Cross-object") ];
-        let model = build_report(&cur, &[], vec![EngineReport{engine:"bola".into(),ran:true,findings:1,errors:0}], Severity::High, false, "cli");
+        let model = build_report(&cur, &[], vec![EngineReport{engine:"bola".into(),ran:true,findings:1,errors:0}], Severity::High, false, "cli", &Records::new());
         let html = report_to_html(&model);
         assert!(html.contains("bola.cross-object"));
         assert!(html.contains("1 new (\u{2265} high)"), "threshold-neutral gate label");
@@ -531,8 +557,22 @@ mod tests {
     }
     #[test] fn html_escapes_hostile_fields() {
         let cur = vec![ mk_item("a", Severity::High, EngineId::Matrix, "<script>x</script>", "GET u @anon", "<b>t</b>") ];
-        let model = build_report(&cur, &[], vec![], Severity::High, false, "cli");
+        let model = build_report(&cur, &[], vec![], Severity::High, false, "cli", &Records::new());
         let html = report_to_html(&model);
         assert!(!html.contains("<script>x</script>") && html.contains("&lt;script&gt;") && html.contains("&lt;b&gt;"), "rule id AND title escaped");
+    }
+
+    #[test] fn sarif_emits_suppressions_and_owner_status() {
+        let cur = vec![ mk_item("aa", Severity::High, EngineId::Bola, "bola.cross-object", "GET getOrder @t1", "X") ];
+        let mut recs = Records::new();
+        recs.insert("aa".into(), LifecycleRecord { suppressed: true, suppress_reason: "accepted".into(),
+            status: "acknowledged".into(), owner: "alice".into(), ..Default::default() });
+        let model = build_report(&cur, &[], vec![], Severity::High, false, "r", &recs);
+        let v: serde_json::Value = serde_json::from_str(&report_to_sarif(&model)).unwrap();
+        let r0 = &v["runs"][0]["results"][0];
+        assert_eq!(r0["suppressions"][0]["kind"], "external");
+        assert_eq!(r0["suppressions"][0]["justification"], "accepted");
+        assert_eq!(r0["properties"]["owner"], "alice");
+        assert_eq!(r0["properties"]["status"], "acknowledged");
     }
 }

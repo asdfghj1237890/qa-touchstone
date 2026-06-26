@@ -311,7 +311,7 @@ pub async fn run_scan(
     }
 
     // Build the report model once; write each requested file (SARIF / HTML / JUnit).
-    let model = build_report(&current.items, &baseline_items, report_engines(&report.engines), fail_on_sev, scope_mismatch, "cli");
+    let model = build_report(&current.items, &baseline_items, report_engines(&report.engines), fail_on_sev, scope_mismatch, "cli", &records);
     if let Some(p) = sarif.as_deref() {
         if let Err(e) = std::fs::write(p, report_to_sarif(&model)) { eprintln!("error: cannot write SARIF `{p}`: {e}"); return ExitCode::from(1); }
     }

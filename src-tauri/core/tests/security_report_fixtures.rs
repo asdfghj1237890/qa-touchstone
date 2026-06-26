@@ -1,5 +1,5 @@
 use qa_touchstone_core::security::finding::{EngineId, Severity};
-use qa_touchstone_core::security::lifecycle::SnapshotItem;
+use qa_touchstone_core::security::lifecycle::{Records, SnapshotItem};
 use qa_touchstone_core::security::report::*;
 use serde_json::Value;
 use roxmltree;
@@ -63,7 +63,7 @@ fn report_sarif_matches_ts() {
         "DELETE delU @anon",
         "Access-control bypass",
     )];
-    let model = build_report(&cur, &base, vec![], Severity::High, false, "r");
+    let model = build_report(&cur, &base, vec![], Severity::High, false, "r", &Records::new());
     let got: Value = serde_json::from_str(&report_to_sarif(&model)).unwrap();
     assert_eq!(
         got,
