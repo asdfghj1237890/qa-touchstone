@@ -173,9 +173,17 @@ pub struct RateLimitConfig { #[serde(default)] pub tests: Vec<RateLimitTest> }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct BflaConfig {
+    #[serde(default)] pub endpoints: Vec<String>,
+    #[serde(default = "default_deny_set", rename = "denySet")] pub deny_set: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     #[serde(default)] pub matrix: Option<MatrixConfig>,
     #[serde(default)] pub bola: Option<BolaConfig>,
+    #[serde(default)] pub bfla: Option<BflaConfig>,
     #[serde(default, rename = "rateLimit")] pub rate_limit: Option<RateLimitConfig>,
     #[serde(default)] pub oracles: Option<OracleConfigRaw>,
 }

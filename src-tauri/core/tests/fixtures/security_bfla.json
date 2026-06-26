@@ -1,0 +1,185 @@
+{
+  "denySet": [
+    401,
+    403,
+    404
+  ],
+  "plan": [
+    [
+      "DELETE /admin/x",
+      "anon"
+    ],
+    [
+      "DELETE /admin/x",
+      "user"
+    ],
+    [
+      "GET /admin/y",
+      "anon"
+    ],
+    [
+      "GET /admin/y",
+      "user"
+    ],
+    [
+      "GET /u",
+      "anon"
+    ],
+    [
+      "GET /u",
+      "user"
+    ]
+  ],
+  "classify": [
+    {
+      "name": "allowed_200",
+      "status": 200,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "vuln"
+    },
+    {
+      "name": "denied_403",
+      "status": 403,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "pass"
+    },
+    {
+      "name": "denied_401",
+      "status": 401,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "pass"
+    },
+    {
+      "name": "denied_404",
+      "status": 404,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "pass"
+    },
+    {
+      "name": "other_500",
+      "status": 500,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "inconclusive"
+    },
+    {
+      "name": "null_status",
+      "status": null,
+      "body": {},
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "inconclusive"
+    },
+    {
+      "name": "soft_deny_200",
+      "status": 200,
+      "body": {
+        "error": "Access denied"
+      },
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "pass"
+    },
+    {
+      "name": "soft_deny_phrase",
+      "status": 200,
+      "body": {
+        "message": "you don't have permission"
+      },
+      "denySet": [
+        401,
+        403,
+        404
+      ],
+      "expected": "pass"
+    },
+    {
+      "name": "empty_deny_set_200",
+      "status": 200,
+      "body": {},
+      "denySet": [],
+      "expected": "vuln"
+    },
+    {
+      "name": "empty_deny_set_403",
+      "status": 403,
+      "body": {},
+      "denySet": [],
+      "expected": "inconclusive"
+    }
+  ],
+  "severity": [
+    {
+      "name": "delete_vuln",
+      "method": "DELETE",
+      "verdict": "vuln",
+      "expected": "critical"
+    },
+    {
+      "name": "post_vuln",
+      "method": "POST",
+      "verdict": "vuln",
+      "expected": "critical"
+    },
+    {
+      "name": "put_vuln",
+      "method": "PUT",
+      "verdict": "vuln",
+      "expected": "critical"
+    },
+    {
+      "name": "patch_vuln",
+      "method": "PATCH",
+      "verdict": "vuln",
+      "expected": "critical"
+    },
+    {
+      "name": "get_vuln",
+      "method": "GET",
+      "verdict": "vuln",
+      "expected": "high"
+    },
+    {
+      "name": "delete_pass",
+      "method": "DELETE",
+      "verdict": "pass",
+      "expected": null
+    },
+    {
+      "name": "get_inconclusive",
+      "method": "GET",
+      "verdict": "inconclusive",
+      "expected": null
+    }
+  ]
+}

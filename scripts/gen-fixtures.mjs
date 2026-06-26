@@ -289,6 +289,61 @@ const baseState = ['new','carried','resolved'].map(p => ({ p, expected: bS(p) })
 writeFileSync(join(OUT,'security_report.json'), JSON.stringify({ sarif, junit, sevLevel, baseState }, null, 2) + '\n');
 console.log('wrote security_report.json');
 
+const { bflaPlan: bP, classifyBfla: cBfla, bflaSeverity: bSev } = await import('./_bfla-bridge.mjs');
+_i = 0;
+const bflaDeny = [401, 403, 404];
+
+// plan cases: [endpoint, identity] → expected pairs as ["{method} {path}", "{identityId}"] tuples.
+// endpoint-major / identity-minor order must match bfla_plan's nested-loop order.
+const bflaEndpoints = [
+  { method: 'DELETE', path: '/admin/x' },   // heuristic: mutating (privileged)
+  { method: 'GET',    path: '/admin/y' },   // heuristic: admin path (privileged)
+  { method: 'GET',    path: '/u',     privileged: true  }, // explicit override: privileged
+  { method: 'DELETE', path: '/v',     privileged: false }, // explicit false: NOT privileged
+  { method: 'GET',    path: '/w' },         // non-privileged (read + no admin token)
+];
+const bflaIdentities = [
+  { id: 'admin',  privileged: true  },
+  { id: 'anon',   privileged: false },
+  { id: 'user',   privileged: false },
+];
+const bflaPairs = bP(bflaEndpoints, bflaIdentities);
+// Map index pairs → ["{method} {path}", "{identityId}"] for ordered Vec comparison in Rust.
+const bflaPlanOut = bflaPairs.map(p => [
+  `${bflaEndpoints[p.endpoint.method ? bflaEndpoints.indexOf(p.endpoint) : 0].method} ${bflaEndpoints[bflaEndpoints.indexOf(p.endpoint)].path}`,
+  p.identity.id,
+]);
+// Re-derive correctly: bflaPlan returns {endpoint, identity} objects, not indices.
+// Build the ordered tuple list by iterating pairs.
+const bflaPlanTuples = bflaPairs.map(p => [`${p.endpoint.method} ${p.endpoint.path}`, p.identity.id]);
+
+const bflaClassifyCases = [
+  { name: 'allowed_200',        status: 200,  body: {},                    denySet: bflaDeny },
+  { name: 'denied_403',         status: 403,  body: {},                    denySet: bflaDeny },
+  { name: 'denied_401',         status: 401,  body: {},                    denySet: bflaDeny },
+  { name: 'denied_404',         status: 404,  body: {},                    denySet: bflaDeny },
+  { name: 'other_500',          status: 500,  body: {},                    denySet: bflaDeny },
+  { name: 'null_status',        status: null, body: {},                    denySet: bflaDeny },
+  { name: 'soft_deny_200',      status: 200,  body: { error: 'Access denied' }, denySet: bflaDeny },
+  { name: 'soft_deny_phrase',   status: 200,  body: { message: "you don't have permission" }, denySet: bflaDeny },
+  { name: 'empty_deny_set_200', status: 200,  body: {},                    denySet: [] },
+  { name: 'empty_deny_set_403', status: 403,  body: {},                    denySet: [] },
+].map(c => ({ ...c, expected: cBfla({ status: c.status, body: c.body }, c.denySet) }));
+
+const bflaSeverityCases = [
+  { name: 'delete_vuln',  method: 'DELETE', verdict: 'vuln' },
+  { name: 'post_vuln',    method: 'POST',   verdict: 'vuln' },
+  { name: 'put_vuln',     method: 'PUT',    verdict: 'vuln' },
+  { name: 'patch_vuln',   method: 'PATCH',  verdict: 'vuln' },
+  { name: 'get_vuln',     method: 'GET',    verdict: 'vuln' },
+  { name: 'delete_pass',  method: 'DELETE', verdict: 'pass' },
+  { name: 'get_inconclusive', method: 'GET', verdict: 'inconclusive' },
+].map(c => ({ ...c, expected: bSev(c.method, c.verdict) ?? null }));
+
+writeFileSync(join(OUT, 'security_bfla.json'), JSON.stringify(
+  { denySet: bflaDeny, plan: bflaPlanTuples, classify: bflaClassifyCases, severity: bflaSeverityCases }, null, 2) + '\n');
+console.log(`wrote security_bfla.json (${bflaPlanTuples.length} plan pairs, ${bflaClassifyCases.length} classify, ${bflaSeverityCases.length} severity)`);
+
 const { scanSensitive: oScan, redact: oRedact } = await import('./_oracles-bridge.mjs');
 const sensCases = [
   { name:'jwt',          resp:{ status:200, headers:{}, body:{ token:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdEF' } } },
