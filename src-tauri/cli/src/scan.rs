@@ -66,13 +66,16 @@ fn body_mode_token(m: &qa_touchstone_core::config::BodyMode) -> &'static str {
 /// Canonical, sorted, secret-free descriptor of the scanned surface, for scope-drift detection.
 fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     use serde_json::{json, Map, Value};
+    // Secret-safe shape: we hash header/query KEY names + method/url/body-mode/privileged, but
+    // NOT free-form header/query VALUES or body CONTENT — those can hold hardcoded literal secrets
+    // that the final FNV digest (stored in the baseline) would otherwise expose to brute-force.
     let req_shape = |id: &str| -> Value {
         match cfg.requests.iter().find(|r| r.id == id) {
             Some(r) => {
-                let mut hs: Vec<String> = r.headers.iter().map(|k| format!("{}={}", k.key, k.value)).collect(); hs.sort();
-                let mut qs: Vec<String> = r.query.iter().map(|k| format!("{}={}", k.key, k.value)).collect(); qs.sort();
-                let body = r.body.as_ref().map(|b| json!({ "mode": body_mode_token(&b.mode), "content": b.content })).unwrap_or(Value::Null);
-                json!({ "method": r.method, "url": r.url, "privileged": r.privileged, "headers": hs, "query": qs, "body": body })
+                let mut hk: Vec<String> = r.headers.iter().map(|k| k.key.clone()).collect(); hk.sort();
+                let mut qk: Vec<String> = r.query.iter().map(|k| k.key.clone()).collect(); qk.sort();
+                let body_mode = r.body.as_ref().map(|b| body_mode_token(&b.mode)).unwrap_or("none");
+                json!({ "method": r.method, "url": r.url, "privileged": r.privileged, "headerKeys": hk, "queryKeys": qk, "bodyMode": body_mode })
             }
             None => Value::Null,
         }
@@ -105,8 +108,12 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     if let Some(b) = sec.and_then(|s| s.bola.as_ref()) {
         let mut tests: Vec<Value> = b.tests.iter().map(|t| {
             req_ids.insert(t.request.clone());
-            let mut o: Vec<String> = t.id_values.keys().cloned().collect(); o.sort();
-            json!({ "id": t.id, "request": t.request, "idLocation": id_location_token(&t.id_location), "owners": o, "negativeControl": t.negative_control })
+            // owners as [identityId, hasNonEmptyIdValue] — the bool (NOT the idValue, which may be PII)
+            // mirrors run_bola's owner filter so an idValue going empty<->non-empty flips the scopeHash.
+            let mut owners: Vec<Value> = t.id_values.iter()
+                .map(|(k, v)| json!([k, qa_touchstone_core::security::bola::idval_nonempty(v)])).collect();
+            owners.sort_by(|a, b| a[0].as_str().unwrap_or("").cmp(b[0].as_str().unwrap_or("")));
+            json!({ "id": t.id, "request": t.request, "idLocation": id_location_token(&t.id_location), "owners": owners, "negativeControl": t.negative_control })
         }).collect();
         tests.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
         root.insert("bola".into(), Value::Array(tests));
@@ -310,5 +317,25 @@ mod tests {
         assert_eq!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "identity reorder must not change the descriptor");
         let c = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}},{"id":"y","auth":{"type":"none"}}],"requests":[{"id":"r","method":"POST","url":"https://h/r"}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
         assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&c, None), "a method change must flip the descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_drops_header_values_keeps_keys() {
+        use qa_touchstone_core::config::load_config;
+        let mk = |hk: &str, hv: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r","headers":[{{"key":"{hk}","value":"{hv}"}}]}}],"security":{{"matrix":{{"endpoints":["r"]}}}}}}"#);
+        let a = load_config(&mk("X-H", "v1"), &|_| None).unwrap();
+        let b = load_config(&mk("X-H", "totally-different-secret"), &|_| None).unwrap();
+        assert_eq!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "a header VALUE change must NOT affect the descriptor (values are never hashed)");
+        let c = load_config(&mk("X-Other", "v1"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&c, None), "a header KEY change MUST affect the descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_tracks_bola_idvalue_presence() {
+        use qa_touchstone_core::config::load_config;
+        let mk = |bval: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"a","auth":{{"type":"none"}}}},{{"id":"b","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r/PH"}}],"security":{{"bola":{{"tests":[{{"id":"t","request":"r","idLocation":{{"kind":"path","index":1}},"idValues":{{"a":"oa","b":"{bval}"}}}}]}}}}}}"#);
+        let nonempty = load_config(&mk("ob"), &|_| None).unwrap();
+        let empty = load_config(&mk(""), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&nonempty, None), build_scope_descriptor(&empty, None), "an idValue going non-empty -> empty must flip the descriptor (it changes which owners run)");
     }
 }

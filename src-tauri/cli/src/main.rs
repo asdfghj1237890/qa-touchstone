@@ -57,7 +57,8 @@ enum Command {
         #[arg(long)] junit: Option<String>,
         #[arg(long)] json: bool,
     },
-    /// Run the security suite (SP2: matrix; bola/rate-limit added later) and report findings.
+    /// Run the security suite (matrix + BOLA + rate-limit), gate on new findings, and emit
+    /// reports (SARIF / HTML / JUnit) with baseline-aware scope-drift detection.
     Scan {
         #[arg(long)] config: String,
         #[arg(long)] engine: Option<String>,

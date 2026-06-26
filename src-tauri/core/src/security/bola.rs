@@ -237,7 +237,10 @@ use crate::step::{run_step, StepResult};
 use crate::security::finding::{EngineError, EngineId, Finding};
 use std::collections::BTreeMap;
 
-fn idval_nonempty(v: &Value) -> bool {
+/// True if an idValue is usable as an owner (non-null, non-empty-string). The scan's
+/// scope-descriptor reuses THIS predicate so the hashed surface can't drift from the
+/// set of owners the runtime actually exercises (which filters by this same test below).
+pub fn idval_nonempty(v: &Value) -> bool {
     match v { Value::Null => false, Value::String(s) => !s.is_empty(), _ => true }
 }
 
