@@ -2,6 +2,7 @@ use qa_touchstone_core::security::finding::{EngineId, Severity};
 use qa_touchstone_core::security::lifecycle::SnapshotItem;
 use qa_touchstone_core::security::report::*;
 use serde_json::Value;
+use roxmltree;
 
 fn item(fp: &str, sev: Severity, eng: EngineId, rule: &str, loc: &str, title: &str) -> SnapshotItem {
     SnapshotItem {
@@ -21,6 +22,7 @@ fn item(fp: &str, sev: Severity, eng: EngineId, rule: &str, loc: &str, title: &s
 #[derive(serde::Deserialize)]
 struct File {
     sarif: Value,
+    junit: String,
     #[serde(rename = "sevLevel")]
     sev_level: Vec<SevLevel>,
 }
@@ -80,4 +82,16 @@ fn report_sarif_matches_ts() {
         };
         assert_eq!(sev_to_sarif_level(s), c.expected);
     }
+
+    // JUnit (fail_on=High; same model/cur/base as the SARIF assert above).
+    let rust_junit = report_to_junit(&model);
+    let ts = roxmltree::Document::parse(&f.junit).unwrap();
+    let rs = roxmltree::Document::parse(&rust_junit).unwrap();
+    let names = |d: &roxmltree::Document| d.descendants().filter(|n| n.has_tag_name("testcase"))
+        .map(|n| (n.attribute("name").unwrap_or("").to_string(),
+                  n.descendants().any(|c| c.has_tag_name("failure")))).collect::<Vec<_>>();
+    assert_eq!(names(&rs), names(&ts), "JUnit testcases (name + has-failure) match TS at fail_on=high");
+    let suites = |d: &roxmltree::Document| d.descendants().filter(|n| n.has_tag_name("testsuite"))
+        .map(|n| n.attribute("name").unwrap_or("").to_string()).collect::<Vec<_>>();
+    assert_eq!(suites(&rs), suites(&ts), "suite order/names match TS");
 }

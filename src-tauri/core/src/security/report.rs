@@ -3,6 +3,7 @@
 //! catalog is deferred (SP3b). Fixture compares PARSED JSON (semantic), not bytes.
 use crate::security::finding::{EngineId, Severity};
 use crate::security::lifecycle::{diff_runs, Presence, SnapshotItem};
+use crate::xml::{sanitize_xml, xml_attr_escape};
 use serde_json::{json, Value};
 
 pub struct ReportFinding {
@@ -332,6 +333,52 @@ pub fn report_to_sarif(model: &ReportModel) -> String {
     .unwrap()
 }
 
+fn is_gate_failure(f: &ReportFinding, fail_on: Severity) -> bool {
+    f.presence == Presence::New && f.severity >= fail_on   // !suppressed — suppressions are a later sprint
+}
+
+/// reportToJUnit (securityReport.ts:113-136). <testsuite> per engine in FIRST-SEEN order; a finding
+/// is a <failure> iff New && severity >= summary.fail_on. durations omitted (time="0.000").
+pub fn report_to_junit(model: &ReportModel) -> String {
+    use std::collections::BTreeMap;
+    let fail_on = model.summary.fail_on;
+    let current: Vec<&ReportFinding> = model.findings.iter().filter(|f| f.presence != Presence::Resolved).collect();
+    let mut order: Vec<EngineId> = Vec::new();
+    let mut by_engine: BTreeMap<&'static str, Vec<&ReportFinding>> = BTreeMap::new();
+    for f in &current {
+        let tok = engine_token(f.engine);
+        if !order.iter().any(|e| engine_token(*e) == tok) { order.push(f.engine); }
+        by_engine.entry(tok).or_default().push(f);
+    }
+    let total = current.len();
+    let total_fail = current.iter().filter(|f| is_gate_failure(f, fail_on)).count();
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    out.push_str(&format!(
+        "<testsuites name=\"QA Touchstone Security\" tests=\"{total}\" failures=\"{total_fail}\" skipped=\"0\" time=\"0.000\">\n"));
+    for eng in &order {
+        let tok = engine_token(*eng);
+        let fs = &by_engine[tok];
+        let sfail = fs.iter().filter(|f| is_gate_failure(f, fail_on)).count();
+        out.push_str(&format!(
+            "  <testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"0\">\n", xml_attr_escape(tok), fs.len(), sfail));
+        for f in fs {
+            let name = xml_attr_escape(&format!("{} @ {}", f.rule_id, f.location));
+            let cls = xml_attr_escape(tok);
+            if is_gate_failure(f, fail_on) {
+                let body = format!("{}{}", f.location, f.evidence.as_deref().map(|e| format!("\n{e}")).unwrap_or_default());
+                let body = sanitize_xml(&body).replace("]]>", "]]]]><![CDATA[>");
+                let msg = xml_attr_escape(&format!("{} ({})", f.title, sev_token(f.severity)));
+                out.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"><failure message=\"{msg}\"><![CDATA[{body}]]></failure></testcase>\n"));
+            } else {
+                out.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"/>\n"));
+            }
+        }
+        out.push_str("  </testsuite>\n");
+    }
+    out.push_str("</testsuites>\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,6 +439,14 @@ mod tests {
         assert_eq!(pascal_case("matrix.deny-bypass"), "MatrixDenyBypass");
         assert_eq!(pascal_case("bola.cross-object"), "BolaCorssObject".replacen("CorssObject", "CrossObject", 1));
         assert_eq!(pascal_case(""), "Rule");
+    }
+
+    #[test] fn junit_failure_set_follows_fail_on() {
+        let cur = vec![ mk_item("a", Severity::Medium, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t") ];
+        let hi = build_report(&cur, &[], vec![], Severity::High, false, "r");
+        assert!(!report_to_junit(&hi).contains("<failure"));   // medium NEW does not fail at fail_on=high
+        let md = build_report(&cur, &[], vec![], Severity::Medium, false, "r");
+        assert!(report_to_junit(&md).contains("<failure"));    // ...but does at fail_on=medium
     }
 
     #[test]

@@ -35,3 +35,4 @@ export const reportToSarif = mr.reportToSarif;
 export const sevToSarifLevel = mr.sevToSarifLevel;
 export const sarifBaselineState = mr.sarifBaselineState;
 export const buildReport = mr.buildReport;
+export const reportToJUnit = mr.reportToJUnit;

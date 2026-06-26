@@ -3126,6 +3126,7 @@ dependencies = [
  "rand 0.8.6",
  "regex",
  "reqwest",
+ "roxmltree",
  "serde",
  "serde_json",
  "sha2 0.11.0",
