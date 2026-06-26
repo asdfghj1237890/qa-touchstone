@@ -1,6 +1,7 @@
 //! Strict run-report DTO + reporters. The DTO IS the output allowlist: it holds ONLY
 //! safe, already-redacted fields — never response body/headers, prepared requests,
 //! local var maps, raw data rows, or executor metadata (which carries auth).
+use qa_touchstone_core::xml::xml_attr_escape;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -108,20 +109,20 @@ pub fn to_junit(r: &RunReport) -> String {
             iter + 1, tests, failures, errors, secs
         ));
         for row in rows {
-            let cls = attr(&row.request);
+            let cls = xml_attr_escape(&row.request);
             if let Some(err) = &row.error {
                 out.push_str(&format!(
                     "    <testcase classname=\"{}\" name=\"request\" time=\"0\"><error message=\"{}\"/></testcase>\n",
-                    cls, attr(err)
+                    cls, xml_attr_escape(err)
                 ));
             } else {
                 for a in &row.assertions {
                     if a.pass {
-                        out.push_str(&format!("    <testcase classname=\"{}\" name=\"{}\" time=\"0\"/>\n", cls, attr(&a.label)));
+                        out.push_str(&format!("    <testcase classname=\"{}\" name=\"{}\" time=\"0\"/>\n", cls, xml_attr_escape(&a.label)));
                     } else {
                         out.push_str(&format!(
                             "    <testcase classname=\"{}\" name=\"{}\" time=\"0\"><failure message=\"{}\"/></testcase>\n",
-                            cls, attr(&a.label), attr(&a.actual)
+                            cls, xml_attr_escape(&a.label), xml_attr_escape(&a.actual)
                         ));
                     }
                 }
@@ -131,29 +132,6 @@ pub fn to_junit(r: &RunReport) -> String {
     }
     out.push_str("</testsuites>\n");
     out
-}
-
-/// Replace characters not permitted in XML 1.0 (NUL/most C0 controls, U+FFFE/FFFF)
-/// with the replacement char. Tab/newline/CR are allowed.
-fn sanitize_xml(s: &str) -> String {
-    // Rust `String` is valid UTF-8, so lone surrogates (U+D800–U+DFFF) cannot occur here;
-    // we only need to strip the forbidden control chars and U+FFFE/U+FFFF.
-    s.chars().map(|c| {
-        let u = c as u32;
-        if c == '\t' || c == '\n' || c == '\r' { c }
-        else if u < 0x20 || u == 0xFFFE || u == 0xFFFF { '\u{FFFD}' }
-        else { c }
-    }).collect()
-}
-
-/// Escape for an XML attribute value (sanitize first). `&` must be replaced first.
-fn attr(s: &str) -> String {
-    sanitize_xml(s)
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }
 
 /// Machine-readable report. The DTO derives `Serialize`; its fields ARE the

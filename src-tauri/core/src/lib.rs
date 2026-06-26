@@ -11,3 +11,4 @@ pub mod redact;
 pub mod reqprep;
 pub mod security;
 pub mod step;
+pub mod xml;
