@@ -82,6 +82,12 @@ fn build_scope_descriptor(cfg: &Config) -> String {
     serde_json::to_string(&Value::Object(root)).unwrap()
 }
 
+fn report_engines(engines: &[EngineSummary]) -> Vec<qa_touchstone_core::security::report::EngineReport> {
+    engines.iter().map(|e| qa_touchstone_core::security::report::EngineReport {
+        engine: e.engine.clone(), ran: e.ran, findings: e.findings, errors: e.errors,
+    }).collect()
+}
+
 fn atomic_write_json<T: serde::Serialize>(path: &str, v: &T) -> std::io::Result<()> {
     let body = serde_json::to_string_pretty(v).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     let tmp = format!("{path}.tmp.{}", std::process::id());
@@ -195,10 +201,10 @@ pub async fn run_scan(
         }
     } else { None };
     let baseline_items: Vec<_> = baseline_snapshot.as_ref().map(|s| s.items.clone()).unwrap_or_default();
-    if let Some(b) = &baseline_snapshot {
-        if !b.scope_hash.is_empty() && b.scope_hash != scope_hash {
-            eprintln!("warn: baseline scope differs from this run — the diff may be unreliable");
-        }
+    let scope_mismatch = baseline_snapshot.as_ref()
+        .map(|b| !b.scope_hash.is_empty() && b.scope_hash != scope_hash).unwrap_or(false);
+    if scope_mismatch {
+        eprintln!("warn: baseline scope differs from this run — the diff may be unreliable");
     }
 
     // Baseline-aware gate: only NEW findings >= fail_on trigger exit 3.
@@ -223,7 +229,7 @@ pub async fn run_scan(
 
     // SARIF emit.
     if let Some(path) = sarif.as_deref() {
-        let model = build_report(&current.items, &baseline_items);
+        let model = build_report(&current.items, &baseline_items, report_engines(&report.engines), fail_on_sev, scope_mismatch, "cli");
         if let Err(e) = std::fs::write(path, report_to_sarif(&model)) {
             eprintln!("error: cannot write SARIF `{path}`: {e}"); return ExitCode::from(1);
         }

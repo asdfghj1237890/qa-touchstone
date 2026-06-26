@@ -61,7 +61,7 @@ fn report_sarif_matches_ts() {
         "DELETE delU @anon",
         "Access-control bypass",
     )];
-    let model = build_report(&cur, &base);
+    let model = build_report(&cur, &base, vec![], Severity::High, false, "r");
     let got: Value = serde_json::from_str(&report_to_sarif(&model)).unwrap();
     assert_eq!(
         got,

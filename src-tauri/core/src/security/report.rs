@@ -18,7 +18,19 @@ pub struct ReportFinding {
     pub evidence: Option<String>,
 }
 
+pub struct ReportMeta { pub run_id: String, pub scope_mismatch: bool }
+pub struct EngineReport { pub engine: String, pub ran: bool, pub findings: usize, pub errors: usize }
+pub struct ReportSummary {
+    pub total: usize,
+    pub critical: usize, pub high: usize, pub medium: usize, pub low: usize, pub info: usize,
+    pub new: usize, pub carried: usize, pub resolved: usize,
+    pub fail_on: Severity,   // the gate threshold, carried for the reporters
+    pub gated: usize,        // count(presence==New && severity >= fail_on)
+}
 pub struct ReportModel {
+    pub meta: ReportMeta,
+    pub engines: Vec<EngineReport>,
+    pub summary: ReportSummary,
     pub findings: Vec<ReportFinding>,
 }
 
@@ -138,7 +150,10 @@ pub fn location_to_uri(location: &str) -> String {
 
 /// buildReport (securityReport.ts:27-94) trimmed to SARIF needs: presence + sorted findings,
 /// default annotations (no lifecycle/suppressions). resolved appended; sort presence then sev desc.
-pub fn build_report(current: &[SnapshotItem], baseline: &[SnapshotItem]) -> ReportModel {
+pub fn build_report(
+    current: &[SnapshotItem], baseline: &[SnapshotItem],
+    engines: Vec<EngineReport>, fail_on: Severity, scope_mismatch: bool, run_id: &str,
+) -> ReportModel {
     let diff = diff_runs(current, baseline);
     let mut findings: Vec<ReportFinding> = Vec::new();
     for it in current {
@@ -192,7 +207,23 @@ pub fn build_report(current: &[SnapshotItem], baseline: &[SnapshotItem]) -> Repo
             .cmp(&presence_order(b.presence))
             .then(sev_index(b.severity).cmp(&sev_index(a.severity)))
     });
-    ReportModel { findings }
+    // Compute the summary over the CURRENT (non-resolved) findings:
+    let mut s = ReportSummary { total: 0, critical:0, high:0, medium:0, low:0, info:0,
+        new:0, carried:0, resolved:0, fail_on, gated:0 };
+    for f in &findings {
+        match f.presence {
+            Presence::New => s.new += 1,
+            Presence::Carried => s.carried += 1,
+            Presence::Resolved => { s.resolved += 1; continue; }
+        }
+        s.total += 1;
+        match f.severity {
+            Severity::Critical => s.critical += 1, Severity::High => s.high += 1, Severity::Medium => s.medium += 1,
+            Severity::Low => s.low += 1, Severity::Info => s.info += 1,
+        }
+        if f.presence == Presence::New && f.severity >= fail_on { s.gated += 1; }
+    }
+    ReportModel { meta: ReportMeta { run_id: run_id.into(), scope_mismatch }, engines, summary: s, findings }
 }
 
 /// reportToSarif (securityReport.ts:213-267), fallback synthesis (no SARIF_RULE_META — deferred).
@@ -375,7 +406,7 @@ mod tests {
             mk_item("bb", Severity::Critical, EngineId::Matrix, "matrix.deny-bypass",
                     "DELETE delU @anon", "Access-control bypass"),
         ];
-        let model = build_report(&cur, &base);
+        let model = build_report(&cur, &base, vec![], Severity::High, false, "t");
         // bb is carried, aa is new; sort: presence(new=0,carried=1) then sev desc
         // new: aa(high), bb(critical) — wait: bb is carried not new
         // new findings: aa(high); carried: bb(critical)
