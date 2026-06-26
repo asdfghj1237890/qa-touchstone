@@ -458,6 +458,150 @@ pub fn parse_openapi(obj: &Value) -> ImportParsed {
     }
 }
 
+/// Produce a deterministic, URL-safe id slug from a string.
+/// Mirrors the spec: lowercase, non-alphanumeric → '-', collapse repeats, trim;
+/// empty → "req" (for requests) or "coll" (for collections — callers supply fallback).
+pub fn make_slug(s: &str) -> String {
+    let lower = s.to_lowercase();
+    let mut out = String::with_capacity(lower.len());
+    let mut prev_dash = true; // trim leading dashes
+    for c in lower.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    // Trim trailing dash
+    let slug = out.trim_end_matches('-').to_string();
+    if slug.is_empty() { String::new() } else { slug }
+}
+
+/// Deduplicate a slug against a set of already-used ids.
+/// Returns the slug itself if unused, else slug-2, slug-3, ...
+fn dedup_slug(base: &str, used: &mut std::collections::HashSet<String>, fallback: &str) -> String {
+    let base = if base.is_empty() { fallback.to_string() } else { base.to_string() };
+    if used.insert(base.clone()) { return base; }
+    let mut n = 2u32;
+    loop {
+        let candidate = format!("{}-{}", base, n);
+        if used.insert(candidate.clone()) { return candidate; }
+        n += 1;
+    }
+}
+
+fn build_request_url(path: &str) -> String {
+    // Step 1: strip inline ?query (the structured query is emitted in req.query separately)
+    let raw = path.split('?').next().unwrap_or(path);
+
+    // Step 2: absolute URL (case-insensitive http:// or https://)
+    let lower = raw.to_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return raw.to_string();
+    }
+
+    // Step 3: already templated (contains {{)
+    if raw.contains("{{") {
+        return raw.to_string();
+    }
+
+    // Step 4: relative path → prepend {{baseUrl}} with guaranteed leading /
+    let path_part = if raw.starts_with('/') {
+        raw.to_string()
+    } else {
+        format!("/{}", raw)
+    };
+    format!("{{{{baseUrl}}}}{}", path_part)
+}
+
+/// Map an ImportParsed into a qa.json config Value.
+/// `base_url_override`: --base-url CLI flag; takes precedence over parsed base_url.
+/// The returned Value MUST pass load_config (unique ids, valid refs).
+pub fn to_config(parsed: &ImportParsed, base_url_override: Option<&str>) -> serde_json::Value {
+    use serde_json::{json, Value};
+    use std::collections::HashSet;
+
+    let base_url = base_url_override
+        .map(|s| s.to_string())
+        .or_else(|| parsed.collection.base_url.clone())
+        .unwrap_or_default();
+
+    let is_openapi = matches!(parsed.collection.source, Format::OpenApi);
+
+    let mut req_id_used: HashSet<String> = HashSet::new();
+    let mut coll_id_used: HashSet<String> = HashSet::new();
+
+    // Build requests list, collecting per-folder request-id lists simultaneously.
+    struct FolderOut { id: String, request_ids: Vec<String> }
+    let mut all_requests: Vec<Value> = Vec::new();
+    let mut folder_outs: Vec<FolderOut> = Vec::new();
+
+    for folder in &parsed.folders {
+        let coll_slug = make_slug(&folder.name);
+        let coll_id = dedup_slug(&coll_slug, &mut coll_id_used, "coll");
+        let mut request_ids: Vec<String> = Vec::new();
+
+        for req in &folder.requests {
+            let req_slug = make_slug(&format!("{} {}", req.method, req.path));
+            let req_id = dedup_slug(&req_slug, &mut req_id_used, "req");
+            request_ids.push(req_id.clone());
+
+            let url = build_request_url(&req.path);
+
+            // Query: only on:true entries (on:false → OpenAPI optional/header params → dropped)
+            let query: Vec<Value> = req.params.iter()
+                .filter(|p| p.on)
+                .map(|p| json!({ "key": p.key, "value": p.value }))
+                .collect();
+
+            // Headers: only on:true entries
+            let headers: Vec<Value> = req.headers.iter()
+                .filter(|h| h.on)
+                .map(|h| json!({ "key": h.key, "value": h.value }))
+                .collect();
+
+            // Body: mode depends on source format
+            let body: Option<Value> = req.body.as_ref().map(|content| {
+                let mode = if is_openapi { "json" } else { "raw" };
+                json!({ "mode": mode, "content": content })
+            });
+
+            let mut req_obj = json!({
+                "id": req_id,
+                "method": req.method.to_uppercase(),
+                "url": url,
+                "headers": headers,
+                "query": query,
+            });
+            if let Some(b) = body {
+                req_obj["body"] = b;
+            }
+            all_requests.push(req_obj);
+        }
+
+        folder_outs.push(FolderOut { id: coll_id, request_ids });
+    }
+
+    // Collections: one per folder
+    let collections: Vec<Value> = folder_outs.iter()
+        .map(|fo| json!({
+            "id": fo.id,
+            "requests": fo.request_ids,
+            "variables": {},
+        }))
+        .collect();
+
+    json!({
+        "version": 1,
+        "globals": { "variables": { "baseUrl": base_url } },
+        "identities": [{ "id": "anon", "auth": { "type": "none" } }],
+        "requests": all_requests,
+        "collections": collections,
+    })
+}
+
 /// Port of qaParseImport. Error strings are TS-verbatim.
 pub fn qa_parse_import(text: &str) -> Result<ImportParsed, String> {
     let obj: Value = serde_json::from_str(text)
@@ -632,5 +776,263 @@ mod tests {
     fn parse_import_rejects_unknown_format() {
         let err = qa_parse_import(r#"{"something":"else"}"#).unwrap_err();
         assert_eq!(err, "Unrecognized format \u{2014} expected a Postman v2.1 collection or an OpenAPI/Swagger spec.");
+    }
+
+    // ── to_config ─────────────────────────────────────────────────────────────
+
+    fn make_postman_parsed() -> ImportParsed {
+        ImportParsed {
+            collection: ImportCollection {
+                name: "Test API".to_string(),
+                source: Format::Postman,
+                base_url: None,
+            },
+            folders: vec![
+                ImportFolder {
+                    name: "Users".to_string(),
+                    requests: vec![
+                        ImportRequest {
+                            method: "GET".to_string(),
+                            name: "List Users".to_string(),
+                            path: "/api/users?page=1".to_string(),  // inline query to be stripped
+                            params: vec![KvOn { key: "page".to_string(), value: "1".to_string(), on: true }],
+                            headers: vec![],
+                            body: None,
+                            auth: "none".to_string(),
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+
+    fn make_openapi_parsed() -> ImportParsed {
+        ImportParsed {
+            collection: ImportCollection {
+                name: "Pet API".to_string(),
+                source: Format::OpenApi,
+                base_url: Some("https://api.pets.io".to_string()),
+            },
+            folders: vec![
+                ImportFolder {
+                    name: "pets".to_string(),
+                    requests: vec![
+                        ImportRequest {
+                            method: "POST".to_string(),
+                            name: "Create pet".to_string(),
+                            path: "/pets".to_string(),
+                            params: vec![],
+                            headers: vec![KvOn { key: "X-Trace".to_string(), value: String::new(), on: false }],
+                            body: Some(r#"{"name":"Buddy"}"#.to_string()),
+                            auth: "bearer".to_string(),
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+
+    // -- URL rule tests --
+
+    #[test]
+    fn url_rule_strips_inline_query() {
+        // path "/api/users?page=1" → url must be "{{baseUrl}}/api/users" (query stripped)
+        let parsed = make_postman_parsed();
+        let cfg = to_config(&parsed, None);
+        let url = cfg["requests"][0]["url"].as_str().unwrap();
+        assert_eq!(url, "{{baseUrl}}/api/users", "inline ?query must be stripped from url");
+        // query param must survive in the query array
+        let q = &cfg["requests"][0]["query"];
+        assert!(q.as_array().unwrap().iter().any(|e| e["key"] == "page"), "query param must be in query[]");
+    }
+
+    #[test]
+    fn url_rule_absolute_kept_as_is() {
+        let parsed = ImportParsed {
+            collection: ImportCollection { name: "T".into(), source: Format::Postman, base_url: None },
+            folders: vec![ImportFolder { name: "f".into(), requests: vec![
+                ImportRequest { method: "GET".into(), name: "r".into(),
+                    path: "HTTPS://api.example.com/v1/u".to_string(),
+                    params: vec![], headers: vec![], body: None, auth: "none".into() }
+            ]}],
+        };
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["requests"][0]["url"], "HTTPS://api.example.com/v1/u",
+            "absolute URL (case-insensitive) must be kept as-is");
+    }
+
+    #[test]
+    fn url_rule_templated_kept_as_is() {
+        let parsed = ImportParsed {
+            collection: ImportCollection { name: "T".into(), source: Format::Postman, base_url: None },
+            folders: vec![ImportFolder { name: "f".into(), requests: vec![
+                ImportRequest { method: "GET".into(), name: "r".into(),
+                    path: "{{baseUrl}}/users".to_string(),
+                    params: vec![], headers: vec![], body: None, auth: "none".into() }
+            ]}],
+        };
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["requests"][0]["url"], "{{baseUrl}}/users",
+            "already-templated path must be kept as-is");
+    }
+
+    #[test]
+    fn url_rule_bare_path_gets_leading_slash_and_base_url() {
+        let parsed = ImportParsed {
+            collection: ImportCollection { name: "T".into(), source: Format::Postman, base_url: None },
+            folders: vec![ImportFolder { name: "f".into(), requests: vec![
+                ImportRequest { method: "GET".into(), name: "r".into(),
+                    path: "api/users".to_string(),   // no leading slash
+                    params: vec![], headers: vec![], body: None, auth: "none".into() }
+            ]}],
+        };
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["requests"][0]["url"], "{{baseUrl}}/api/users",
+            "bare path must get leading / and {{baseUrl}} prefix");
+    }
+
+    // -- Slug / dedupe --
+
+    #[test]
+    fn slug_deduplication() {
+        // Two requests with the same method+path → slug-2 for the second
+        let parsed = ImportParsed {
+            collection: ImportCollection { name: "T".into(), source: Format::Postman, base_url: None },
+            folders: vec![ImportFolder { name: "f".into(), requests: vec![
+                ImportRequest { method: "GET".into(), name: "a".into(), path: "/users/id".into(), params: vec![], headers: vec![], body: None, auth: "none".into() },
+                ImportRequest { method: "GET".into(), name: "b".into(), path: "/users/id".into(), params: vec![], headers: vec![], body: None, auth: "none".into() },
+            ]}],
+        };
+        let cfg = to_config(&parsed, None);
+        let ids: Vec<&str> = cfg["requests"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap()).collect();
+        assert_eq!(ids[0], "get-users-id");
+        assert_eq!(ids[1], "get-users-id-2", "second collision must become -2");
+    }
+
+    // -- baseUrl precedence --
+
+    #[test]
+    fn base_url_override_wins_over_parsed() {
+        let parsed = make_openapi_parsed(); // has base_url = Some("https://api.pets.io")
+        let cfg = to_config(&parsed, Some("https://override.example.com"));
+        assert_eq!(cfg["globals"]["variables"]["baseUrl"], "https://override.example.com",
+            "--base-url override must win over parsed servers[0]");
+    }
+
+    #[test]
+    fn base_url_falls_back_to_parsed() {
+        let parsed = make_openapi_parsed(); // has base_url = Some("https://api.pets.io")
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["globals"]["variables"]["baseUrl"], "https://api.pets.io",
+            "parsed servers[0] used when no --base-url override");
+    }
+
+    #[test]
+    fn base_url_empty_when_neither() {
+        let parsed = make_postman_parsed(); // base_url = None, no override
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["globals"]["variables"]["baseUrl"], "",
+            "baseUrl must be empty string when no source and no override");
+    }
+
+    // -- Body mode --
+
+    #[test]
+    fn body_mode_openapi_is_json() {
+        let parsed = make_openapi_parsed();
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["requests"][0]["body"]["mode"], "json",
+            "OpenAPI requestBody must use mode:json");
+    }
+
+    #[test]
+    fn body_mode_postman_is_raw() {
+        let parsed = ImportParsed {
+            collection: ImportCollection { name: "T".into(), source: Format::Postman, base_url: None },
+            folders: vec![ImportFolder { name: "f".into(), requests: vec![
+                ImportRequest { method: "POST".into(), name: "r".into(), path: "/u".into(),
+                    params: vec![], headers: vec![], body: Some("{\"x\":1}".into()), auth: "none".into() }
+            ]}],
+        };
+        let cfg = to_config(&parsed, None);
+        assert_eq!(cfg["requests"][0]["body"]["mode"], "raw",
+            "Postman raw body must use mode:raw");
+    }
+
+    // -- on:false dropped --
+
+    #[test]
+    fn on_false_params_and_headers_dropped() {
+        let parsed = make_openapi_parsed(); // has header on:false
+        let cfg = to_config(&parsed, None);
+        let hdrs = cfg["requests"][0]["headers"].as_array().unwrap();
+        assert!(hdrs.is_empty(), "on:false header must be dropped");
+    }
+
+    // -- Placeholder identity --
+
+    #[test]
+    fn placeholder_identity() {
+        let parsed = make_postman_parsed();
+        let cfg = to_config(&parsed, None);
+        let ids = cfg["identities"].as_array().unwrap();
+        assert_eq!(ids.len(), 1);
+        assert_eq!(ids[0]["id"], "anon");
+        assert_eq!(ids[0]["auth"]["type"], "none");
+    }
+
+    // -- load_config round-trip --
+
+    #[test]
+    fn to_config_passes_load_config() {
+        use crate::config::load_config;
+        let parsed = make_openapi_parsed();
+        let cfg_val = to_config(&parsed, Some("https://api.pets.io"));
+        let json_str = serde_json::to_string(&cfg_val).unwrap();
+        let result = load_config(&json_str, &|_| None);
+        assert!(result.is_ok(), "to_config output must pass load_config: {:?}", result.err());
+    }
+
+    // -- build_request-level Blocker guard --
+
+    #[test]
+    fn build_request_no_dup_query_from_inline_url() {
+        // Postman request with inline-query url + structured query → build_request
+        // must produce the query param EXACTLY ONCE (the Blocker: pm_url_to_path keeps
+        // the query in path; to_config strips it; structured query is emitted in req.query).
+        use crate::config::load_config;
+        use crate::buildreq::build_request;
+        use crate::engine::NoDynamics;
+        use std::collections::BTreeMap;
+
+        // Simulate what to_config emits for a Postman request with inline-query url.
+        // path="/api/pets?limit=10" → url="{{baseUrl}}/api/pets" (stripped), query=[{key:"limit",value:"10"}]
+        let cfg_json = r#"{
+            "version": 1,
+            "globals": { "variables": { "baseUrl": "https://api.pets.io" } },
+            "identities": [{ "id": "anon", "auth": { "type": "none" } }],
+            "requests": [{
+                "id": "list-pets",
+                "method": "GET",
+                "url": "{{baseUrl}}/api/pets",
+                "query": [{ "key": "limit", "value": "10" }]
+            }]
+        }"#;
+
+        let cfg = load_config(cfg_json, &|_| None).expect("config loads");
+        let req = cfg.requests.iter().find(|r| r.id == "list-pets").unwrap();
+        let identity = cfg.identities.iter().find(|i| i.id == "anon").unwrap();
+
+        // Build var map with baseUrl resolved
+        let mut map = BTreeMap::new();
+        map.insert("baseUrl".to_string(), "https://api.pets.io".to_string());
+
+        let out = build_request(req, identity, &map, &mut NoDynamics).expect("build succeeds");
+        let url = out["request"]["url"].as_str().unwrap();
+
+        // Count occurrences of "limit=" in the built URL
+        let count = url.matches("limit=").count();
+        assert_eq!(count, 1, "query param 'limit' must appear exactly once in built URL, got: {url}");
+        assert!(url.contains("limit=10"), "query value must be present: {url}");
     }
 }
