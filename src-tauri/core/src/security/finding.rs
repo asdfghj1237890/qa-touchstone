@@ -9,7 +9,7 @@ pub enum Severity { Info, Low, Medium, High, Critical } // Ord: Critical is grea
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum EngineId { Matrix, Bola, RateLimit }
+pub enum EngineId { Matrix, Bola, RateLimit, Oracle }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Finding {
@@ -47,6 +47,10 @@ mod tests {
         assert!(Severity::Medium > Severity::Low);
         assert!(Severity::Low > Severity::Info);
         assert!(Severity::High >= Severity::High);
+    }
+    #[test] fn oracle_engine_serializes_lowercase() {
+        assert_eq!(serde_json::to_value(EngineId::Oracle).unwrap(), "oracle");
+        assert_ne!(EngineId::Oracle, EngineId::Matrix);
     }
     #[test]
     fn serializes_lowercase_and_skips_none() {

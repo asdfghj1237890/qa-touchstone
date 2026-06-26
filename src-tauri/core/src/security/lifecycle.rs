@@ -19,7 +19,7 @@ pub fn fnv1a(s: &str) -> String {
 }
 
 /// normalizePath (oracles.ts:26): replace every `[<digits>]` with `[]`.
-fn normalize_path(p: &str) -> String {
+pub(crate) fn normalize_path(p: &str) -> String {
     use std::sync::OnceLock;
     use regex::Regex;
     static R: OnceLock<Regex> = OnceLock::new();
@@ -27,7 +27,7 @@ fn normalize_path(p: &str) -> String {
 }
 
 /// Engine token feeding the fingerprint — same lowercase strings as the TS `engine`.
-fn engine_token(e: EngineId) -> &'static str { match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::RateLimit=>"ratelimit" } }
+fn engine_token(e: EngineId) -> &'static str { match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle" } }
 
 /// ruleIdOf (findings.ts:21): rule_id, else oracle, else "unknown".
 fn rule_id_of(f: &Finding) -> String {
