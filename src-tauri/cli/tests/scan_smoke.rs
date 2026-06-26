@@ -185,7 +185,7 @@ async fn scan_annotations_suppress_and_override() {
     let fp = v["findings"][0]["fp"].as_str().expect("fp in json output").to_string();
     // 2) suppress that fp -> exit 0 + JUnit <skipped> + SARIF suppressions + no secret leak.
     let ann = write_temp("a.json", &format!(r#"{{"fpVersion":1,"records":{{"{fp}":{{"suppressed":true,"suppressReason":"accepted"}}}}}}"#));
-    let junit = write_temp("o.xml",""); let sarif = write_temp("o.sarif","");
+    let junit = write_temp("annsupp.xml",""); let sarif = write_temp("annsupp.sarif","");
     let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--annotations",ann.to_str().unwrap(),"--junit",junit.to_str().unwrap(),"--sarif",sarif.to_str().unwrap()]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "suppressed finding must not gate");
     let x = std::fs::read_to_string(&junit).unwrap();
