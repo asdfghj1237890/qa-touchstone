@@ -169,3 +169,32 @@ async fn scan_writes_html_and_junit() {
     assert!(x.contains("<failure"), "a new High finding is a JUnit failure");
     assert!(!h.contains("SUPERSECRET") && !x.contains("SUPERSECRET"), "secret must not leak into HTML/JUnit");
 }
+
+#[tokio::test]
+async fn scan_annotations_suppress_and_override() {
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/s")).respond_with(ResponseTemplate::new(200)).mount(&s).await;
+    let cfg = write_temp("ann.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"lp","auth":{{"type":"bearer","token":"SUPERSECRET"}}}}],
+      "requests":[{{"id":"s","method":"GET","url":"{base}/s"}}],
+      "security":{{"matrix":{{"endpoints":["s"],"expect":{{"s":{{"lp":"deny"}}}}}}}} }}"#, base=s.uri()));
+    // 1) baseline run: anon-bypass High -> exit 3; capture the fp from --json output.
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let fp = v["findings"][0]["fp"].as_str().expect("fp in json output").to_string();
+    // 2) suppress that fp -> exit 0 + JUnit <skipped> + SARIF suppressions + no secret leak.
+    let ann = write_temp("a.json", &format!(r#"{{"fpVersion":1,"records":{{"{fp}":{{"suppressed":true,"suppressReason":"accepted"}}}}}}"#));
+    let junit = write_temp("o.xml",""); let sarif = write_temp("o.sarif","");
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--annotations",ann.to_str().unwrap(),"--junit",junit.to_str().unwrap(),"--sarif",sarif.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "suppressed finding must not gate");
+    let x = std::fs::read_to_string(&junit).unwrap();
+    assert!(x.contains("<skipped") && !x.contains("<failure"), "suppressed -> <skipped>");
+    let sf = std::fs::read_to_string(&sarif).unwrap();
+    assert!(sf.contains("\"suppressions\"") && sf.contains("accepted"));
+    assert!(!x.contains("SUPERSECRET") && !sf.contains("SUPERSECRET"), "secret must not leak");
+    // 3) severityOverride high->low also un-gates.
+    let ann2 = write_temp("a2.json", &format!(r#"{{"fpVersion":1,"records":{{"{fp}":{{"severityOverride":"low"}}}}}}"#));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--annotations",ann2.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "downgraded finding must not gate at fail_on=high");
+}

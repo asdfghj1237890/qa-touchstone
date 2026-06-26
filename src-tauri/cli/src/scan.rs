@@ -5,7 +5,7 @@ use qa_touchstone_core::config::{load_config, Config};
 use qa_touchstone_core::redact::RedactionSet;
 use qa_touchstone_core::security::finding::{EngineError, EngineId, Finding, Severity};
 use qa_touchstone_core::security::lifecycle::{
-    diff_runs, gate_count, scope_hash_of, snapshot_of, Snapshot, FP_VERSION,
+    diff_runs, fingerprint, gate_count, scope_hash_of, snapshot_of, AnnotationsFile, Records, Snapshot, FP_VERSION,
 };
 use qa_touchstone_core::security::report::{build_report, report_to_sarif, report_to_html, report_to_junit};
 use serde::Serialize;
@@ -19,6 +19,7 @@ struct EngineSummary { engine: String, ran: bool, findings: usize, errors: usize
 struct Totals { critical: usize, high: usize, medium: usize, low: usize, info: usize, errors: usize }
 #[derive(Serialize)]
 struct RFinding {
+    fp: String,
     engine: String, severity: String, rule_id: String, oracle: String,
     title: String, path: String, evidence: String,
     #[serde(skip_serializing_if = "Option::is_none")] method: Option<String>,
@@ -185,6 +186,7 @@ pub async fn run_scan(
     sarif: Option<String>,
     html: Option<String>,
     junit: Option<String>,
+    annotations: Option<String>,
 ) -> ExitCode {
     let text = match std::fs::read_to_string(&config_path) {
         Ok(t) => t, Err(e) => { eprintln!("error: cannot read config `{config_path}`: {e}"); return ExitCode::from(2); }
@@ -215,9 +217,19 @@ pub async fn run_scan(
         Some(other) => { eprintln!("error: bad --fail-on `{other}` (use critical|high|medium|low)"); return ExitCode::from(2); }
     };
 
-    // Annotations (suppress / override / status / owner / note), keyed by fingerprint.
-    // Empty here; Task 5 loads it from `--annotations`.
-    let records = qa_touchstone_core::security::lifecycle::Records::new();
+    // Load the annotations file (absent/empty => no annotations; fpVersion mismatch / corrupt => exit 2).
+    let records: Records = if let Some(path) = annotations.as_deref() {
+        match std::fs::read_to_string(path) {
+            Ok(t) if t.trim().is_empty() => Records::new(),
+            Ok(t) => match serde_json::from_str::<AnnotationsFile>(&t) {
+                Ok(a) if a.fp_version == FP_VERSION => a.records,
+                Ok(_) => { eprintln!("error: annotations `{path}` fpVersion mismatch (expected {FP_VERSION})"); return ExitCode::from(2); }
+                Err(e) => { eprintln!("error: corrupt annotations `{path}`: {e}"); return ExitCode::from(2); }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Records::new(),
+            Err(e) => { eprintln!("error: cannot read annotations `{path}`: {e}"); return ExitCode::from(2); }
+        }
+    } else { Records::new() };
 
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
@@ -243,13 +255,20 @@ pub async fn run_scan(
         findings.extend(f); errors.extend(e);
     }
 
+    // Redact once (secrets-free, stable fps), then derive both the JSON findings and the snapshot from it.
+    let redacted: Vec<Finding> = findings.iter().map(|f| Finding {
+        engine: f.engine, severity: f.severity, rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
+        title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
+        method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
+    }).collect();
     let mut totals = Totals { critical:0, high:0, medium:0, low:0, info:0, errors: errors.len() };
-    let rfs: Vec<RFinding> = findings.iter().map(|f| {
+    let rfs: Vec<RFinding> = redacted.iter().map(|f| {
         match f.severity { Severity::Critical=>totals.critical+=1, Severity::High=>totals.high+=1, Severity::Medium=>totals.medium+=1, Severity::Low=>totals.low+=1, Severity::Info=>totals.info+=1 }
         RFinding {
+            fp: fingerprint(f).0,
             engine: engine_str(f.engine).into(), severity: sev_str(f.severity).into(), rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
-            title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
-            method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
+            title: f.title.clone(), path: f.path.clone(), evidence: f.evidence.clone(),
+            method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.clone(),
         }
     }).collect();
 
@@ -263,11 +282,6 @@ pub async fn run_scan(
     // Build scope hash and current snapshot from REDACTED findings (secrets-free, stable FPs).
     let scope_json = build_scope_descriptor(&cfg, env.as_deref());
     let scope_hash = scope_hash_of(&scope_json);
-    let redacted: Vec<Finding> = findings.iter().map(|f| Finding {
-        engine: f.engine, severity: f.severity, rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
-        title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
-        method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
-    }).collect();
     let current = snapshot_of(&redacted, "cli", "", &scope_hash, &records);
 
     // Load baseline (absent or empty file => empty baseline, all findings are New).
@@ -306,7 +320,7 @@ pub async fn run_scan(
     if use_json { println!("{}", serde_json::to_string(&report).unwrap()); }
     else {
         println!("security scan: {} finding(s), {}E — {}C {}H {}M {}L {}I", report.findings.len(), report.totals.errors, report.totals.critical, report.totals.high, report.totals.medium, report.totals.low, report.totals.info);
-        for f in &report.findings { println!("  [{}] {}  {}  — {}", f.severity, f.engine, f.path, f.evidence); }
+        for f in &report.findings { println!("  {} [{}] {}  {}  — {}", f.fp, f.severity, f.engine, f.path, f.evidence); }
         for e in &report.errors { println!("  ERROR {} {} — {}", e.engine, e.endpoint.as_deref().unwrap_or("?"), e.message); }
     }
 

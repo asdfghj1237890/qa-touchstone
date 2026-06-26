@@ -67,7 +67,7 @@ enum Command {
         #[arg(long)] out: Option<String>,
         /// Path to a baseline snapshot JSON file (absent or empty => bootstrap / all-new).
         #[arg(long)] baseline: Option<String>,
-        /// Overwrite the baseline file with this run's snapshot (requires --baseline; ignored on engine errors).
+        /// Overwrite the baseline file with this run's snapshot (requires --baseline; ignored on engine errors). With --annotations, the overridden effective severities are frozen into the baseline.
         #[arg(long, requires = "baseline")] update_baseline: bool,
         /// Gate threshold: critical|high|medium|low (default: high).
         #[arg(long)] fail_on: Option<String>,
@@ -77,6 +77,8 @@ enum Command {
         #[arg(long)] html: Option<String>,
         /// Write a JUnit XML report to this file path.
         #[arg(long)] junit: Option<String>,
+        /// Read a findings annotations file (suppress / severityOverride / status / owner / note), keyed by fingerprint.
+        #[arg(long)] annotations: Option<String>,
     },
 }
 
@@ -105,8 +107,8 @@ async fn main() -> std::process::ExitCode {
         Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
             run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
         }
-        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif, html, junit } => {
-            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif, html, junit).await
+        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations } => {
+            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations).await
         }
     }
 }
