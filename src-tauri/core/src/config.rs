@@ -343,6 +343,13 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                 }
             }
         }
+        if let Some(bf) = &sec.bfla {
+            for e in &bf.endpoints {
+                if !req_ids.contains(e.as_str()) {
+                    return Err(format!("security.bfla endpoint references unknown request `{e}`"));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -699,5 +706,35 @@ mod tests {
         let c = load_config(j, &|_| None).unwrap();
         let o = c.security.unwrap().oracles.unwrap().resolve();
         assert!(!o.sensitive && o.schema && o.severity_overrides["secrets"] == crate::security::finding::Severity::Critical);
+    }
+
+    #[test] fn bfla_config_defaults() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{}}}"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let bfla = cfg.security.unwrap().bfla.unwrap();
+        assert!(bfla.endpoints.is_empty(), "defaults to all requests");
+        assert_eq!(bfla.deny_set, vec![401i64, 403, 404], "default deny_set");
+    }
+
+    #[test] fn bfla_config_explicit() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"},{"id":"s","method":"POST","url":"https://h/s"}],"security":{"bfla":{"endpoints":["r"],"denySet":[401,403]}}}"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let bfla = cfg.security.unwrap().bfla.unwrap();
+        assert_eq!(bfla.endpoints, vec!["r"]);
+        assert_eq!(bfla.deny_set, vec![401i64, 403]);
+    }
+
+    #[test] fn bfla_config_empty_deny_set_honored() {
+        // explicit denySet:[] must be honored as-is (not fall back to the default)
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{"denySet":[]}}}"#;
+        let cfg = load_config(j, &|_| None).unwrap();
+        let bfla = cfg.security.unwrap().bfla.unwrap();
+        assert!(bfla.deny_set.is_empty(), "explicit empty denySet must be preserved");
+    }
+
+    #[test] fn bfla_config_rejects_unknown_endpoint_ref() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{"endpoints":["noexist"]}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.contains("security.bfla endpoint references unknown request `noexist`"), "error: {err}");
     }
 }

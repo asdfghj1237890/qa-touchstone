@@ -160,6 +160,20 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
         ov.sort();
         root.insert("oracles".into(), json!({ "sensitive": o.sensitive, "schema": o.schema, "severityOverrides": ov }));
     }
+    if let Some(bf) = sec.and_then(|s| s.bfla.as_ref()) {
+        // (a) BFLA's effective endpoint set → req_ids (so a shape change on a BFLA-only
+        //     request flips the scopeHash even if matrix/bola/ratelimit don't reference it).
+        let bfla_eps: Vec<String> = if bf.endpoints.is_empty() {
+            cfg.requests.iter().map(|r| r.id.clone()).collect()
+        } else {
+            bf.endpoints.clone()
+        };
+        for e in &bfla_eps { req_ids.insert(e.clone()); }
+        // (b) BFLA descriptor entry: endpoints + denySet.
+        let mut eps_sorted = bfla_eps.clone(); eps_sorted.sort();
+        let mut deny = bf.deny_set.clone(); deny.sort();
+        root.insert("bfla".into(), serde_json::json!({ "endpoints": eps_sorted, "denySet": deny }));
+    }
     let reqs: Map<String, Value> = req_ids.into_iter().map(|id| { let sh = req_shape(&id); (id, sh) }).collect();
     root.insert("requests".into(), Value::Object(reqs));
     serde_json::to_string(&Value::Object(root)).unwrap()
@@ -459,5 +473,34 @@ mod tests {
         let a = load_config(&mk("true"), &|_| None).unwrap();
         let b = load_config(&mk("false"), &|_| None).unwrap();
         assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "toggling oracles.sensitive must flip the descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_bfla_deny_set_and_endpoints_flip_hash() {
+        use qa_touchstone_core::config::load_config;
+        let mk = |body: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r"}}],"security":{{"bfla":{body}}}}}"#);
+        let a = load_config(&mk(r#"{"denySet":[401,403,404]}"#), &|_| None).unwrap();
+        let b = load_config(&mk(r#"{"denySet":[401,403]}"#), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "denySet change must flip descriptor");
+        let two_reqs = format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r"}},{{"id":"s","method":"POST","url":"https://h/s"}}],"security":{{"bfla":{{}}}}}}"#);
+        let d = load_config(&two_reqs, &|_| None).unwrap();
+        let one_req = format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r"}}],"security":{{"bfla":{{}}}}}}"#);
+        let e = load_config(&one_req, &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&d, None), build_scope_descriptor(&e, None), "adding a request with bfla.endpoints:[] must flip descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_bfla_request_shape_changes_flip_hash() {
+        use qa_touchstone_core::config::load_config;
+        // With bfla present and endpoints:[] (all), a method change on any request must flip the hash.
+        let mk_method = |m: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"{m}","url":"https://h/r"}}],"security":{{"bfla":{{}}}}}}"#);
+        let get = load_config(&mk_method("GET"), &|_| None).unwrap();
+        let post = load_config(&mk_method("POST"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&get, None), build_scope_descriptor(&post, None), "method change on a bfla-only request must flip descriptor");
+        // privileged flag change must also flip
+        let mk_priv = |p: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r","privileged":{p}}}],"security":{{"bfla":{{}}}}}}"#);
+        let priv_true = load_config(&mk_priv("true"), &|_| None).unwrap();
+        let priv_false = load_config(&mk_priv("false"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&priv_true, None), build_scope_descriptor(&priv_false, None), "privileged flag change must flip descriptor");
     }
 }
