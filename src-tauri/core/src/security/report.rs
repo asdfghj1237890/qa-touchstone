@@ -62,6 +62,7 @@ fn engine_token(e: EngineId) -> &'static str {
     match e {
         EngineId::Matrix => "matrix",
         EngineId::Bola => "bola",
+        EngineId::Bfla => "bfla",
         EngineId::RateLimit => "ratelimit",
         EngineId::Oracle => "oracle",
     }

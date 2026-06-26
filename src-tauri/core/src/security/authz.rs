@@ -7,6 +7,9 @@ use std::sync::OnceLock;
 
 pub const DEFAULT_DENY_SET: [i64; 3] = [401, 403, 404];
 const MUTATING_METHODS: [&str; 4] = ["POST", "PUT", "PATCH", "DELETE"];
+pub(crate) fn is_mutating_method(method: &str) -> bool {
+    MUTATING_METHODS.contains(&method.to_uppercase().as_str())
+}
 const ADMIN_PATH_TOKENS: [&str; 8] =
     ["admin", "internal", "manage", "management", "root", "sudo", "privileged", "superuser"];
 
@@ -33,7 +36,7 @@ fn error_marker_key(k: &str) -> bool { matches!(k, "error"|"errors"|"errorcode"|
 
 /// classifyEndpoint (authz.ts:23-29).
 pub fn classify_endpoint(method: &str, path: &str) -> bool {
-    if MUTATING_METHODS.contains(&method.to_uppercase().as_str()) { return true; }
+    if is_mutating_method(method) { return true; }
     path_token_re().split(&path.to_lowercase()).filter(|t| !t.is_empty()).any(|t| ADMIN_PATH_TOKENS.contains(&t))
 }
 /// endpointPrivileged (authz.ts:33-38): manual override wins, else heuristic.
@@ -128,6 +131,15 @@ pub fn default_expectation(auth_is_none: bool, identity_privileged: bool, endpoi
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test] fn is_mutating_method_cases() {
+        assert!(is_mutating_method("POST"));
+        assert!(is_mutating_method("put"));   // case-insensitive
+        assert!(is_mutating_method("PATCH"));
+        assert!(is_mutating_method("DELETE"));
+        assert!(!is_mutating_method("GET"));
+        assert!(!is_mutating_method("get"));
+        assert!(!is_mutating_method("HEAD"));
+    }
     #[test] fn outcome_basic() {
         assert_eq!(classify_outcome(Some(200), &DEFAULT_DENY_SET), Outcome::Allowed);
         assert_eq!(classify_outcome(Some(403), &DEFAULT_DENY_SET), Outcome::Denied);

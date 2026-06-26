@@ -38,7 +38,7 @@ fn sev_str(s: Severity) -> &'static str {
     match s { Severity::Critical=>"critical", Severity::High=>"high", Severity::Medium=>"medium", Severity::Low=>"low", Severity::Info=>"info" }
 }
 fn engine_str(e: EngineId) -> &'static str {
-    match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle" }
+    match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::Bfla=>"bfla", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle" }
 }
 
 /// Explicit, stable wire tokens for scope-descriptor enums (NOT Debug — a code-shape detail
