@@ -1,7 +1,6 @@
 //! Port of src/qa/oracles.ts — response oracles (sensitive-data + schema-drift), pure.
 //! Findings carry NO cell context (method/endpoint/identity = None); run_matrix stamps the cell.
 use crate::security::finding::{EngineId, Finding, Severity};
-use crate::security::lifecycle::normalize_path;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::BTreeMap;
