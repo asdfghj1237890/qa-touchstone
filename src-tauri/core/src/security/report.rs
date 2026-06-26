@@ -379,6 +379,39 @@ pub fn report_to_junit(model: &ReportModel) -> String {
     out
 }
 
+/// htmlEscape (securityReport.ts:98).
+pub fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;").replace('\'', "&#39;")
+}
+
+/// reportToHtml (securityReport.ts:297-316), CLI-adapted: durations omitted; gate label threshold-neutral;
+/// evidence = the plain redacted string (no GUI evidenceArtifact). Every interpolated field is html_escape'd.
+pub fn report_to_html(model: &ReportModel) -> String {
+    let h = html_escape;
+    let s = &model.summary;
+    let sev_chip = |n: usize, name: &str| if n > 0 { format!("<span class=\"chip sev-{name}\">{n} {name}</span>") } else { String::new() };
+    let chips = format!("{}{}{}{}{}",
+        sev_chip(s.critical,"critical"), sev_chip(s.high,"high"), sev_chip(s.medium,"medium"), sev_chip(s.low,"low"), sev_chip(s.info,"info"));
+    let eng_rows: String = model.engines.iter().map(|e| format!(
+        "<tr><td>{}</td><td>{}</td><td>{}</td></tr>", h(&e.engine), if e.ran { e.findings.to_string() } else { "skipped".into() }, e.errors)).collect();
+    let find_rows: String = model.findings.iter().map(|f| {
+        let presence = match f.presence { Presence::New=>"new", Presence::Carried=>"carried", Presence::Resolved=>"resolved" };
+        format!("<tr class=\"p-{presence}\"><td>{presence}</td><td class=\"sev-{sev}\">{sev}</td><td>{eng}</td><td><code>{rule}</code> {title}{cnt}</td><td><code>{loc}</code></td><td>{ev}</td></tr>",
+            sev=sev_token(f.severity), eng=h(engine_token(f.engine)), rule=h(&f.rule_id), title=h(&f.title),
+            cnt=if f.count>1 { format!(" \u{00d7}{}", f.count) } else { String::new() },
+            loc=h(&f.location), ev=f.evidence.as_deref().map(|e| format!("<code>{}</code>", h(e))).unwrap_or_default())
+    }).collect();
+    format!("<!doctype html><html><head><meta charset=\"utf-8\"><title>QA Touchstone — Security report</title>\n\
+<style>body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}}.gate{{font-size:20px;font-weight:700}}.chip{{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}}.sev-critical,.sev-high{{color:#b91c1c}}.sev-medium{{color:#b45309}}.p-resolved{{opacity:.55}}</style>\n\
+</head><body>\n<h1>QA Touchstone — Security report</h1>\n\
+<p>Run {run}{drift}</p>\n<p class=\"gate\">{gated} new (\u{2265} {fail_on})</p>\n\
+<p>{total} findings — {new} new \u{00b7} {carried} carried \u{00b7} {resolved} resolved</p>\n<div>{chips}</div>\n\
+<h2>Engines</h2><table><thead><tr><th>Engine</th><th>Findings</th><th>Errors</th></tr></thead><tbody>{eng_rows}</tbody></table>\n\
+<h2>Findings</h2><table><thead><tr><th>State</th><th>Severity</th><th>Engine</th><th>Rule</th><th>Location</th><th>Evidence</th></tr></thead><tbody>{find_rows}</tbody></table>\n</body></html>",
+        run=h(&model.meta.run_id), drift=if model.meta.scope_mismatch { " \u{00b7} <strong>baseline scope differs</strong>" } else { "" },
+        gated=s.gated, fail_on=sev_token(s.fail_on), total=s.total, new=s.new, carried=s.carried, resolved=s.resolved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,5 +506,20 @@ mod tests {
         assert_eq!(v["version"], "2.1.0");
         assert!(v["runs"][0]["tool"]["driver"]["rules"].is_array());
         assert!(v["runs"][0]["results"].is_array());
+    }
+
+    #[test] fn html_contains_findings_and_threshold_gate() {
+        let cur = vec![ mk_item("a", Severity::High, EngineId::Bola, "bola.cross-object", "GET getOrder @t1", "Cross-object") ];
+        let model = build_report(&cur, &[], vec![EngineReport{engine:"bola".into(),ran:true,findings:1,errors:0}], Severity::High, false, "cli");
+        let html = report_to_html(&model);
+        assert!(html.contains("bola.cross-object"));
+        assert!(html.contains("1 new (\u{2265} high)"), "threshold-neutral gate label");
+        assert!(html.contains("<!doctype html>"));
+    }
+    #[test] fn html_escapes_hostile_fields() {
+        let cur = vec![ mk_item("a", Severity::High, EngineId::Matrix, "<script>x</script>", "GET u @anon", "<b>t</b>") ];
+        let model = build_report(&cur, &[], vec![], Severity::High, false, "cli");
+        let html = report_to_html(&model);
+        assert!(!html.contains("<script>x</script>") && html.contains("&lt;script&gt;") && html.contains("&lt;b&gt;"), "rule id AND title escaped");
     }
 }
