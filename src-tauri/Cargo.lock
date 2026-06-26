@@ -3106,6 +3106,7 @@ dependencies = [
  "env_logger",
  "log",
  "qa_touchstone_core",
+ "reqwest",
  "roxmltree",
  "serde",
  "serde_json",

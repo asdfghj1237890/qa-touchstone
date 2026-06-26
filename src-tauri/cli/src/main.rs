@@ -9,6 +9,7 @@ use clap::{Parser, Subcommand};
 use qa_touchstone_core::executor::ExecOptions;
 use serde_json::json;
 
+mod bola_suggest;
 mod report;
 mod run;
 mod scan;
@@ -80,6 +81,19 @@ enum Command {
         /// Read a findings annotations file (suppress / severityOverride / status / owner / note), keyed by fingerprint.
         #[arg(long)] annotations: Option<String>,
     },
+    /// Detect id locations in configured requests and print ranked candidates
+    /// + a paste-ready security.bola.tests config stub. Read-only, no network.
+    BolaSuggest {
+        /// Path to the QA Touchstone config JSON file.
+        #[arg(long)]
+        config: String,
+        /// Name of the environment to activate (from the config `environments` array).
+        #[arg(long)]
+        env: Option<String>,
+        /// Output machine-readable JSON instead of human lines.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
@@ -109,6 +123,9 @@ async fn main() -> std::process::ExitCode {
         }
         Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations } => {
             scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations).await
+        }
+        Command::BolaSuggest { config, env, json: use_json } => {
+            bola_suggest::run(config, env, use_json).await
         }
     }
 }
