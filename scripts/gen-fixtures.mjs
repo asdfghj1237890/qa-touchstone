@@ -308,13 +308,8 @@ const bflaIdentities = [
   { id: 'user',   privileged: false },
 ];
 const bflaPairs = bP(bflaEndpoints, bflaIdentities);
-// Map index pairs → ["{method} {path}", "{identityId}"] for ordered Vec comparison in Rust.
-const bflaPlanOut = bflaPairs.map(p => [
-  `${bflaEndpoints[p.endpoint.method ? bflaEndpoints.indexOf(p.endpoint) : 0].method} ${bflaEndpoints[bflaEndpoints.indexOf(p.endpoint)].path}`,
-  p.identity.id,
-]);
-// Re-derive correctly: bflaPlan returns {endpoint, identity} objects, not indices.
-// Build the ordered tuple list by iterating pairs.
+// bflaPlan returns {endpoint, identity} objects; map to ["{method} {path}", "{id}"] tuples
+// for the ordered-Vec comparison in the Rust fixture test.
 const bflaPlanTuples = bflaPairs.map(p => [`${p.endpoint.method} ${p.endpoint.path}`, p.identity.id]);
 
 const bflaClassifyCases = [

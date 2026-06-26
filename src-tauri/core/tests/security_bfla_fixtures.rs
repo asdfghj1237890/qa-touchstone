@@ -5,7 +5,6 @@ use serde_json::Value;
 
 #[derive(serde::Deserialize)]
 struct File {
-    #[serde(rename = "denySet")] deny_set: Vec<i64>,
     plan: Vec<[String; 2]>,
     classify: Vec<ClassifyCase>,
     severity: Vec<SeverityCase>,
