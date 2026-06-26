@@ -149,3 +149,23 @@ async fn scan_ratelimit_throttled_exits_0() {
     let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","ratelimit"]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "strong throttling → exit 0");
 }
+
+#[tokio::test]
+async fn scan_writes_html_and_junit() {
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/s")).respond_with(ResponseTemplate::new(200)).mount(&s).await;
+    let cfg = write_temp("hj.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"lp","auth":{{"type":"bearer","token":"SUPERSECRET"}}}}],
+      "requests":[{{"id":"s","method":"GET","url":"{base}/s"}}],
+      "security":{{"matrix":{{"endpoints":["s"],"expect":{{"s":{{"lp":"deny"}}}}}}}} }}"#, base=s.uri()));
+    let html = write_temp("o.html", "");
+    let junit = write_temp("o.xml", "");
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--html",html.to_str().unwrap(),"--junit",junit.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "anon-bypass vuln High → exit 3");
+    let h = std::fs::read_to_string(&html).unwrap();
+    assert!(h.contains("<!doctype html>") && h.contains("matrix.deny-bypass"), "html has doctype + rule id");
+    let x = std::fs::read_to_string(&junit).unwrap();
+    roxmltree::Document::parse(&x).expect("valid JUnit XML");
+    assert!(x.contains("<failure"), "a new High finding is a JUnit failure");
+    assert!(!h.contains("SUPERSECRET") && !x.contains("SUPERSECRET"), "secret must not leak into HTML/JUnit");
+}

@@ -7,7 +7,7 @@ use qa_touchstone_core::security::finding::{EngineError, EngineId, Finding, Seve
 use qa_touchstone_core::security::lifecycle::{
     diff_runs, gate_count, scope_hash_of, snapshot_of, Snapshot, FP_VERSION,
 };
-use qa_touchstone_core::security::report::{build_report, report_to_sarif};
+use qa_touchstone_core::security::report::{build_report, report_to_sarif, report_to_html, report_to_junit};
 use serde::Serialize;
 use std::process::ExitCode;
 
@@ -50,35 +50,77 @@ fn id_location_token(l: &qa_touchstone_core::config::IdLocation) -> String {
     use qa_touchstone_core::config::IdLocation;
     match l { IdLocation::Path { index } => format!("path:{index}"), IdLocation::Query { key } => format!("query:{key}"), IdLocation::Body { path } => format!("body:{path}") }
 }
+fn auth_kind_token(a: &qa_touchstone_core::config::Auth) -> &'static str {
+    use qa_touchstone_core::config::Auth::*;
+    match a { None => "none", Bearer { .. } => "bearer", ApiKey { .. } => "apikey", Basic { .. } => "basic" }
+}
+fn apikey_in_token(l: &qa_touchstone_core::config::ApiKeyIn) -> &'static str {
+    use qa_touchstone_core::config::ApiKeyIn;
+    match l { ApiKeyIn::Header => "header", ApiKeyIn::Query => "query" }
+}
+fn body_mode_token(m: &qa_touchstone_core::config::BodyMode) -> &'static str {
+    use qa_touchstone_core::config::BodyMode;
+    match m { BodyMode::None => "none", BodyMode::Json => "json", BodyMode::Raw => "raw" }
+}
 
 /// Canonical, sorted, secret-free descriptor of the scanned surface, for scope-drift detection.
-fn build_scope_descriptor(cfg: &Config) -> String {
+fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     use serde_json::{json, Map, Value};
+    let req_shape = |id: &str| -> Value {
+        match cfg.requests.iter().find(|r| r.id == id) {
+            Some(r) => {
+                let mut hs: Vec<String> = r.headers.iter().map(|k| format!("{}={}", k.key, k.value)).collect(); hs.sort();
+                let mut qs: Vec<String> = r.query.iter().map(|k| format!("{}={}", k.key, k.value)).collect(); qs.sort();
+                let body = r.body.as_ref().map(|b| json!({ "mode": body_mode_token(&b.mode), "content": b.content })).unwrap_or(Value::Null);
+                json!({ "method": r.method, "url": r.url, "privileged": r.privileged, "headers": hs, "query": qs, "body": body })
+            }
+            None => Value::Null,
+        }
+    };
     let sec = cfg.security.as_ref();
     let mut root = Map::new();
+    root.insert("env".into(), json!(env.unwrap_or("")));
+    // identities: auth KIND + privileged + apikey key/location ONLY — never token/value/password.
+    let mut ids: Vec<Value> = cfg.identities.iter().map(|i| {
+        let (k, loc) = match &i.auth {
+            qa_touchstone_core::config::Auth::ApiKey { key, location, .. } => (Some(key.clone()), Some(apikey_in_token(location))),
+            _ => (None, None),
+        };
+        json!({ "id": i.id, "authKind": auth_kind_token(&i.auth), "privileged": i.privileged, "apikeyKey": k, "apikeyLocation": loc })
+    }).collect();
+    ids.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
+    root.insert("identities".into(), Value::Array(ids));
+    // Every request id the security suite references, so its shape goes in the `requests` map.
+    let mut req_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     if let Some(m) = sec.and_then(|s| s.matrix.as_ref()) {
-        let mut eps: Vec<String> = m.endpoints.clone(); eps.sort();
+        let mut eps = m.endpoints.clone(); eps.sort();
+        for e in &eps { req_ids.insert(e.clone()); }
+        for rid in m.expect.keys() { req_ids.insert(rid.clone()); }
         let mut deny = m.deny_set.clone(); deny.sort();
-        let mut expect: Vec<Value> = m.expect.iter().flat_map(|(rid, row)| row.iter().map(move |(idid, exp)| json!([rid, idid, expectation_token(exp)]))).collect();
+        let mut expect: Vec<Value> = m.expect.iter()
+            .flat_map(|(rid, row)| row.iter().map(move |(idid, exp)| json!([rid, idid, expectation_token(exp)]))).collect();
         expect.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
         root.insert("matrix".into(), json!({ "endpoints": eps, "denySet": deny, "expect": expect }));
     }
     if let Some(b) = sec.and_then(|s| s.bola.as_ref()) {
         let mut tests: Vec<Value> = b.tests.iter().map(|t| {
-            let mut owners: Vec<String> = t.id_values.keys().cloned().collect(); owners.sort();
-            json!({ "id": t.id, "request": t.request, "idLocation": id_location_token(&t.id_location), "owners": owners })
+            req_ids.insert(t.request.clone());
+            let mut o: Vec<String> = t.id_values.keys().cloned().collect(); o.sort();
+            json!({ "id": t.id, "request": t.request, "idLocation": id_location_token(&t.id_location), "owners": o, "negativeControl": t.negative_control })
         }).collect();
         tests.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
         root.insert("bola".into(), Value::Array(tests));
     }
     if let Some(r) = sec.and_then(|s| s.rate_limit.as_ref()) {
-        let mut tests: Vec<Value> = r.tests.iter().map(|t| json!({ "id": t.id, "request": t.request,
-            "identity": t.identity, "sensitivity": t.sensitivity, "n": t.n, "concurrency": t.concurrency })).collect();
+        let mut tests: Vec<Value> = r.tests.iter().map(|t| {
+            req_ids.insert(t.request.clone());
+            json!({ "id": t.id, "request": t.request, "identity": t.identity, "sensitivity": t.sensitivity, "n": t.n, "concurrency": t.concurrency })
+        }).collect();
         tests.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
         root.insert("ratelimit".into(), Value::Array(tests));
     }
-    // serde_json::Map preserves insertion order; we inserted matrix/bola/ratelimit in a fixed order,
-    // and every array is sorted, so the serialization is canonical for a given config.
+    let reqs: Map<String, Value> = req_ids.into_iter().map(|id| { let sh = req_shape(&id); (id, sh) }).collect();
+    root.insert("requests".into(), Value::Object(reqs));
     serde_json::to_string(&Value::Object(root)).unwrap()
 }
 
@@ -106,6 +148,8 @@ pub async fn run_scan(
     update_baseline: bool,
     fail_on: Option<String>,
     sarif: Option<String>,
+    html: Option<String>,
+    junit: Option<String>,
 ) -> ExitCode {
     let text = match std::fs::read_to_string(&config_path) {
         Ok(t) => t, Err(e) => { eprintln!("error: cannot read config `{config_path}`: {e}"); return ExitCode::from(2); }
@@ -178,7 +222,7 @@ pub async fn run_scan(
     }).collect();
 
     // Build scope hash and current snapshot from REDACTED findings (secrets-free, stable FPs).
-    let scope_json = build_scope_descriptor(&cfg);
+    let scope_json = build_scope_descriptor(&cfg, env.as_deref());
     let scope_hash = scope_hash_of(&scope_json);
     let redacted: Vec<Finding> = findings.iter().map(|f| Finding {
         engine: f.engine, severity: f.severity, rule_id: f.rule_id.clone(), oracle: f.oracle.clone(),
@@ -227,12 +271,16 @@ pub async fn run_scan(
         for e in &report.errors { println!("  ERROR {} {} — {}", e.engine, e.endpoint.as_deref().unwrap_or("?"), e.message); }
     }
 
-    // SARIF emit.
-    if let Some(path) = sarif.as_deref() {
-        let model = build_report(&current.items, &baseline_items, report_engines(&report.engines), fail_on_sev, scope_mismatch, "cli");
-        if let Err(e) = std::fs::write(path, report_to_sarif(&model)) {
-            eprintln!("error: cannot write SARIF `{path}`: {e}"); return ExitCode::from(1);
-        }
+    // Build the report model once; write each requested file (SARIF / HTML / JUnit).
+    let model = build_report(&current.items, &baseline_items, report_engines(&report.engines), fail_on_sev, scope_mismatch, "cli");
+    if let Some(p) = sarif.as_deref() {
+        if let Err(e) = std::fs::write(p, report_to_sarif(&model)) { eprintln!("error: cannot write SARIF `{p}`: {e}"); return ExitCode::from(1); }
+    }
+    if let Some(p) = html.as_deref() {
+        if let Err(e) = std::fs::write(p, report_to_html(&model)) { eprintln!("error: cannot write HTML `{p}`: {e}"); return ExitCode::from(1); }
+    }
+    if let Some(p) = junit.as_deref() {
+        if let Err(e) = std::fs::write(p, report_to_junit(&model)) { eprintln!("error: cannot write JUnit `{p}`: {e}"); return ExitCode::from(1); }
     }
 
     // Bless: --update-baseline writes the current snapshot atomically (requires zero engine errors).
@@ -249,4 +297,18 @@ pub async fn run_scan(
     }
 
     if gated > 0 { ExitCode::from(3) } else if !errors.is_empty() { ExitCode::from(1) } else { ExitCode::SUCCESS }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn scope_descriptor_stable_and_sensitive() {
+        use qa_touchstone_core::config::load_config;
+        let a = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}},{"id":"y","auth":{"type":"none"}}],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
+        let b = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"y","auth":{"type":"none"}},{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
+        assert_eq!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "identity reorder must not change the descriptor");
+        let c = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}},{"id":"y","auth":{"type":"none"}}],"requests":[{"id":"r","method":"POST","url":"https://h/r"}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&c, None), "a method change must flip the descriptor");
+    }
 }

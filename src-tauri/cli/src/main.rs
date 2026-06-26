@@ -72,6 +72,10 @@ enum Command {
         #[arg(long)] fail_on: Option<String>,
         /// Write a SARIF 2.1.0 report to this file path.
         #[arg(long)] sarif: Option<String>,
+        /// Write an HTML security report to this file path.
+        #[arg(long)] html: Option<String>,
+        /// Write a JUnit XML report to this file path.
+        #[arg(long)] junit: Option<String>,
     },
 }
 
@@ -100,8 +104,8 @@ async fn main() -> std::process::ExitCode {
         Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
             run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
         }
-        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif } => {
-            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif).await
+        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif, html, junit } => {
+            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif, html, junit).await
         }
     }
 }
