@@ -155,6 +155,11 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
         tests.sort_by(|a, b| a["id"].as_str().unwrap_or("").cmp(b["id"].as_str().unwrap_or("")));
         root.insert("ratelimit".into(), Value::Array(tests));
     }
+    if let Some(o) = sec.and_then(|s| s.oracles.as_ref()) {
+        let mut ov: Vec<String> = o.severity_overrides.iter().map(|(k, v)| format!("{k}={v:?}")).collect();
+        ov.sort();
+        root.insert("oracles".into(), json!({ "sensitive": o.sensitive, "schema": o.schema, "severityOverrides": ov }));
+    }
     let reqs: Map<String, Value> = req_ids.into_iter().map(|id| { let sh = req_shape(&id); (id, sh) }).collect();
     root.insert("requests".into(), Value::Object(reqs));
     serde_json::to_string(&Value::Object(root)).unwrap()
@@ -442,5 +447,14 @@ mod tests {
         for sentinel in ["BEARER-SENTINEL", "HDR-SENTINEL", "QRY-SENTINEL", "URLQ-SENTINEL", "USERINFO-SENTINEL", "FRAG-SENTINEL"] {
             assert!(!d.contains(sentinel), "descriptor must not contain literal secret `{sentinel}`: {d}");
         }
+    }
+
+    #[test]
+    fn scope_descriptor_tracks_oracles_config() {
+        use qa_touchstone_core::config::load_config;
+        let mk = |s: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"https://h/r"}}],"security":{{"matrix":{{"endpoints":["r"]}},"oracles":{{"sensitive":{s}}}}}}}"#);
+        let a = load_config(&mk("true"), &|_| None).unwrap();
+        let b = load_config(&mk("false"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "toggling oracles.sensitive must flip the descriptor");
     }
 }

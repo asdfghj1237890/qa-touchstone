@@ -177,6 +177,25 @@ pub struct SecurityConfig {
     #[serde(default)] pub matrix: Option<MatrixConfig>,
     #[serde(default)] pub bola: Option<BolaConfig>,
     #[serde(default, rename = "rateLimit")] pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)] pub oracles: Option<OracleConfigRaw>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OracleConfigRaw {
+    #[serde(default)] pub sensitive: Option<bool>,
+    #[serde(default)] pub schema: Option<bool>,
+    #[serde(default, rename = "severityOverrides")] pub severity_overrides: BTreeMap<String, crate::security::finding::Severity>,
+}
+
+impl OracleConfigRaw {
+    /// Resolve to the engine config; absent fields default ON (TS DEFAULT_ORACLE_CONFIG parity).
+    pub fn resolve(&self) -> crate::security::oracles::OracleConfig {
+        crate::security::oracles::OracleConfig {
+            sensitive: self.sensitive.unwrap_or(true),
+            schema: self.schema.unwrap_or(true),
+            severity_overrides: self.severity_overrides.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -662,5 +681,15 @@ mod tests {
           "requests":[{"id":"r","method":"GET","url":"https://x"}],
           "security":{"rateLimit":{"tests":[{"id":"t","request":"r"},{"id":"t","request":"r"}]}} }"#;
         assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+    }
+
+    #[test]
+    fn oracles_config_tolerates_llm_and_resolves() {
+        let j = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://h/r"}],
+          "security":{"matrix":{"endpoints":["r"]},"oracles":{"sensitive":false,"llm":false,"severityOverrides":{"secrets":"critical"}}} }"#;
+        let c = load_config(j, &|_| None).unwrap();
+        let o = c.security.unwrap().oracles.unwrap().resolve();
+        assert!(!o.sensitive && o.schema && o.severity_overrides["secrets"] == crate::security::finding::Severity::Critical);
     }
 }
