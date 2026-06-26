@@ -185,7 +185,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
                     let loc_json: IdLocation = serde_json::from_value(c.id_location.clone()).unwrap();
                     println!("  [{}] {} = {:?}  confidence:{} ({})",
                         i + 1,
-                        id_location_human(&loc_json),
+                        red.redact_str(&id_location_human(&loc_json)),
                         c.value,
                         c.confidence,
                         c.why,
