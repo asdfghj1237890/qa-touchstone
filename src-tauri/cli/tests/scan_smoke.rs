@@ -312,8 +312,9 @@ async fn scan_bfla_denied_exits_0() {
 
 #[tokio::test]
 async fn scan_bfla_secret_never_leaks() {
-    // A bearer-token identity's secret must NEVER appear in --json stdout (in findings,
-    // errors, or anywhere else), even when a vuln is found.
+    // The bearer token sits on the NON-privileged attacker identity — the one BFLA actually
+    // exercises (privileged identities are skipped), so the token IS sent by the runner. Assert it
+    // never surfaces in --json output (findings are config-id-only + the union RedactionSet applies).
     let server = MockServer::start().await;
     Mock::given(method("DELETE")).and(path("/admin/resource"))
         .respond_with(ResponseTemplate::new(200))
@@ -321,8 +322,7 @@ async fn scan_bfla_secret_never_leaks() {
     let cfg = write_temp("bfl.json", &format!(r#"{{
       "version":1,"environments":[],
       "identities":[
-        {{"id":"admin","auth":{{"type":"bearer","token":"SUPERSECRET-BFLA"}},"privileged":true}},
-        {{"id":"anon","auth":{{"type":"none"}}}}
+        {{"id":"attacker","auth":{{"type":"bearer","token":"SUPERSECRET-BFLA"}},"privileged":false}}
       ],
       "requests":[{{"id":"delAdmin","method":"DELETE","url":"{base}/admin/resource","privileged":true}}],
       "security":{{"bfla":{{}}}}
