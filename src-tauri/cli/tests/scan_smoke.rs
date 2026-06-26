@@ -258,3 +258,100 @@ async fn scan_oracle_secret_as_key_not_leaked() {
     assert_eq!(jwt["engine"], "oracle");
     assert!(jwt["path"].as_str().unwrap().contains("…<redacted>…"), "the secret-as-key in the path must be redacted");
 }
+
+// ── BFLA smokes ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn scan_bfla_vuln_exits_3() {
+    // A privileged endpoint (explicit privileged:true) reached (200) by a non-privileged
+    // identity with security.bfla:{} ⇒ exit 3 + engine:"bfla" finding.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/admin/secret"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server).await;
+    let cfg = write_temp("bfv.json", &format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[
+        {{"id":"admin","auth":{{"type":"bearer","token":"ADMIN-TOK"}},"privileged":true}},
+        {{"id":"anon","auth":{{"type":"none"}}}}
+      ],
+      "requests":[{{"id":"getSecret","method":"GET","url":"{base}/admin/secret","privileged":true}}],
+      "security":{{"bfla":{{}}}}
+    }}"#, base=server.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bfla","--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "privileged endpoint reached by anon => vuln => exit 3");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON output");
+    assert!(v["findings"].as_array().unwrap().iter().any(|f| f["engine"] == "bfla"),
+        "must have a bfla finding: {stdout}");
+    assert!(!stdout.contains("ADMIN-TOK"), "admin token must not appear in output");
+}
+
+#[tokio::test]
+async fn scan_bfla_denied_exits_0() {
+    // Same setup but mock returns 403 ⇒ pass ⇒ exit 0, no bfla finding.
+    let server = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/admin/secret"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server).await;
+    let cfg = write_temp("bfd.json", &format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[
+        {{"id":"admin","auth":{{"type":"bearer","token":"ADMIN-TOK"}},"privileged":true}},
+        {{"id":"anon","auth":{{"type":"none"}}}}
+      ],
+      "requests":[{{"id":"getSecret","method":"GET","url":"{base}/admin/secret","privileged":true}}],
+      "security":{{"bfla":{{}}}}
+    }}"#, base=server.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bfla","--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "403 denied ⇒ pass ⇒ exit 0");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON output");
+    assert!(v["findings"].as_array().unwrap().is_empty(), "no findings on pass: {stdout}");
+}
+
+#[tokio::test]
+async fn scan_bfla_secret_never_leaks() {
+    // A bearer-token identity's secret must NEVER appear in --json stdout (in findings,
+    // errors, or anywhere else), even when a vuln is found.
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE")).and(path("/admin/resource"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server).await;
+    let cfg = write_temp("bfl.json", &format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[
+        {{"id":"admin","auth":{{"type":"bearer","token":"SUPERSECRET-BFLA"}},"privileged":true}},
+        {{"id":"anon","auth":{{"type":"none"}}}}
+      ],
+      "requests":[{{"id":"delAdmin","method":"DELETE","url":"{base}/admin/resource","privileged":true}}],
+      "security":{{"bfla":{{}}}}
+    }}"#, base=server.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bfla","--json"]).output().unwrap();
+    // Should be exit 3 (DELETE vuln = Critical >= High threshold)
+    assert_eq!(out.status.code(), Some(3), "DELETE allowed by anon on privileged endpoint => exit 3");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("SUPERSECRET-BFLA"), "bearer token must be redacted from JSON output: {stdout}");
+}
+
+#[tokio::test]
+async fn scan_bfla_no_config_block_no_finding() {
+    // When there is no security.bfla block, --engine bfla produces zero findings and exits 0.
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE")).and(path("/admin/resource"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server).await;
+    let cfg = write_temp("bfn.json", &format!(r#"{{
+      "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"delAdmin","method":"DELETE","url":"{base}/admin/resource"}}],
+      "security":{{"matrix":{{"endpoints":[]}}}}
+    }}"#, base=server.uri()));
+    // --engine bfla with no security.bfla block: run_bfla returns empty immediately.
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--engine","bfla","--json"]).output().unwrap();
+    // engine row is pushed (ran:true) but findings = 0; no HTTP calls made; exit 0.
+    assert_eq!(out.status.code(), Some(0), "no security.bfla block => no findings => exit 0");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON output");
+    assert!(v["findings"].as_array().unwrap().is_empty(), "no bfla findings without config block");
+}

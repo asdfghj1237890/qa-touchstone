@@ -218,7 +218,7 @@ pub async fn run_scan(
         if !cfg.environments.iter().any(|e| &e.name == name) { eprintln!("error: no environment named `{name}`"); return ExitCode::from(2); }
     }
     if let Some(eng) = &engine {
-        if !matches!(eng.as_str(), "matrix" | "bola" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
+        if !matches!(eng.as_str(), "matrix" | "bola" | "bfla" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
     }
     // A single-engine run produces a partial finding set; blessing it would write a baseline
     // missing the other engines' findings (which the next full run would then flag as New).
@@ -253,7 +253,7 @@ pub async fn run_scan(
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
 
-    // Run engines (suite order: matrix -> bola -> ratelimit). --engine filters.
+    // Run engines (suite order: matrix -> bfla -> bola -> ratelimit). --engine filters.
     let want = |e: &str| engine.as_deref().map(|x| x == e).unwrap_or(true);
     let mut findings: Vec<Finding> = Vec::new();
     let mut errors: Vec<EngineError> = Vec::new();
@@ -264,6 +264,11 @@ pub async fn run_scan(
         let orac = f.iter().filter(|x| matches!(x.engine, EngineId::Oracle)).count();
         engines.push(EngineSummary { engine: "matrix".into(), ran: true, findings: mat, errors: e.len() });
         engines.push(EngineSummary { engine: "oracle".into(), ran: true, findings: orac, errors: 0 });
+        findings.extend(f); errors.extend(e);
+    }
+    if want("bfla") {
+        let (f, e) = qa_touchstone_core::security::bfla::run_bfla(&cfg, env.as_deref()).await;
+        engines.push(EngineSummary { engine: "bfla".into(), ran: true, findings: f.len(), errors: e.len() });
         findings.extend(f); errors.extend(e);
     }
     if want("bola") {
