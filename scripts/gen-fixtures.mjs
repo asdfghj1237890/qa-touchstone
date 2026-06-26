@@ -408,6 +408,11 @@ const bolasetupCases = [
     req: { url: '/users/550e8400-e29b-41d4-a716-446655440000',
            params: [{ key: 'account_id', value: '7', on: true }],
            body: null } },
+  // nested/array body → golden-locks walkJson's array-path format (items[0].id, meta.account_id).
+  // hex24 id (72) vs numeric account_id (50) → distinct scores → deterministic order.
+  { name: 'nested_array_body',
+    req: { url: '/save', params: [],
+           body: JSON.stringify({ items: [{ id: 'a1b2c3d4e5f6a7b8c9d0e1f2' }], meta: { account_id: 9 } }) } },
 ];
 // TS detectIdLocation takes the same DetectableRequest shape (url, params, body).
 // params items need on:true to not be filtered (the TS fn filters p.on !== false).

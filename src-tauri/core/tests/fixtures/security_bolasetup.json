@@ -197,5 +197,33 @@
         "why": "query key account_id"
       }
     ]
+  },
+  {
+    "name": "nested_array_body",
+    "req": {
+      "url": "/save",
+      "params": [],
+      "body": "{\"items\":[{\"id\":\"a1b2c3d4e5f6a7b8c9d0e1f2\"}],\"meta\":{\"account_id\":9}}"
+    },
+    "expected": [
+      {
+        "idLocation": {
+          "kind": "body",
+          "path": "items[0].id"
+        },
+        "value": "a1b2c3d4e5f6a7b8c9d0e1f2",
+        "confidence": "medium",
+        "why": "body field items[0].id"
+      },
+      {
+        "idLocation": {
+          "kind": "body",
+          "path": "meta.account_id"
+        },
+        "value": "9",
+        "confidence": "medium",
+        "why": "body field meta.account_id"
+      }
+    ]
   }
 ]

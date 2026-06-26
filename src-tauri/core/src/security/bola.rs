@@ -159,25 +159,12 @@ const ID_DENYLIST_WORDS: [&str; 10] = [
     "total", "per_page", "perpage", "page_size", "pagesize",
 ];
 
-fn detect_uuid_re() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| Regex::new(r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap())
-}
-fn detect_hex24_re() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| Regex::new(r"(?i)^[0-9a-f]{24}$").unwrap())
-}
-fn detect_num_re() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| Regex::new(r"^\d+$").unwrap())
-}
+// NOTE: shape_score + the strong-value checks below reuse the existing uuid_re /
+// hex24_re / num_re (the synthetic-id trio above) — character-identical patterns,
+// so no separate detection regexes. is_id_key reuses the existing camel_id_re too.
 fn id_key_suffix_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| Regex::new(r"(?i)_id$").unwrap())
-}
-fn id_key_camel_re() -> &'static Regex {
-    static R: OnceLock<Regex> = OnceLock::new();
-    R.get_or_init(|| Regex::new(r"[a-z]Id$").unwrap())
 }
 fn id_key_uuid_org_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
@@ -189,7 +176,7 @@ fn plural_re() -> &'static Regex {
 }
 
 /// bolaSetup.ts:isIdKey — distinct from is_identity_key (bola.ts variant).
-/// Lowercased key not in ID_DENYLIST AND:
+/// Lowercased key NOT in ID_DENYLIST AND:
 ///   k_lower == "id"  OR  /_id$/i  OR  /[a-z]Id$/ (camelCase, case-sensitive)
 ///   OR /(^|_)(uuid|tenant|account|org)(_|$)/i
 pub fn is_id_key(key: &str) -> bool {
@@ -197,16 +184,16 @@ pub fn is_id_key(key: &str) -> bool {
     if ID_DENYLIST_WORDS.contains(&k_lower.as_str()) { return false; }
     if k_lower == "id" { return true; }
     if id_key_suffix_re().is_match(key) { return true; }    // /_id$/i
-    if id_key_camel_re().is_match(key) { return true; }     // /[a-z]Id$/ — case-sensitive!
+    if camel_id_re().is_match(key) { return true; }         // /[a-z]Id$/ — case-sensitive!
     if id_key_uuid_org_re().is_match(key) { return true; }  // uuid/tenant/account/org
     false
 }
 
 /// bolaSetup.ts:shapeScore → Some((score, shape_name)) or None.
 pub fn shape_score(v: &str) -> Option<(i64, &'static str)> {
-    if detect_uuid_re().is_match(v)  { return Some((90, "uuid")); }
-    if detect_hex24_re().is_match(v) { return Some((88, "hex24")); }
-    if detect_num_re().is_match(v)   { return Some((55, "numeric")); }
+    if uuid_re().is_match(v)  { return Some((90, "uuid")); }
+    if hex24_re().is_match(v) { return Some((88, "hex24")); }
+    if num_re().is_match(v)   { return Some((55, "numeric")); }
     None
 }
 
@@ -265,7 +252,7 @@ pub fn detect_id_location(req: &DetectableRequest) -> Vec<BolaIdCandidate> {
     // ── query ──
     for (key, value) in &req.params {
         if is_id_key(key) {
-            let strong = detect_uuid_re().is_match(value) || detect_hex24_re().is_match(value);
+            let strong = uuid_re().is_match(value) || hex24_re().is_match(value);
             let score = if strong { 78 } else { 55 };
             let why = format!("query key {}", key);
             cands.push((crate::config::IdLocation::Query { key: key.clone() }, value.clone(), score, why));
@@ -282,7 +269,7 @@ pub fn detect_id_location(req: &DetectableRequest) -> Vec<BolaIdCandidate> {
                         if is_id_key(k) {
                             // js_string for JS String(val) parity — NOT val.to_string()
                             let v = js_string(val);
-                            let strong = detect_uuid_re().is_match(&v) || detect_hex24_re().is_match(&v);
+                            let strong = uuid_re().is_match(&v) || hex24_re().is_match(&v);
                             let score = if strong { 72 } else { 50 };
                             let why = format!("body field {}", path);
                             cands.push((crate::config::IdLocation::Body { path: path.to_string() }, v, score, why));
@@ -295,7 +282,7 @@ pub fn detect_id_location(req: &DetectableRequest) -> Vec<BolaIdCandidate> {
     }
 
     // sort score descending (stable)
-    cands.sort_by(|a, b| b.2.cmp(&a.2));
+    cands.sort_by_key(|c| std::cmp::Reverse(c.2));
 
     cands.into_iter().map(|(loc, value, score, why)| {
         let confidence = if score >= 75 { "high" } else if score >= 50 { "medium" } else { "low" };
