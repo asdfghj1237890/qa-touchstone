@@ -10,6 +10,7 @@ use qa_touchstone_core::executor::ExecOptions;
 use serde_json::json;
 
 mod bola_suggest;
+mod import;
 mod report;
 mod run;
 mod scan;
@@ -94,6 +95,19 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Convert a Postman v2.1 collection or OpenAPI 3 / Swagger 2 spec (JSON)
+    /// into a qa.json config scaffold. Read-only, no network.
+    Import {
+        /// Path to the input spec file (Postman v2.1 or OpenAPI 3 / Swagger 2, JSON).
+        #[arg(long)]
+        input: String,
+        /// Override or supply the base URL (sets globals.variables.baseUrl in the output).
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Write the generated config to this file (default: stdout).
+        #[arg(long)]
+        out: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -126,6 +140,9 @@ async fn main() -> std::process::ExitCode {
         }
         Command::BolaSuggest { config, env, json: use_json } => {
             bola_suggest::run(config, env, use_json).await
+        }
+        Command::Import { input, base_url, out } => {
+            import::run(input, base_url, out).await
         }
     }
 }
