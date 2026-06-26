@@ -426,3 +426,146 @@ const bolasetupOut = bolasetupCases.map(c => ({
 }));
 writeFileSync(join(OUT, 'security_bolasetup.json'), JSON.stringify(bolasetupOut, null, 2) + '\n');
 console.log(`wrote security_bolasetup.json (${bolasetupOut.length} cases)`);
+
+// ── import: qaParseImport golden fixtures ────────────────────────────────────
+// Two sample inputs: a Postman v2.1 collection and an OpenAPI 3 spec.
+// The bridge maps {collection,details} → inlined ImportParsed (no ids, no responses).
+// Includes falsey-example cases to lock the schemaStub truthiness asymmetry.
+const { runImport, mod: importMod } = await import('./_import-bridge.mjs');
+
+const SAMPLE_POSTMAN = JSON.stringify({
+  info: {
+    name: 'Pet Store',
+    _postman_id: 'abc123',
+    schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+  },
+  item: [
+    // Root request with string url (query inline)
+    {
+      name: 'List Pets',
+      request: {
+        method: 'GET',
+        url: 'https://api.pets.io/v1/pets?limit=10',
+        header: [
+          { key: 'Accept', value: 'application/json', disabled: false },
+          { key: 'X-Internal', value: 'secret', disabled: true },   // disabled → excluded
+        ],
+      },
+    },
+    // Root request with raw body
+    {
+      name: 'Create Pet',
+      request: {
+        method: 'POST',
+        url: { raw: 'https://api.pets.io/v1/pets', path: ['v1', 'pets'], query: [] },
+        header: [{ key: 'Content-Type', value: 'application/json', disabled: false }],
+        body: { mode: 'raw', raw: '{"name":"Buddy","species":"dog"}' },
+      },
+    },
+    // Folder with a nested request (structured url with query)
+    {
+      name: 'Users',
+      item: [
+        {
+          name: 'Get User',
+          request: {
+            method: 'GET',
+            url: {
+              raw: 'https://api.pets.io/v1/users/{{userId}}',
+              path: ['v1', 'users', '{{userId}}'],
+              query: [{ key: 'include', value: 'pets', disabled: false }],
+            },
+            header: [],
+          },
+        },
+      ],
+    },
+  ],
+});
+
+const SAMPLE_OPENAPI = JSON.stringify({
+  openapi: '3.0.3',
+  info: { title: 'Pet API', version: '1.0.0' },
+  servers: [{ url: 'https://api.pets.io' }],
+  paths: {
+    '/pets': {
+      get: {
+        summary: 'List all pets',
+        tags: ['pets'],
+        parameters: [
+          { name: 'limit', in: 'query', required: true,  example: 20 },
+          { name: 'offset', in: 'query', required: false, example: 0 },
+          { name: 'X-Trace-Id', in: 'header' },
+        ],
+        security: [],          // empty array is truthy in JS → auth:bearer
+      },
+      post: {
+        summary: 'Create pet',
+        tags: ['pets'],
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name:    { type: 'string',  example: 'Buddy' },
+                  active:  { type: 'boolean', example: false },   // falsey property example
+                  score:   { type: 'number',  example: 0 },       // falsey property example
+                  species: { type: 'string',  example: '' },      // falsey property example (empty string)
+                  count:   { type: 'integer', example: null },    // null → typed zero
+                  tags:    { type: 'array' },                     // absent example → []
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/pets/{id}': {
+      get: {
+        summary: 'Get pet',
+        operationId: 'getPetById',
+        tags: ['pets'],
+        parameters: [],
+        // Top-level schema with falsey examples to test the truthiness asymmetry:
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: {
+                // top-level example:0 → FALSY → fall through to property stubs
+                type: 'object',
+                example: 0,
+                properties: { id: { type: 'integer' } },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/users': {
+      get: {
+        summary: 'List users',
+        tags: ['users'],
+        parameters: [{ name: 'role', in: 'query', required: true }],
+      },
+    },
+  },
+});
+
+const importPostman = runImport(SAMPLE_POSTMAN);
+const importOpenApi = runImport(SAMPLE_OPENAPI);
+
+// Error cases (not stored in fixture — verified separately in unit tests)
+const importBadJson   = importMod.qaParseImport('not json');
+const importUnknown   = importMod.qaParseImport('{"something":"else"}');
+
+writeFileSync(join(OUT, 'import.json'), JSON.stringify({
+  postman: importPostman,
+  openapi: importOpenApi,
+  errors: {
+    bad_json:  importBadJson.error,
+    unknown:   importUnknown.error,
+  },
+}, null, 2) + '\n');
+console.log('wrote import.json');

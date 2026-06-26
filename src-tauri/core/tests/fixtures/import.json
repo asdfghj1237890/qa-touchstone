@@ -1,0 +1,154 @@
+{
+  "postman": {
+    "collection": {
+      "name": "Pet Store",
+      "source": "postman",
+      "base_url": null
+    },
+    "folders": [
+      {
+        "name": "Pet Store",
+        "requests": [
+          {
+            "method": "GET",
+            "name": "List Pets",
+            "path": "https://api.pets.io/v1/pets?limit=10",
+            "params": [
+              {
+                "key": "limit",
+                "value": "10",
+                "on": true
+              }
+            ],
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "on": true
+              }
+            ],
+            "body": null,
+            "auth": "none"
+          },
+          {
+            "method": "POST",
+            "name": "Create Pet",
+            "path": "https://api.pets.io/v1/pets",
+            "params": [],
+            "headers": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "on": true
+              }
+            ],
+            "body": "{\"name\":\"Buddy\",\"species\":\"dog\"}",
+            "auth": "none"
+          }
+        ]
+      },
+      {
+        "name": "Users",
+        "requests": [
+          {
+            "method": "GET",
+            "name": "Get User",
+            "path": "https://api.pets.io/v1/users/{{userId}}",
+            "params": [
+              {
+                "key": "include",
+                "value": "pets",
+                "on": true
+              }
+            ],
+            "headers": [],
+            "body": null,
+            "auth": "none"
+          }
+        ]
+      }
+    ]
+  },
+  "openapi": {
+    "collection": {
+      "name": "Pet API",
+      "source": "openapi",
+      "base_url": "https://api.pets.io"
+    },
+    "folders": [
+      {
+        "name": "pets",
+        "requests": [
+          {
+            "method": "GET",
+            "name": "List all pets",
+            "path": "/pets",
+            "params": [
+              {
+                "key": "limit",
+                "value": "20",
+                "on": true
+              },
+              {
+                "key": "offset",
+                "value": "0",
+                "on": false
+              }
+            ],
+            "headers": [
+              {
+                "key": "X-Trace-Id",
+                "value": "",
+                "on": false
+              }
+            ],
+            "body": null,
+            "auth": "bearer"
+          },
+          {
+            "method": "POST",
+            "name": "Create pet",
+            "path": "/pets",
+            "params": [],
+            "headers": [],
+            "body": "{\n  \"name\": \"Buddy\",\n  \"active\": false,\n  \"score\": 0,\n  \"species\": \"\",\n  \"count\": 0,\n  \"tags\": []\n}",
+            "auth": "bearer"
+          },
+          {
+            "method": "GET",
+            "name": "Get pet",
+            "path": "/pets/{id}",
+            "params": [],
+            "headers": [],
+            "body": "{\n  \"id\": 0\n}",
+            "auth": "none"
+          }
+        ]
+      },
+      {
+        "name": "users",
+        "requests": [
+          {
+            "method": "GET",
+            "name": "List users",
+            "path": "/users",
+            "params": [
+              {
+                "key": "role",
+                "value": "",
+                "on": true
+              }
+            ],
+            "headers": [],
+            "body": null,
+            "auth": "none"
+          }
+        ]
+      }
+    ]
+  },
+  "errors": {
+    "bad_json": "Not valid JSON. (YAML specs must be converted to JSON first.)",
+    "unknown": "Unrecognized format — expected a Postman v2.1 collection or an OpenAPI/Swagger spec."
+  }
+}

@@ -7,6 +7,7 @@ pub mod config;
 pub mod datafile;
 pub mod engine;
 pub mod executor;
+pub mod import;
 pub mod redact;
 pub mod reqprep;
 pub mod security;
