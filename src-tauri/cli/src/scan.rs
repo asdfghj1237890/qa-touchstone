@@ -246,7 +246,10 @@ pub async fn run_scan(
     let mut engines: Vec<EngineSummary> = Vec::new();
     if want("matrix") {
         let (f, e) = qa_touchstone_core::security::runner::run_matrix(&cfg, env.as_deref()).await;
-        engines.push(EngineSummary { engine: "matrix".into(), ran: true, findings: f.len(), errors: e.len() });
+        let mat = f.iter().filter(|x| matches!(x.engine, EngineId::Matrix)).count();
+        let orac = f.iter().filter(|x| matches!(x.engine, EngineId::Oracle)).count();
+        engines.push(EngineSummary { engine: "matrix".into(), ran: true, findings: mat, errors: e.len() });
+        engines.push(EngineSummary { engine: "oracle".into(), ran: true, findings: orac, errors: 0 });
         findings.extend(f); errors.extend(e);
     }
     if want("bola") {

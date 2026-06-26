@@ -198,3 +198,38 @@ async fn scan_annotations_suppress_and_override() {
     let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--annotations",ann2.to_str().unwrap()]).output().unwrap();
     assert_eq!(out.status.code(), Some(0), "downgraded finding must not gate at fail_on=high");
 }
+
+#[tokio::test]
+async fn scan_oracle_sensitive_jwt_exits_3() {
+    // An ALLOWED 200 whose body leaks a JWT → an oracle sensitive-data finding (High) → gate (exit 3).
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/u")).respond_with(ResponseTemplate::new(200)
+        .set_body_string(r#"{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ4In0.abcdEFsig"}"#)).mount(&s).await;
+    let cfg = write_temp("orc.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"u","method":"GET","url":"{base}/u"}}],
+      "security":{{"matrix":{{"endpoints":["u"],"expect":{{"u":{{"anon":"allow"}}}}}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap(),"--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3), "a new high jwt leak gates");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let fs = v["findings"].as_array().unwrap();
+    let jwt = fs.iter().find(|f| f["rule_id"] == "jwt").expect("jwt finding present");
+    assert_eq!(jwt["engine"], "oracle");
+    assert_eq!(jwt["oracle"], "sensitive-data");
+    assert!(jwt["evidence"].as_str().unwrap().contains("…<redacted>…"), "evidence must be masked");
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("abcdEFsig"), "raw JWT must not leak anywhere in output");
+}
+
+#[tokio::test]
+async fn scan_oracles_disabled_no_finding() {
+    // Same leaky body, but oracles disabled via config ⇒ no oracle finding ⇒ exit 0.
+    let s = MockServer::start().await;
+    Mock::given(method("GET")).and(path("/u")).respond_with(ResponseTemplate::new(200)
+        .set_body_string(r#"{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ4In0.abcdEFsig"}"#)).mount(&s).await;
+    let cfg = write_temp("orcoff.json", &format!(r#"{{ "version":1,"environments":[],
+      "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+      "requests":[{{"id":"u","method":"GET","url":"{base}/u"}}],
+      "security":{{"matrix":{{"endpoints":["u"],"expect":{{"u":{{"anon":"allow"}}}}}},"oracles":{{"sensitive":false,"schema":false}}}} }}"#, base=s.uri()));
+    let out = bin().args(["scan","--config",cfg.to_str().unwrap()]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "oracles disabled ⇒ no jwt finding ⇒ exit 0");
+}
