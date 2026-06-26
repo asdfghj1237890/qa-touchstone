@@ -417,7 +417,8 @@ pub fn html_escape(s: &str) -> String {
 }
 
 /// reportToHtml (securityReport.ts:297-316), CLI-adapted: durations omitted; gate label threshold-neutral;
-/// evidence = the plain redacted string (no GUI evidenceArtifact). Every interpolated field is html_escape'd.
+/// evidence = the plain redacted string (no GUI evidenceArtifact); the GUI's separate Owner/Status columns
+/// are merged into one compact "Triage" column (status/owner/suppressed). Every interpolated field is html_escape'd.
 pub fn report_to_html(model: &ReportModel) -> String {
     let h = html_escape;
     let s = &model.summary;
@@ -587,7 +588,7 @@ mod tests {
         let mut recs = Records::new();
         recs.insert("aa".into(), LifecycleRecord { note: "see JIRA-1".into(), ..Default::default() });
         let xml = report_to_junit(&build_report(&cur, &[], vec![], Severity::High, false, "r", &recs));
-        assert!(xml.contains("<failure") && xml.contains("see JIRA-1"));
+        assert!(xml.contains("<failure") && xml.contains("see JIRA-1]]>"), "note is appended into the failure CDATA body");
     }
     #[test] fn html_triage_shows_owner_status_and_dims_suppressed() {
         let cur = vec![ mk_item("aa", Severity::High, EngineId::Bola, "bola.cross-object", "GET g @t1", "X") ];
