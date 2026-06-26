@@ -66,16 +66,18 @@ fn body_mode_token(m: &qa_touchstone_core::config::BodyMode) -> &'static str {
 /// Canonical, sorted, secret-free descriptor of the scanned surface, for scope-drift detection.
 fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     use serde_json::{json, Map, Value};
-    // Secret-safe shape: we hash header/query KEY names + method/url/body-mode/privileged, but
-    // NOT free-form header/query VALUES or body CONTENT — those can hold hardcoded literal secrets
-    // that the final FNV digest (stored in the baseline) would otherwise expose to brute-force.
+    // Secret-safe shape: we hash header/query KEY names + method/url-without-query/body-mode/privileged,
+    // but NOT free-form header/query VALUES, body CONTENT, or the url's inline ?query string — any of
+    // those can hold a hardcoded literal secret the final FNV digest (stored in the baseline) would
+    // otherwise expose to brute-force. (scheme/host/path is retained for endpoint-drift detection.)
     let req_shape = |id: &str| -> Value {
         match cfg.requests.iter().find(|r| r.id == id) {
             Some(r) => {
                 let mut hk: Vec<String> = r.headers.iter().map(|k| k.key.clone()).collect(); hk.sort();
                 let mut qk: Vec<String> = r.query.iter().map(|k| k.key.clone()).collect(); qk.sort();
                 let body_mode = r.body.as_ref().map(|b| body_mode_token(&b.mode)).unwrap_or("none");
-                json!({ "method": r.method, "url": r.url, "privileged": r.privileged, "headerKeys": hk, "queryKeys": qk, "bodyMode": body_mode })
+                let url_base = r.url.split('?').next().unwrap_or("");
+                json!({ "method": r.method, "url": url_base, "privileged": r.privileged, "headerKeys": hk, "queryKeys": qk, "bodyMode": body_mode })
             }
             None => Value::Null,
         }
@@ -96,7 +98,13 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
     // Every request id the security suite references, so its shape goes in the `requests` map.
     let mut req_ids: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     if let Some(m) = sec.and_then(|s| s.matrix.as_ref()) {
-        let mut eps = m.endpoints.clone(); eps.sort();
+        // An empty `endpoints` means the runtime scans ALL requests (runner.rs:28), so the
+        // descriptor must enumerate them too — otherwise a change to a non-listed request's
+        // shape would alter the scan without flipping the scopeHash.
+        let mut eps: Vec<String> = if m.endpoints.is_empty() {
+            cfg.requests.iter().map(|r| r.id.clone()).collect()
+        } else { m.endpoints.clone() };
+        eps.sort();
         for e in &eps { req_ids.insert(e.clone()); }
         for rid in m.expect.keys() { req_ids.insert(rid.clone()); }
         let mut deny = m.deny_set.clone(); deny.sort();
@@ -337,5 +345,52 @@ mod tests {
         let nonempty = load_config(&mk("ob"), &|_| None).unwrap();
         let empty = load_config(&mk(""), &|_| None).unwrap();
         assert_ne!(build_scope_descriptor(&nonempty, None), build_scope_descriptor(&empty, None), "an idValue going non-empty -> empty must flip the descriptor (it changes which owners run)");
+    }
+
+    #[test]
+    fn scope_descriptor_empty_endpoints_covers_all_requests() {
+        use qa_touchstone_core::config::load_config;
+        // endpoints:[] => the runtime scans ALL requests, so adding/altering any request must flip the hash.
+        let one = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r1","method":"GET","url":"https://h/r1"}],"security":{"matrix":{"endpoints":[]}}}"#, &|_| None).unwrap();
+        let two = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"none"}}],"requests":[{"id":"r1","method":"GET","url":"https://h/r1"},{"id":"r2","method":"POST","url":"https://h/r2"}],"security":{"matrix":{"endpoints":[]}}}"#, &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&one, None), build_scope_descriptor(&two, None), "with empty endpoints, adding a request must flip the descriptor (all requests are scanned)");
+    }
+
+    #[test]
+    fn scope_descriptor_drops_query_body_and_url_query_values() {
+        use qa_touchstone_core::config::load_config;
+        // query VALUE change => no flip; query KEY change => flip.
+        let q = |k: &str, v: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"POST","url":"https://h/r","query":[{{"key":"{k}","value":"{v}"}}]}}],"security":{{"matrix":{{"endpoints":["r"]}}}}}}"#);
+        let a = load_config(&q("page", "1"), &|_| None).unwrap();
+        let b = load_config(&q("page", "SECRET-2"), &|_| None).unwrap();
+        assert_eq!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None), "a query VALUE change must NOT flip the descriptor");
+        let c = load_config(&q("offset", "1"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&c, None), "a query KEY change MUST flip the descriptor");
+        // body CONTENT change => no flip; body MODE change => flip.
+        let body = |mode: &str, content: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"POST","url":"https://h/r","body":{{"mode":"{mode}","content":"{content}"}}}}],"security":{{"matrix":{{"endpoints":["r"]}}}}}}"#);
+        let d = load_config(&body("raw", "hello"), &|_| None).unwrap();
+        let e = load_config(&body("raw", "SECRET-BODY"), &|_| None).unwrap();
+        assert_eq!(build_scope_descriptor(&d, None), build_scope_descriptor(&e, None), "a body CONTENT change must NOT flip the descriptor");
+        let f = load_config(&body("json", "hello"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&d, None), build_scope_descriptor(&f, None), "a body MODE change MUST flip the descriptor");
+        // url inline ?query VALUE change => no flip (query stripped); url PATH change => flip.
+        let u = |url: &str| format!(r#"{{"version":1,"environments":[],"identities":[{{"id":"x","auth":{{"type":"none"}}}}],"requests":[{{"id":"r","method":"GET","url":"{url}"}}],"security":{{"matrix":{{"endpoints":["r"]}}}}}}"#);
+        let g = load_config(&u("https://h/r?token=aaa"), &|_| None).unwrap();
+        let h = load_config(&u("https://h/r?token=SECRET-bbb"), &|_| None).unwrap();
+        assert_eq!(build_scope_descriptor(&g, None), build_scope_descriptor(&h, None), "a url ?query VALUE change must NOT flip the descriptor (query stripped)");
+        let i = load_config(&u("https://h/r2?token=aaa"), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&g, None), build_scope_descriptor(&i, None), "a url PATH change MUST flip the descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_omits_literal_secrets() {
+        use qa_touchstone_core::config::load_config;
+        // Hardcoded secrets in a bearer token, a header value, a query value, and the url ?query —
+        // none of these literals may appear anywhere in the descriptor string.
+        let cfg = load_config(r#"{"version":1,"environments":[],"identities":[{"id":"x","auth":{"type":"bearer","token":"BEARER-SENTINEL"}}],"requests":[{"id":"r","method":"GET","url":"https://h/r?apikey=URLQ-SENTINEL","headers":[{"key":"X-Api-Key","value":"HDR-SENTINEL"}],"query":[{"key":"q","value":"QRY-SENTINEL"}]}],"security":{"matrix":{"endpoints":["r"]}}}"#, &|_| None).unwrap();
+        let d = build_scope_descriptor(&cfg, None);
+        for sentinel in ["BEARER-SENTINEL", "HDR-SENTINEL", "QRY-SENTINEL", "URLQ-SENTINEL"] {
+            assert!(!d.contains(sentinel), "descriptor must not contain literal secret `{sentinel}`: {d}");
+        }
     }
 }

@@ -482,6 +482,19 @@ mod tests {
         assert!(report_to_junit(&md).contains("<failure"));    // ...but does at fail_on=medium
     }
 
+    #[test] fn junit_cdata_splits_and_sanitizes_controls() {
+        // A New high finding whose evidence carries a raw "]]>" (would prematurely close CDATA)
+        // and a C0 control char (illegal in XML 1.0).
+        let mut it = mk_item("a", Severity::High, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t");
+        it.evidence = "danger ]]> mid \u{0007} end".into();
+        let model = build_report(&[it], &[], vec![], Severity::High, false, "r");
+        let xml = report_to_junit(&model);
+        assert!(xml.contains("]]]]><![CDATA[>"), "]]> must be split across CDATA sections");
+        assert!(!xml.contains('\u{0007}'), "C0 control must be sanitized to U+FFFD");
+        // The split must keep the document well-formed (a bad ]]> escape would fail to parse).
+        roxmltree::Document::parse(&xml).expect("valid JUnit XML after CDATA split + sanitize");
+    }
+
     #[test]
     fn build_and_sarif_roundtrip() {
         let cur = vec![
