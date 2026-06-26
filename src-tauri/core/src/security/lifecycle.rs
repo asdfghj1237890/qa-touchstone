@@ -109,17 +109,18 @@ pub struct AnnotationsFile {
     #[serde(default)] pub records: Records,
 }
 
-/// snapshotOf (findings.ts:112-140): dedup by fp, count repeats. effective_severity = severity
-/// (override deferred). Preserves first-seen order.
-pub fn snapshot_of(findings: &[Finding], run_id: &str, created_at: &str, scope_hash: &str) -> Snapshot {
+/// snapshotOf (findings.ts:112-140): dedup by fp, count repeats. effective_severity applies
+/// severityOverride from records if present. Preserves first-seen order.
+pub fn snapshot_of(findings: &[Finding], run_id: &str, created_at: &str, scope_hash: &str, records: &Records) -> Snapshot {
     let mut order: Vec<String> = Vec::new();
     let mut by_fp: BTreeMap<String, SnapshotItem> = BTreeMap::new();
     for f in findings {
         let (fp, _) = fingerprint(f);
         if let Some(it) = by_fp.get_mut(&fp) { it.count += 1; continue; }
+        let eff = effective_severity(f, records.get(&fp).and_then(|r| r.severity_override));
         order.push(fp.clone());
         by_fp.insert(fp.clone(), SnapshotItem {
-            fp, effective_severity: f.severity, engine: f.engine, rule_id: rule_id_of(f),
+            fp, effective_severity: eff, engine: f.engine, rule_id: rule_id_of(f),
             path: normalize_path(&f.path), location_label: location_of(f),
             title: f.title.clone(), evidence: f.evidence.clone(), dfp: detail_hash(f), count: 1,
         });
@@ -151,11 +152,13 @@ pub fn diff_detail(current: &[SnapshotItem], baseline: &[SnapshotItem]) -> BTree
 /// effectiveSeverity (findings.ts:101-106): override if present (already validated by caller), else severity.
 pub fn effective_severity(f: &Finding, severity_override: Option<Severity>) -> Severity { severity_override.unwrap_or(f.severity) }
 
-/// gateCount — ADAPTATION (findings.ts:164-178 hardcodes high/critical; we parameterize `fail_on`;
-/// suppressions deferred): count items whose presence is New and effective_severity >= fail_on.
-pub fn gate_count(items: &[SnapshotItem], diff: &BTreeMap<String, Presence>, fail_on: Severity) -> usize {
+/// gateCount — ADAPTATION (findings.ts:164-178 hardcodes high/critical; we parameterize `fail_on`):
+/// count items whose presence is New and effective_severity >= fail_on and not suppressed.
+pub fn gate_count(items: &[SnapshotItem], diff: &BTreeMap<String, Presence>, fail_on: Severity, records: &Records) -> usize {
     items.iter().filter(|it| {
-        matches!(diff.get(&it.fp), Some(Presence::New) | None) && it.effective_severity >= fail_on
+        matches!(diff.get(&it.fp), Some(Presence::New) | None)
+            && it.effective_severity >= fail_on
+            && !records.get(&it.fp).map(|r| r.suppressed).unwrap_or(false)
     }).count()
 }
 
@@ -183,10 +186,28 @@ mod tests {
         let mk = |fp: &str, sev: Severity| SnapshotItem{ fp:fp.into(), effective_severity:sev, engine:EngineId::Matrix, rule_id:"x".into(), path:String::new(), location_label:String::new(), title:String::new(), evidence:String::new(), dfp:String::new(), count:1 };
         let items = vec![mk("a", Severity::High), mk("b", Severity::Medium)];
         let mut diff = BTreeMap::new(); diff.insert("a".to_string(), Presence::New); diff.insert("b".to_string(), Presence::New);
-        assert_eq!(gate_count(&items, &diff, Severity::High), 1);
-        assert_eq!(gate_count(&items, &diff, Severity::Medium), 2);
+        assert_eq!(gate_count(&items, &diff, Severity::High, &Records::new()), 1);
+        assert_eq!(gate_count(&items, &diff, Severity::Medium, &Records::new()), 2);
         diff.insert("a".to_string(), Presence::Carried);
-        assert_eq!(gate_count(&items, &diff, Severity::High), 0);
+        assert_eq!(gate_count(&items, &diff, Severity::High, &Records::new()), 0);
+        // a suppressed New-high finding is NOT counted
+        diff.insert("a".to_string(), Presence::New);
+        let mut recs = Records::new();
+        recs.insert("a".into(), LifecycleRecord { suppressed: true, ..Default::default() });
+        assert_eq!(gate_count(&items, &diff, Severity::High, &recs), 0);
+    }
+    #[test] fn override_reclassifies_and_moves_the_gate() {
+        let finds = vec![ f(EngineId::Matrix, "matrix.deny-bypass", Severity::High, "GET", "u", "anon") ];
+        let s0 = snapshot_of(&finds, "r", "", "h", &Records::new());
+        let d0 = diff_runs(&s0.items, &[]);
+        assert_eq!(gate_count(&s0.items, &d0, Severity::High, &Records::new()), 1); // New high gates
+        let fp = s0.items[0].fp.clone();
+        let mut down = Records::new();
+        down.insert(fp.clone(), LifecycleRecord { severity_override: Some(Severity::Low), ..Default::default() });
+        let s1 = snapshot_of(&finds, "r", "", "h", &down);
+        assert_eq!(s1.items[0].effective_severity, Severity::Low);
+        let d1 = diff_runs(&s1.items, &[]);
+        assert_eq!(gate_count(&s1.items, &d1, Severity::High, &down), 0); // downgraded => no gate
     }
     #[test] fn fnv1a_is_deterministic() { assert_eq!(fnv1a("x"), fnv1a("x")); assert_ne!(fnv1a("a"), fnv1a("b")); }
     #[test] fn annotations_parse_defaults_and_ignores_gui_fields() {

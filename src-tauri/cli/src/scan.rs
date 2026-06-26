@@ -215,6 +215,10 @@ pub async fn run_scan(
         Some(other) => { eprintln!("error: bad --fail-on `{other}` (use critical|high|medium|low)"); return ExitCode::from(2); }
     };
 
+    // Annotations (suppress / override / status / owner / note), keyed by fingerprint.
+    // Empty here; Task 5 loads it from `--annotations`.
+    let records = qa_touchstone_core::security::lifecycle::Records::new();
+
     // Redaction = UNION of every identity's auth secrets.
     let red = RedactionSet::from_auths(cfg.identities.iter().map(|i| &i.auth));
 
@@ -264,7 +268,7 @@ pub async fn run_scan(
         title: red.redact_str(&f.title), path: red.redact_str(&f.path), evidence: red.redact_str(&f.evidence),
         method: f.method.clone(), endpoint: f.endpoint.clone(), identity: f.identity.as_deref().map(|s| red.redact_str(s)),
     }).collect();
-    let current = snapshot_of(&redacted, "cli", "", &scope_hash);
+    let current = snapshot_of(&redacted, "cli", "", &scope_hash, &records);
 
     // Load baseline (absent or empty file => empty baseline, all findings are New).
     let baseline_snapshot: Option<Snapshot> = if let Some(path) = baseline.as_deref() {
@@ -288,7 +292,7 @@ pub async fn run_scan(
 
     // Baseline-aware gate: only NEW findings >= fail_on trigger exit 3.
     let diff = diff_runs(&current.items, &baseline_items);
-    let gated = gate_count(&current.items, &diff, fail_on_sev);
+    let gated = gate_count(&current.items, &diff, fail_on_sev, &records);
 
     let ok = gated == 0 && errors.is_empty();
     let report = ScanReport { engines, findings: rfs, errors: rerrors, totals, ok };
