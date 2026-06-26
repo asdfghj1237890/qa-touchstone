@@ -303,7 +303,18 @@ const sensCases = [
   { name:'secret_as_key',resp:{ status:200, headers:{}, body:{ 'eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123':'eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123' } } },
   { name:'dedup',        resp:{ status:200, headers:{}, body:{ a:{ email:'x@y.com' }, b:{ email:'x@y.com' } } } },
 ];
-const sensOut = sensCases.map(c => ({ name:c.name, findings: oScan(c.resp).map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, path:f.path, evidence:f.evidence })) }));
+const sensOut = sensCases.map(c => ({ name:c.name, findings: oScan(c.resp).map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, title:f.title, path:f.path, evidence:f.evidence })) }));
 const redactCases = ['', 'short', 'abcdefgh', 'eyJverylongsecretvalue99'].map(s => ({ s, expected: oRedact(s) }));
-writeFileSync(join(OUT,'security_oracles.json'), JSON.stringify({ sensitive: sensOut, redact: redactCases }, null, 2) + '\n');
+const { checkSchema: oCheck, inferContract: oInfer, runOracles: oRun } = await import('./_oracles-bridge.mjs');
+const oContract = oInfer({ id:1, name:'a', tags:['x'] });
+const schemaCases = [
+  { name:'undeclared',   body:{ id:1, name:'a', tags:['x'], extra:true } },
+  { name:'type_mismatch',body:{ id:'1', name:'a', tags:['x'] } },
+  { name:'missing',      body:{ id:1, tags:['x'] } },
+  { name:'nullable_tol', body:{ id:null, name:'a', tags:['x'] } },
+].map(c => ({ name:c.name, findings: oCheck(c.body, oContract).map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, title:f.title, path:f.path, evidence:f.evidence })) }));
+// runOracles bump: an undeclared field whose value also leaks (email) → high
+const runBump = oRun({ status:200, response:{ body:{ id:1, name:'a', tags:['x'], leak:'u@v.com' } } }, { baseline: oInfer({ id:1, name:'a', tags:['x'] }) })
+  .map(f => ({ ruleId:f.ruleId, oracle:f.oracle, severity:f.severity, path:f.path }));
+writeFileSync(join(OUT,'security_oracles.json'), JSON.stringify({ sensitive: sensOut, redact: redactCases, schema: schemaCases, runBump }, null, 2) + '\n');
 console.log('wrote security_oracles.json');

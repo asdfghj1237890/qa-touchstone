@@ -7,6 +7,7 @@
           "ruleId": "jwt",
           "oracle": "sensitive-data",
           "severity": "high",
+          "title": "JWT in response",
           "path": "token",
           "evidence": "eyJ…<redacted>…EF"
         },
@@ -14,6 +15,7 @@
           "ruleId": "secret-name",
           "oracle": "sensitive-data",
           "severity": "critical",
+          "title": "Secret-named field present",
           "path": "token",
           "evidence": "eyJ…<redacted>…EF"
         }
@@ -26,6 +28,7 @@
           "ruleId": "aws-key",
           "oracle": "sensitive-data",
           "severity": "high",
+          "title": "AWS access key id",
           "path": "key",
           "evidence": "AKI…<redacted>…LE"
         }
@@ -38,6 +41,7 @@
           "ruleId": "private-key",
           "oracle": "sensitive-data",
           "severity": "critical",
+          "title": "Private key",
           "path": "pem",
           "evidence": "---…<redacted>…xx"
         }
@@ -50,6 +54,7 @@
           "ruleId": "secret-name",
           "oracle": "sensitive-data",
           "severity": "critical",
+          "title": "Secret-named field present",
           "path": "password",
           "evidence": "•••••••"
         }
@@ -62,6 +67,7 @@
           "ruleId": "email",
           "oracle": "sensitive-data",
           "severity": "medium",
+          "title": "Email address",
           "path": "contact",
           "evidence": "use…<redacted>…om"
         }
@@ -74,6 +80,7 @@
           "ruleId": "card",
           "oracle": "sensitive-data",
           "severity": "high",
+          "title": "Credit-card-like number",
           "path": "pan",
           "evidence": "411…<redacted>…11"
         }
@@ -90,6 +97,7 @@
           "ruleId": "internal",
           "oracle": "sensitive-data",
           "severity": "medium",
+          "title": "Internal/debug field",
           "path": "stack_trace",
           "evidence": "••••"
         }
@@ -102,6 +110,7 @@
           "ruleId": "leaky-header",
           "oracle": "sensitive-data",
           "severity": "medium",
+          "title": "Server/version header",
           "path": "header:Server",
           "evidence": "ngi…<redacted>….2"
         }
@@ -114,6 +123,7 @@
           "ruleId": "jwt",
           "oracle": "sensitive-data",
           "severity": "high",
+          "title": "JWT in response",
           "path": "eyJhbGciOiJIUzI1NiJ9.eyJhIjoxfQ.sig123",
           "evidence": "eyJ…<redacted>…23"
         }
@@ -126,6 +136,7 @@
           "ruleId": "email",
           "oracle": "sensitive-data",
           "severity": "medium",
+          "title": "Email address",
           "path": "a.email",
           "evidence": "•••••••"
         },
@@ -133,6 +144,7 @@
           "ruleId": "email",
           "oracle": "sensitive-data",
           "severity": "medium",
+          "title": "Email address",
           "path": "b.email",
           "evidence": "•••••••"
         }
@@ -155,6 +167,65 @@
     {
       "s": "eyJverylongsecretvalue99",
       "expected": "eyJ…<redacted>…99"
+    }
+  ],
+  "schema": [
+    {
+      "name": "undeclared",
+      "findings": [
+        {
+          "ruleId": "schema:undeclared",
+          "oracle": "schema",
+          "severity": "low",
+          "title": "Undeclared field",
+          "path": "extra",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "name": "type_mismatch",
+      "findings": [
+        {
+          "ruleId": "schema:type-mismatch",
+          "oracle": "schema",
+          "severity": "medium",
+          "title": "Type mismatch",
+          "path": "id",
+          "evidence": "number → string"
+        }
+      ]
+    },
+    {
+      "name": "missing",
+      "findings": [
+        {
+          "ruleId": "schema:missing",
+          "oracle": "schema",
+          "severity": "medium",
+          "title": "Missing field",
+          "path": "name",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "name": "nullable_tol",
+      "findings": []
+    }
+  ],
+  "runBump": [
+    {
+      "ruleId": "email",
+      "oracle": "sensitive-data",
+      "severity": "medium",
+      "path": "leak"
+    },
+    {
+      "ruleId": "schema:undeclared",
+      "oracle": "schema",
+      "severity": "high",
+      "path": "leak"
     }
   ]
 }

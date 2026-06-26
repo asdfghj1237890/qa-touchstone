@@ -1,6 +1,7 @@
 //! Port of src/qa/oracles.ts — response oracles (sensitive-data + schema-drift), pure.
 //! Findings carry NO cell context (method/endpoint/identity = None); run_matrix stamps the cell.
 use crate::security::finding::{EngineId, Finding, Severity};
+use crate::security::lifecycle::normalize_path;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -128,6 +129,66 @@ pub fn scan_sensitive(body: &Value, headers: &Value, cfg: &OracleConfig) -> Vec<
                         emit(&mut out, &mut seen, cfg, rule.id, rule.group, rule.severity, rule.title, path, Some(m.as_str()), value);
                     }
                 }
+            }
+        }
+    }
+    out
+}
+
+fn js_type(v: &Value) -> &'static str { // oracles.ts:139
+    match v { Value::Null=>"null", Value::Array(_)=>"array", Value::String(_)=>"string",
+        Value::Number(_)=>"number", Value::Bool(_)=>"boolean", Value::Object(_)=>"object" }
+}
+
+pub type Contract = BTreeMap<String, (String, bool)>; // normalizedPath -> (type, required)
+
+/// inferContract (oracles.ts:146).
+pub fn infer_contract(body: &Value) -> Contract {
+    let mut c = Contract::new();
+    if body.is_object() || body.is_array() {
+        walk_json(body, "", 0, &mut |path, _k, value| { c.insert(normalize_path(path), (js_type(value).into(), true)); });
+    }
+    c
+}
+
+/// checkSchema (oracles.ts:154). engine=Oracle, oracle="schema", cell stamped later.
+pub fn check_schema(body: &Value, contract: &Contract, cfg: &OracleConfig) -> Vec<Finding> {
+    if !cfg.schema { return vec![]; }
+    let mut out = Vec::new();
+    let mut present: BTreeMap<String, String> = BTreeMap::new();
+    if body.is_object() || body.is_array() {
+        walk_json(body, "", 0, &mut |path, _k, value| { present.insert(normalize_path(path), js_type(value).into()); });
+    }
+    let mk = |rule: &str, sev: Severity, title: &str, path: &str, ev: String| Finding {
+        engine: EngineId::Oracle, severity: sev, rule_id: rule.into(), oracle: "schema".into(),
+        title: title.into(), path: path.into(), evidence: ev, method: None, endpoint: None, identity: None };
+    for (p, ty) in &present {
+        match contract.get(p) {
+            None => out.push(mk("schema:undeclared", Severity::Low, "Undeclared field", p, String::new())),
+            Some((cty, _)) if ty != cty && cty != "null" && ty != "null" =>
+                out.push(mk("schema:type-mismatch", Severity::Medium, "Type mismatch", p, format!("{cty} → {ty}"))),
+            _ => {}
+        }
+    }
+    for (p, (_ty, required)) in contract {
+        if *required && !present.contains_key(p) {
+            out.push(mk("schema:missing", Severity::Medium, "Missing field", p, String::new()));
+        }
+    }
+    out
+}
+
+/// runOracles (oracles.ts:182): sensitive + (2xx & baseline ⇒ schema); undeclared-that-also-leaks ⇒ high.
+pub fn run_oracles(status: i64, body: &Value, headers: &Value, baseline: Option<&Contract>, cfg: &OracleConfig) -> Vec<Finding> {
+    let sensitive = scan_sensitive(body, headers, cfg);
+    let leak_paths: std::collections::BTreeSet<String> = sensitive.iter().map(|f| normalize_path(&f.path)).collect();
+    let mut out = sensitive;
+    let is2xx = (200..=299).contains(&status);
+    if is2xx {
+        if let Some(c) = baseline {
+            for mut f in check_schema(body, c, cfg) {
+                if f.title == "Undeclared field" && leak_paths.contains(&f.path) { f.severity = Severity::High; }
+                out.push(f);
             }
         }
     }
