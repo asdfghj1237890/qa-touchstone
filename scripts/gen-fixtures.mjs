@@ -280,7 +280,8 @@ const item = (o) => ({ fp:o.fp, effectiveSeverity:o.sev, engine:o.engine, ruleId
 const cur = { fpVersion:1, runId:'r', items:[ item({fp:'aa',sev:'high',engine:'bola',ruleId:'bola.cross-object',loc:'GET getOrder @t1: alice→bob',title:'Cross-object access confirmed'}),
   item({fp:'bb',sev:'critical',engine:'matrix',ruleId:'matrix.deny-bypass',loc:'DELETE delU @anon',title:'Access-control bypass'}) ] };
 const base = { fpVersion:1, runId:'b', items:[ item({fp:'bb',sev:'critical',engine:'matrix',ruleId:'matrix.deny-bypass',loc:'DELETE delU @anon',title:'Access-control bypass'}) ] };
-const model = bR(cur, base, { records:{} });
+const records = { aa: { suppressed:true, suppressReason:'accepted' }, bb: { status:'acknowledged', owner:'alice', note:'tracked' } };
+const model = bR(cur, base, { records });
 const sarif = JSON.parse(rS(model));
 const junit = rJU(model);
 const sevLevel = ['critical','high','medium','low','info'].map(s => ({ s, expected: sL(s) }));

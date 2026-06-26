@@ -360,15 +360,18 @@ pub fn report_to_sarif(model: &ReportModel) -> String {
 }
 
 fn is_gate_failure(f: &ReportFinding, fail_on: Severity) -> bool {
-    f.presence == Presence::New && f.severity >= fail_on   // !suppressed — suppressions are a later sprint
+    f.presence == Presence::New && f.severity >= fail_on && !f.suppressed
 }
 
 /// reportToJUnit (securityReport.ts:113-136). <testsuite> per engine in FIRST-SEEN order; a finding
-/// is a <failure> iff New && severity >= summary.fail_on. durations omitted (time="0.000").
+/// is a <failure> iff New && severity >= summary.fail_on && !suppressed. durations omitted (time="0.000").
 pub fn report_to_junit(model: &ReportModel) -> String {
     use std::collections::BTreeMap;
     let fail_on = model.summary.fail_on;
     let current: Vec<&ReportFinding> = model.findings.iter().filter(|f| f.presence != Presence::Resolved).collect();
+    let total = current.len();
+    let total_fail = current.iter().filter(|f| is_gate_failure(f, fail_on)).count();
+    let total_skip = current.iter().filter(|f| f.suppressed).count();
     let mut order: Vec<EngineId> = Vec::new();
     let mut by_engine: BTreeMap<&'static str, Vec<&ReportFinding>> = BTreeMap::new();
     for f in &current {
@@ -376,25 +379,28 @@ pub fn report_to_junit(model: &ReportModel) -> String {
         if !order.iter().any(|e| engine_token(*e) == tok) { order.push(f.engine); }
         by_engine.entry(tok).or_default().push(f);
     }
-    let total = current.len();
-    let total_fail = current.iter().filter(|f| is_gate_failure(f, fail_on)).count();
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out.push_str(&format!(
-        "<testsuites name=\"QA Touchstone Security\" tests=\"{total}\" failures=\"{total_fail}\" skipped=\"0\" time=\"0.000\">\n"));
+        "<testsuites name=\"QA Touchstone Security\" tests=\"{total}\" failures=\"{total_fail}\" skipped=\"{total_skip}\" time=\"0.000\">\n"));
     for eng in &order {
         let tok = engine_token(*eng);
         let fs = &by_engine[tok];
         let sfail = fs.iter().filter(|f| is_gate_failure(f, fail_on)).count();
+        let sskip = fs.iter().filter(|f| f.suppressed).count();
         out.push_str(&format!(
-            "  <testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"0\">\n", xml_attr_escape(tok), fs.len(), sfail));
+            "  <testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\">\n", xml_attr_escape(tok), fs.len(), sfail, sskip));
         for f in fs {
             let name = xml_attr_escape(&format!("{} @ {}", f.rule_id, f.location));
             let cls = xml_attr_escape(tok);
             if is_gate_failure(f, fail_on) {
-                let body = format!("{}{}", f.location, f.evidence.as_deref().map(|e| format!("\n{e}")).unwrap_or_default());
+                let note = if f.note.is_empty() { String::new() } else { format!("\n{}", f.note) };
+                let body = format!("{}{}{}", f.location, f.evidence.as_deref().map(|e| format!("\n{e}")).unwrap_or_default(), note);
                 let body = sanitize_xml(&body).replace("]]>", "]]]]><![CDATA[>");
                 let msg = xml_attr_escape(&format!("{} ({})", f.title, sev_token(f.severity)));
                 out.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"><failure message=\"{msg}\"><![CDATA[{body}]]></failure></testcase>\n"));
+            } else if f.suppressed {
+                let msg = xml_attr_escape(&format!("suppressed: {}", f.suppress_reason));
+                out.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"><skipped message=\"{msg}\"/></testcase>\n"));
             } else {
                 out.push_str(&format!("    <testcase name=\"{name}\" classname=\"{cls}\"/>\n"));
             }
@@ -422,18 +428,24 @@ pub fn report_to_html(model: &ReportModel) -> String {
         "<tr><td>{}</td><td>{}</td><td>{}</td></tr>", h(&e.engine), if e.ran { e.findings.to_string() } else { "skipped".into() }, e.errors)).collect();
     let find_rows: String = model.findings.iter().map(|f| {
         let presence = match f.presence { Presence::New=>"new", Presence::Carried=>"carried", Presence::Resolved=>"resolved" };
-        format!("<tr class=\"p-{presence}\"><td>{presence}</td><td class=\"sev-{sev}\">{sev}</td><td>{eng}</td><td><code>{rule}</code> {title}{cnt}</td><td><code>{loc}</code></td><td>{ev}</td></tr>",
+        let supp = if f.suppressed { " suppressed" } else { "" };
+        let mut tri: Vec<String> = Vec::new();
+        if !f.status.is_empty() && f.status != "open" { tri.push(h(&f.status)); }
+        if !f.owner.is_empty() { tri.push(h(&f.owner)); }
+        if f.suppressed { tri.push(if f.suppress_reason.is_empty() { "(suppressed)".into() } else { format!("(suppressed: {})", h(&f.suppress_reason)) }); }
+        let triage = tri.join(" \u{00b7} ");
+        format!("<tr class=\"p-{presence}{supp}\"><td>{presence}</td><td class=\"sev-{sev}\">{sev}</td><td>{eng}</td><td><code>{rule}</code> {title}{cnt}</td><td><code>{loc}</code></td><td>{ev}</td><td>{triage}</td></tr>",
             sev=sev_token(f.severity), eng=h(engine_token(f.engine)), rule=h(&f.rule_id), title=h(&f.title),
             cnt=if f.count>1 { format!(" \u{00d7}{}", f.count) } else { String::new() },
-            loc=h(&f.location), ev=f.evidence.as_deref().map(|e| format!("<code>{}</code>", h(e))).unwrap_or_default())
+            loc=h(&f.location), ev=f.evidence.as_deref().map(|e| format!("<code>{}</code>", h(e))).unwrap_or_default(), triage=triage)
     }).collect();
     format!("<!doctype html><html><head><meta charset=\"utf-8\"><title>QA Touchstone — Security report</title>\n\
-<style>body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}}.gate{{font-size:20px;font-weight:700}}.chip{{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}}.sev-critical,.sev-high{{color:#b91c1c}}.sev-medium{{color:#b45309}}.p-resolved{{opacity:.55}}</style>\n\
+<style>body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}table{{border-collapse:collapse;width:100%;margin:12px 0}}th,td{{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}}.gate{{font-size:20px;font-weight:700}}.chip{{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}}.sev-critical,.sev-high{{color:#b91c1c}}.sev-medium{{color:#b45309}}.suppressed,.p-resolved{{opacity:.55}}</style>\n\
 </head><body>\n<h1>QA Touchstone — Security report</h1>\n\
 <p>Run {run}{drift}</p>\n<p class=\"gate\">{gated} new (\u{2265} {fail_on})</p>\n\
 <p>{total} findings — {new} new \u{00b7} {carried} carried \u{00b7} {resolved} resolved</p>\n<div>{chips}</div>\n\
 <h2>Engines</h2><table><thead><tr><th>Engine</th><th>Findings</th><th>Errors</th></tr></thead><tbody>{eng_rows}</tbody></table>\n\
-<h2>Findings</h2><table><thead><tr><th>State</th><th>Severity</th><th>Engine</th><th>Rule</th><th>Location</th><th>Evidence</th></tr></thead><tbody>{find_rows}</tbody></table>\n</body></html>",
+<h2>Findings</h2><table><thead><tr><th>State</th><th>Severity</th><th>Engine</th><th>Rule</th><th>Location</th><th>Evidence</th><th>Triage</th></tr></thead><tbody>{find_rows}</tbody></table>\n</body></html>",
         run=h(&model.meta.run_id), drift=if model.meta.scope_mismatch { " \u{00b7} <strong>baseline scope differs</strong>" } else { "" },
         gated=s.gated, fail_on=sev_token(s.fail_on), total=s.total, new=s.new, carried=s.carried, resolved=s.resolved)
 }
@@ -560,6 +572,32 @@ mod tests {
         let model = build_report(&cur, &[], vec![], Severity::High, false, "cli", &Records::new());
         let html = report_to_html(&model);
         assert!(!html.contains("<script>x</script>") && html.contains("&lt;script&gt;") && html.contains("&lt;b&gt;"), "rule id AND title escaped");
+    }
+
+    #[test] fn junit_suppressed_is_skipped_not_failure() {
+        let cur = vec![ mk_item("aa", Severity::High, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t") ];
+        let mut recs = Records::new();
+        recs.insert("aa".into(), LifecycleRecord { suppressed: true, suppress_reason: "ok".into(), ..Default::default() });
+        let xml = report_to_junit(&build_report(&cur, &[], vec![], Severity::High, false, "r", &recs));
+        assert!(xml.contains("<skipped message=\"suppressed: ok\"") && !xml.contains("<failure"));
+        assert!(xml.contains("skipped=\"1\""));
+    }
+    #[test] fn junit_failure_cdata_includes_note() {
+        let cur = vec![ mk_item("aa", Severity::High, EngineId::Matrix, "matrix.deny-bypass", "GET u @anon", "t") ];
+        let mut recs = Records::new();
+        recs.insert("aa".into(), LifecycleRecord { note: "see JIRA-1".into(), ..Default::default() });
+        let xml = report_to_junit(&build_report(&cur, &[], vec![], Severity::High, false, "r", &recs));
+        assert!(xml.contains("<failure") && xml.contains("see JIRA-1"));
+    }
+    #[test] fn html_triage_shows_owner_status_and_dims_suppressed() {
+        let cur = vec![ mk_item("aa", Severity::High, EngineId::Bola, "bola.cross-object", "GET g @t1", "X") ];
+        let mut recs = Records::new();
+        recs.insert("aa".into(), LifecycleRecord { suppressed: true, suppress_reason: "ok".into(),
+            status: "acknowledged".into(), owner: "alice".into(), ..Default::default() });
+        let html = report_to_html(&build_report(&cur, &[], vec![], Severity::High, false, "cli", &recs));
+        assert!(html.contains("<th>Triage</th>"));
+        assert!(html.contains("acknowledged") && html.contains("alice") && html.contains("(suppressed: ok)"));
+        assert!(html.contains("class=\"p-new suppressed\""));
     }
 
     #[test] fn sarif_emits_suppressions_and_owner_status() {

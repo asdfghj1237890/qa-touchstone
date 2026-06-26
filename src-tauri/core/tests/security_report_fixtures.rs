@@ -1,5 +1,5 @@
 use qa_touchstone_core::security::finding::{EngineId, Severity};
-use qa_touchstone_core::security::lifecycle::{Records, SnapshotItem};
+use qa_touchstone_core::security::lifecycle::SnapshotItem;
 use qa_touchstone_core::security::report::*;
 use serde_json::Value;
 use roxmltree;
@@ -63,7 +63,12 @@ fn report_sarif_matches_ts() {
         "DELETE delU @anon",
         "Access-control bypass",
     )];
-    let model = build_report(&cur, &base, vec![], Severity::High, false, "r", &Records::new());
+    let mut records = qa_touchstone_core::security::lifecycle::Records::new();
+    records.insert("aa".into(), qa_touchstone_core::security::lifecycle::LifecycleRecord {
+        suppressed: true, suppress_reason: "accepted".into(), ..Default::default() });
+    records.insert("bb".into(), qa_touchstone_core::security::lifecycle::LifecycleRecord {
+        status: "acknowledged".into(), owner: "alice".into(), note: "tracked".into(), ..Default::default() });
+    let model = build_report(&cur, &base, vec![], Severity::High, false, "r", &records);
     let got: Value = serde_json::from_str(&report_to_sarif(&model)).unwrap();
     assert_eq!(
         got,
@@ -89,8 +94,9 @@ fn report_sarif_matches_ts() {
     let rs = roxmltree::Document::parse(&rust_junit).unwrap();
     let names = |d: &roxmltree::Document| d.descendants().filter(|n| n.has_tag_name("testcase"))
         .map(|n| (n.attribute("name").unwrap_or("").to_string(),
-                  n.descendants().any(|c| c.has_tag_name("failure")))).collect::<Vec<_>>();
-    assert_eq!(names(&rs), names(&ts), "JUnit testcases (name + has-failure) match TS at fail_on=high");
+                  n.descendants().any(|c| c.has_tag_name("failure")),
+                  n.descendants().any(|c| c.has_tag_name("skipped")))).collect::<Vec<_>>();
+    assert_eq!(names(&rs), names(&ts), "JUnit testcases (name + has-failure + has-skipped) match TS at fail_on=high");
     let suites = |d: &roxmltree::Document| d.descendants().filter(|n| n.has_tag_name("testsuite"))
         .map(|n| n.attribute("name").unwrap_or("").to_string()).collect::<Vec<_>>();
     assert_eq!(suites(&rs), suites(&ts), "suite order/names match TS");
