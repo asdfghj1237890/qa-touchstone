@@ -693,7 +693,7 @@ mod tests {
 
     #[test]
     fn derive_seeds_explicit_first_and_not_dropped_by_cap() {
-        use crate::config::{Kv, FuzzSeedCfg};
+        use crate::config::FuzzSeedCfg;
         // Explicit seed for path:0, cap=1 → explicit survives, auto path:0 is deduped.
         let explicit = vec![FuzzSeedCfg { name: "my-id".into(), location: IdLocation::Path { index: 0 } }];
         // Use a URL with many path segments to generate lots of auto seeds.
