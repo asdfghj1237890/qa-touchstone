@@ -281,6 +281,9 @@ pub async fn run_fuzz(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
         // Per seed × payload: apply_id_location → build_request → execute → classify → dedup.
         // dedup_set: (loc_token, signal_wire_str) → (first_payload_id, extra_count)
         let mut dedup_set: HashMap<(String, String), (String, usize)> = HashMap::new();
+        // Patch only THIS target's findings below — avoids re-patching a prior target's
+        // finding that happens to share the same request id + loc_token (degenerate config).
+        let target_findings_start = findings.len();
 
         'seed: for (seed_name, tok, location) in &seeds {
             // An apply_id_location or build_request failure → one EngineError for this seed. No false-clean.
@@ -358,7 +361,7 @@ pub async fn run_fuzz(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
         // Patch evidence strings with (+k more) counts.
         // dedup_set key = (tok, signal_tok); value = (first_payload_id, extra_count).
         // Findings were just pushed in order; iterate and patch matching ones.
-        for f in findings.iter_mut() {
+        for f in findings[target_findings_start..].iter_mut() {
             if f.endpoint.as_deref() != Some(&target.request) { continue; }
             let Some(ref id_tok) = f.identity else { continue };
             // Find the dedup entry: signal_tok is the last segment of rule_id ("fuzz:{signal}").

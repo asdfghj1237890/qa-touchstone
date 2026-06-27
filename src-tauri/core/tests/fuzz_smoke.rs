@@ -55,7 +55,7 @@ async fn fuzz_server_error_on_long_payload() {
     assert_eq!(findings[0].rule_id, "fuzz:server-error");
     assert_eq!(findings[0].severity, Severity::High);
     assert_eq!(findings[0].endpoint.as_deref(), Some("getItem"), "endpoint must be the request id");
-    assert!(!findings[0].path.contains("http"), "path must not contain the resolved URL");
+    assert!(!findings[0].path.contains("://"), "path must not contain the resolved URL");
 }
 
 // ── Smoke (b) — SQL error in body → fuzz:error-leak ──
