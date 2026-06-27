@@ -46,55 +46,52 @@ pub static FUZZ_PAYLOADS: std::sync::LazyLock<Vec<FuzzPayload>> = std::sync::Laz
 /// Pattern-by-pattern translation from fuzz.ts:51-60, line by line:
 ///
 ///   TS: /\bat [\w$.]+\([^)]*:\d+(?::\d+)?\)/
-///   RS: r"(?-u:\bat [\w$.]+\([^)]*:\d+(?::\d+)?\))"      — JS/Java stack frame
+///   RS: r"(?-u:\b)at [0-9A-Za-z_$.]+\([^)]*:\d+(?::\d+)?\)"      — JS/Java stack frame
 ///
 ///   TS: /Traceback \(most recent call last\)/
-///   RS: r"(?-u:Traceback \(most recent call last\))"      — Python traceback (literal, no specials)
+///   RS: r"Traceback \(most recent call last\)"      — Python traceback (literal, no specials)
 ///
 ///   TS: /\b(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::\w+|near ".+": syntax error)\b/i
-///   RS: r#"(?i-u:\b(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::\w+|near ".+": syntax error)\b)"#
+///   RS: r#"(?i)(?-u:\b)(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::(?-u:\w)+|near ".+": syntax error)(?-u:\b)"#
 ///
 ///   TS: /\bjava\.lang\.\w+(?:Exception|Error)\b/
-///   RS: r"(?-u:\bjava\.lang\.\w+(?:Exception|Error)\b)"   — JVM exception
+///   RS: r"(?-u:\b)java\.lang\.(?-u:\w)+(?:Exception|Error)(?-u:\b)"   — JVM exception
 ///
 ///   TS: /\bSystem\.\w+Exception\b/
-///   RS: r"(?-u:\bSystem\.\w+Exception\b)"                 — .NET System.*Exception
+///   RS: r"(?-u:\b)System\.(?-u:\w)+Exception(?-u:\b)"                 — .NET System.*Exception
 ///
 ///   TS: /<b>(?:Warning|Fatal error|Notice|Parse error)<\/b>:/
-///   RS: r"(?-u:<b>(?:Warning|Fatal error|Notice|Parse error)</b>:)"  — PHP error tag
+///   RS: r"<b>(?:Warning|Fatal error|Notice|Parse error)</b>:"  — PHP error tag
 ///
 ///   TS: /goroutine \d+ \[/
-///   RS: r"(?-u:goroutine \d+ \[)"                         — Go panic goroutine
+///   RS: r"goroutine \d+ \["                         — Go panic goroutine
 ///
 ///   TS: /\bUnhandledPromiseRejection\b|\bECONNREFUSED\b/
-///   RS: r"(?-u:\bUnhandledPromiseRejection\b|\bECONNREFUSED\b)"  — Node-ish
+///   RS: r"(?-u:\b)UnhandledPromiseRejection(?-u:\b)|(?-u:\b)ECONNREFUSED(?-u:\b)"  — Node-ish
 fn error_signatures() -> &'static [Regex] {
     static SIGS: OnceLock<Vec<Regex>> = OnceLock::new();
     SIGS.get_or_init(|| {
-        // Faithful port of fuzz.ts ERROR_SIGNATURES (lines 51-60).
-        // Uses standard Unicode regex mode (regex crate default) — \b/\w/\d match Unicode code
-        // points. For the ASCII error strings we check this is identical to JS behaviour:
-        // the TS source uses plain /…/ without /u flag (JS default is non-Unicode-aware for
-        // \w/\b, but both match the same ASCII character set for these patterns).
-        // The regex crate does not support (?-u:…) for str-based matching (byte-mode only);
-        // Unicode mode is the correct Rust equivalent for matching ASCII error signatures.
+        // ASCII mode (JS \b/\w semantics): scope \b/\w per-token with (?-u:…); . / [^)] / .+
+        // stay default (they would otherwise allow invalid UTF-8 on &str). The in-class \w of
+        // the old [\w$.] cannot be scoped ([(?-u:\w)] is illegal) so it is expanded to
+        // [0-9A-Za-z_$.]. Order is positional — the keyed fixture + family unit test index by it.
         let patterns: &[&str] = &[
-            // JS/Java "at fn (file:line:col)"
-            r"\bat [\w$.]+\([^)]*:\d+(?::\d+)?\)",
+            // JS/Java "at fn(file:line:col)"
+            r"(?-u:\b)at [0-9A-Za-z_$.]+\([^)]*:\d+(?::\d+)?\)",
             // Python traceback
             r"Traceback \(most recent call last\)",
             // SQL errors (case-insensitive)
-            r#"(?i)\b(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::\w+|near ".+": syntax error)\b"#,
+            r#"(?i)(?-u:\b)(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::(?-u:\w)+|near ".+": syntax error)(?-u:\b)"#,
             // JVM exception
-            r"\bjava\.lang\.\w+(?:Exception|Error)\b",
+            r"(?-u:\b)java\.lang\.(?-u:\w)+(?:Exception|Error)(?-u:\b)",
             // .NET System.*Exception
-            r"\bSystem\.\w+Exception\b",
+            r"(?-u:\b)System\.(?-u:\w)+Exception(?-u:\b)",
             // PHP error tag
             r"<b>(?:Warning|Fatal error|Notice|Parse error)</b>:",
             // Go panic goroutine
             r"goroutine \d+ \[",
             // Node-ish
-            r"\bUnhandledPromiseRejection\b|\bECONNREFUSED\b",
+            r"(?-u:\b)UnhandledPromiseRejection(?-u:\b)|(?-u:\b)ECONNREFUSED(?-u:\b)",
         ];
         patterns.iter().map(|p| Regex::new(p).expect("ERROR_SIGNATURES pattern failed to compile")).collect()
     })
