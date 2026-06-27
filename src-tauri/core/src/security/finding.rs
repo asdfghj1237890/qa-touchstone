@@ -9,7 +9,7 @@ pub enum Severity { Info, Low, Medium, High, Critical } // Ord: Critical is grea
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum EngineId { Matrix, Bola, Bfla, RateLimit, Oracle }
+pub enum EngineId { Matrix, Bola, Bfla, RateLimit, Oracle, Fuzz }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Finding {

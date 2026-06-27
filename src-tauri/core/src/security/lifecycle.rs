@@ -27,7 +27,7 @@ pub(crate) fn normalize_path(p: &str) -> String {
 }
 
 /// Engine token feeding the fingerprint — same lowercase strings as the TS `engine`.
-fn engine_token(e: EngineId) -> &'static str { match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::Bfla=>"bfla", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle" } }
+fn engine_token(e: EngineId) -> &'static str { match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::Bfla=>"bfla", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle", EngineId::Fuzz=>"fuzz" } }
 
 /// ruleIdOf (findings.ts:21): rule_id, else oracle, else "unknown".
 fn rule_id_of(f: &Finding) -> String {

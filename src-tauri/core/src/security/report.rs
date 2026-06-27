@@ -65,6 +65,7 @@ fn engine_token(e: EngineId) -> &'static str {
         EngineId::Bfla => "bfla",
         EngineId::RateLimit => "ratelimit",
         EngineId::Oracle => "oracle",
+        EngineId::Fuzz => "fuzz",
     }
 }
 

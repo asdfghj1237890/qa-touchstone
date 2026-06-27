@@ -38,7 +38,10 @@ fn sev_str(s: Severity) -> &'static str {
     match s { Severity::Critical=>"critical", Severity::High=>"high", Severity::Medium=>"medium", Severity::Low=>"low", Severity::Info=>"info" }
 }
 fn engine_str(e: EngineId) -> &'static str {
-    match e { EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::Bfla=>"bfla", EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle" }
+    match e {
+        EngineId::Matrix=>"matrix", EngineId::Bola=>"bola", EngineId::Bfla=>"bfla",
+        EngineId::RateLimit=>"ratelimit", EngineId::Oracle=>"oracle", EngineId::Fuzz=>"fuzz",
+    }
 }
 
 /// Explicit, stable wire tokens for scope-descriptor enums (NOT Debug — a code-shape detail
@@ -218,7 +221,7 @@ pub async fn run_scan(
         if !cfg.environments.iter().any(|e| &e.name == name) { eprintln!("error: no environment named `{name}`"); return ExitCode::from(2); }
     }
     if let Some(eng) = &engine {
-        if !matches!(eng.as_str(), "matrix" | "bola" | "bfla" | "ratelimit") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
+        if !matches!(eng.as_str(), "matrix" | "bola" | "bfla" | "ratelimit" | "fuzz") { eprintln!("error: unknown --engine `{eng}`"); return ExitCode::from(2); }
     }
     // A single-engine run produces a partial finding set; blessing it would write a baseline
     // missing the other engines' findings (which the next full run would then flag as New).

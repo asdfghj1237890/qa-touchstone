@@ -3,6 +3,7 @@ pub mod authz;
 pub mod bfla;
 pub mod bola;
 pub mod finding;
+pub mod fuzz;
 pub mod lifecycle;
 pub mod oracles;
 pub mod ratelimit;

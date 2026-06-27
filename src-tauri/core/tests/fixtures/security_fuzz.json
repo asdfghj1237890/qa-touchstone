@@ -1,0 +1,78 @@
+{
+  "classify": {
+    "server-error": {
+      "signal": "server-error",
+      "severity": "high"
+    },
+    "error-leak-js": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-python": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-sql": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-jvm": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-dotnet": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-php": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-go": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "error-leak-node": {
+      "signal": "error-leak",
+      "severity": "high"
+    },
+    "reflected-xss": {
+      "signal": "reflected",
+      "severity": "high"
+    },
+    "reflected-sqli": {
+      "signal": "reflected",
+      "severity": "medium"
+    },
+    "benign-echo": {
+      "signal": "ok",
+      "severity": null
+    },
+    "clean-400": {
+      "signal": "ok",
+      "severity": null
+    }
+  },
+  "findings": {
+    "finding-server-error": {
+      "oracle": "fuzz",
+      "ruleId": "fuzz:server-error",
+      "severity": "high",
+      "title": "Fuzz input caused a server error (5xx)",
+      "path": "GET /items",
+      "evidence": "payload \"long\" on id",
+      "source": "rule"
+    },
+    "finding-reflected-xss": {
+      "oracle": "fuzz",
+      "ruleId": "fuzz:reflected",
+      "severity": "high",
+      "title": "Fuzz input reflected unescaped in the response",
+      "path": "GET /items",
+      "evidence": "payload \"xss\" on id",
+      "source": "rule"
+    },
+    "finding-clean-null": null
+  },
+  "casesLength": 12
+}

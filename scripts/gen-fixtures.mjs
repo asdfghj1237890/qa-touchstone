@@ -427,6 +427,70 @@ const bolasetupOut = bolasetupCases.map(c => ({
 writeFileSync(join(OUT, 'security_bolasetup.json'), JSON.stringify(bolasetupOut, null, 2) + '\n');
 console.log(`wrote security_bolasetup.json (${bolasetupOut.length} cases)`);
 
+const { classifyFuzzResponse: cFR, fuzzFinding: fF, fuzzCasesFor: fCF, FUZZ_PAYLOADS: FP } = await import('./_fuzz-bridge.mjs');
+_i = 0;
+
+// Helper: build a QaResponse-like object (status + body) matching fuzz.ts's QaResponse type.
+const mkResp = (status, body) => ({ status, body });
+const seedLoc = { kind: 'query', key: 'id' };
+const meta = { method: 'GET', path: '/items' };
+
+// classify cases — keyed by name
+const fuzzClassify = {};
+
+// 1. 5xx → server-error
+fuzzClassify['server-error'] = cFR(FP.find(p => p.id === 'long'), mkResp(500, ''));
+
+// 2. One case per ERROR_SIGNATURE family (using a string body that matches only that family)
+fuzzClassify['error-leak-js']     = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, '    at Object.fn(app.js:10:3)'));
+fuzzClassify['error-leak-python'] = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'Traceback (most recent call last):'));
+fuzzClassify['error-leak-sql']    = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'You have an error in your SQL syntax near "1": syntax error'));
+fuzzClassify['error-leak-jvm']    = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'java.lang.NullPointerException'));
+fuzzClassify['error-leak-dotnet'] = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'System.NullReferenceException'));
+fuzzClassify['error-leak-php']    = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, '<b>Fatal error</b>: Uncaught'));
+fuzzClassify['error-leak-go']     = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'goroutine 1 [running],'));
+fuzzClassify['error-leak-node']   = cFR(FP.find(p => p.id === 'sqli'), mkResp(200, 'UnhandledPromiseRejection'));
+
+// 3. reflected xss → high
+const xssP = FP.find(p => p.id === 'xss');
+fuzzClassify['reflected-xss'] = cFR(xssP, mkResp(200, `<div>${xssP.value}</div>`));
+
+// 4. reflected sqli → medium (sqli is not xss → medium)
+const sqliP = FP.find(p => p.id === 'sqli');
+fuzzClassify['reflected-sqli'] = cFR(sqliP, mkResp(200, `echo: ${sqliP.value}`));
+
+// 5. echoed benign (empty payload) → ok
+const emptyP = FP.find(p => p.id === 'empty');
+fuzzClassify['benign-echo'] = cFR(emptyP, mkResp(200, ''));
+
+// 6. clean 400 with payload present in body (not an error body — no signature match) → ok
+const sqliClean = FP.find(p => p.id === 'sqli');
+fuzzClassify['clean-400'] = cFR(sqliClean, mkResp(400, { error: 'invalid id' }));
+
+// fuzz_cases_for: verify 12 cases + first carries the location
+const casesForSeed = { name: 'id', location: seedLoc, value: '1' };
+const casesArr = fCF(casesForSeed);
+// NOTE: the cases-length count is written as a SEPARATE top-level `casesLength` field below,
+// NOT as a classify entry — a {length} object has no signal/severity and must not be
+// deserialized as a verdict (would panic the fixture test on a missing `signal`).
+
+// fuzz_finding cases — keyed by name (compare ruleId, severity, title, path, evidence)
+const fuzzFindings = {};
+const longCase = casesArr.find(c => c.payload.id === 'long');
+const resp500 = mkResp(500, '');
+fuzzFindings['finding-server-error'] = fF(meta, longCase, resp500);
+
+const xssCase = casesArr.find(c => c.payload.id === 'xss');
+const respXss = mkResp(200, `<div>${xssCase.payload.value}</div>`);
+fuzzFindings['finding-reflected-xss'] = fF(meta, xssCase, respXss);
+
+const sqliCase = casesArr.find(c => c.payload.id === 'sqli');
+const respOk = mkResp(200, { ok: true });
+fuzzFindings['finding-clean-null'] = fF(meta, sqliCase, respOk);   // must be null
+
+writeFileSync(join(OUT, 'security_fuzz.json'), JSON.stringify({ classify: fuzzClassify, findings: fuzzFindings, casesLength: casesArr.length }, null, 2) + '\n');
+console.log(`wrote security_fuzz.json (${Object.keys(fuzzClassify).length} classify, ${Object.keys(fuzzFindings).length} finding, casesLength=${casesArr.length})`);
+
 // ── import: qaParseImport golden fixtures ────────────────────────────────────
 // Two sample inputs: a Postman v2.1 collection and an OpenAPI 3 spec.
 // The bridge maps {collection,details} → inlined ImportParsed (no ids, no responses).
