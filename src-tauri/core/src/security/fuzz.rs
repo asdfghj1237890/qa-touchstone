@@ -1,13 +1,16 @@
 //! Port of src/qa/fuzz.ts — input fuzzing engine (pure logic + runner).
 //! Mutates request inputs with 12 boundary/injection payloads and classifies
 //! responses for server errors, internal-error leaks, and dangerous reflections.
-use crate::config::{FuzzSeedCfg, IdLocation};
-use crate::security::bola::walk_json;
-use crate::security::finding::{EngineId, Finding, Severity};
+use crate::buildreq::{build_request, exec_opts_for};
+use crate::config::{Auth, Config, FuzzSeedCfg, IdLocation};
+use crate::engine::{qa_substitute, qa_var_map, RealDynamics};
+use crate::security::bola::{apply_id_location, walk_json};
+use crate::security::finding::{EngineError, EngineId, Finding, Severity};
+use crate::step::{run_step, StepResult};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 /// Tags a payload whose verbatim reflection is a vulnerability.
@@ -201,6 +204,178 @@ fn signal_wire_token(signal: FuzzSignal) -> &'static str {
 
 const DEFAULT_MAX_SEEDS: usize = 50;
 
+/// run_fuzz: sequential, mirroring run_bola/run_bfla.
+/// Returns (vec![], vec![]) when security.fuzz is absent (opt-in engine).
+pub async fn run_fuzz(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<EngineError>) {
+    let fzcfg = match cfg.security.as_ref().and_then(|s| s.fuzz.as_ref()) {
+        Some(f) => f,
+        None => return (vec![], vec![]),
+    };
+
+    let scoped = cfg.scoped_vars();
+    let var_map = qa_var_map(&scoped, env, None, None);
+    let max = fzcfg.max_seeds_per_target;
+
+    let mut findings: Vec<Finding> = Vec::new();
+    let mut errors: Vec<EngineError> = Vec::new();
+
+    for target in &fzcfg.targets {
+        let req = match cfg.requests.iter().find(|r| r.id == target.request) {
+            Some(r) => r,
+            None => {
+                errors.push(EngineError {
+                    engine: EngineId::Fuzz,
+                    endpoint: Some(target.request.clone()),
+                    identity: None,
+                    message: format!("fuzz target `{}`: request not found", target.request),
+                });
+                continue;
+            }
+        };
+
+        // Resolve identity: None → anon Auth::None (like ratelimit).
+        let resolved_auth = if let Some(id_str) = &target.identity {
+            match cfg.identities.iter().find(|i| &i.id == id_str) {
+                Some(i) => i.auth.clone(),
+                None => {
+                    errors.push(EngineError {
+                        engine: EngineId::Fuzz,
+                        endpoint: Some(target.request.clone()),
+                        identity: target.identity.clone(),
+                        message: format!("fuzz target `{}`: identity `{id_str}` not found", target.request),
+                    });
+                    continue;
+                }
+            }
+        } else {
+            Auth::None
+        };
+
+        // Build a stub identity for build_request / exec_opts_for.
+        let anon_identity = crate::config::Identity {
+            id: target.identity.clone().unwrap_or_else(|| "__fuzz_anon__".into()),
+            auth: resolved_auth.clone(),
+            privileged: false,
+        };
+
+        // Substitute {{vars}} in the URL first so path-segment seeds index the resolved path.
+        let mut req_resolved = req.clone();
+        req_resolved.url = qa_substitute(&req.url, &var_map, &mut RealDynamics);
+
+        // Parse body JSON for derive_fuzz_seeds.
+        let body_val: Option<Value> = req.body.as_ref().and_then(|b| {
+            serde_json::from_str(&b.content).ok()
+        });
+
+        // Derive the effective seed set. run_fuzz is the canonical place to warn on truncation.
+        let seeds = derive_fuzz_seeds(
+            &req_resolved.url,
+            &req.query,
+            body_val.as_ref(),
+            target.seeds.as_deref(),
+            max,
+            &target.request,
+            true, // warn_on_truncate: runner is canonical
+        );
+
+        // Per seed × payload: apply_id_location → build_request → execute → classify → dedup.
+        // dedup_set: (loc_token, signal_wire_str) → (first_payload_id, extra_count)
+        let mut dedup_set: HashMap<(String, String), (String, usize)> = HashMap::new();
+
+        'seed: for (seed_name, tok, location) in &seeds {
+            // An apply_id_location or build_request failure → one EngineError for this seed. No false-clean.
+
+            for payload in FUZZ_PAYLOADS.iter() {
+                let mutated = match apply_id_location(&req_resolved, location, &Value::String(payload.value.clone())) {
+                    Ok(m) => m,
+                    Err(_) => {
+                        // Secret-safe: carry only request id + loc_token + generic reason, NEVER the resolved URL.
+                        errors.push(EngineError {
+                            engine: EngineId::Fuzz,
+                            endpoint: Some(target.request.clone()),
+                            identity: Some(tok.clone()),
+                            message: format!("fuzz `{}` seed `{tok}`: could not apply seed location", target.request),
+                        });
+                        continue 'seed; // skip all payloads for this seed (one EngineError per seed)
+                    }
+                };
+                let prepared = match build_request(&mutated, &anon_identity, &var_map, &mut RealDynamics) {
+                    Ok(p) => p,
+                    Err(_) => {
+                        // Secret-safe: carry only request id + loc_token + generic reason, NEVER the resolved URL.
+                        errors.push(EngineError {
+                            engine: EngineId::Fuzz,
+                            endpoint: Some(target.request.clone()),
+                            identity: Some(tok.clone()),
+                            message: format!("fuzz `{}` seed `{tok}`: could not build request", target.request),
+                        });
+                        continue 'seed;
+                    }
+                };
+
+                // Execute; transport failure → resp=None (swallowed, faithful to fuzz.ts:129).
+                let step: StepResult = run_step(&prepared, &[], exec_opts_for(&anon_identity.auth)).await;
+                let qa_resp = if step.success || step.status > 0 {
+                    Some(QaResponse { status: Some(step.status), body: step.body.clone() })
+                } else {
+                    None // transport failure (connection refused, DNS, etc.) → swallow
+                };
+
+                let verdict = classify_fuzz_response(Some(payload), qa_resp.as_ref());
+                if verdict.signal == FuzzSignal::Ok { continue; }
+
+                let signal_tok = signal_wire_token(verdict.signal).to_string();
+                let dedup_key = (tok.clone(), signal_tok.clone());
+
+                match dedup_set.get_mut(&dedup_key) {
+                    Some((_, count)) => { *count += 1; } // additional trigger — increment only
+                    None => {
+                        // First occurrence: build the finding via the pure fuzz_finding fn
+                        // (so signal→rule_id/title/severity stays the single golden-fixtured source),
+                        // then override the CLI fields per spec §4.
+                        let method = req.method.to_uppercase();
+                        let fake_case = FuzzCase { seed_name, location, payload };
+                        let naive_finding = fuzz_finding(&method, &target.request, &fake_case, qa_resp.as_ref());
+                        if let Some(mut f) = naive_finding {
+                            // Override to the CLI shape (spec §4 runner overrides):
+                            // path = "{METHOD} {requestId}" (config id — NEVER the resolved URL)
+                            f.path     = format!("{} {}", method, target.request);
+                            f.endpoint = Some(target.request.clone());
+                            // identity = loc_token (collision-free fingerprint for (request, location))
+                            f.identity = Some(tok.clone());
+                            // evidence will be overwritten when we know the final (+k more) count — store a placeholder
+                            // using a sentinel and patch after the payload loop.
+                            f.evidence = format!("seed \"{seed_name}\" [{tok}]: {}", payload.id);
+                            f.method   = Some(method);
+                            findings.push(f);
+                            dedup_set.insert(dedup_key, (payload.id.to_string(), 0));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Patch evidence strings with (+k more) counts.
+        // dedup_set key = (tok, signal_tok); value = (first_payload_id, extra_count).
+        // Findings were just pushed in order; iterate and patch matching ones.
+        for f in findings.iter_mut() {
+            if f.endpoint.as_deref() != Some(&target.request) { continue; }
+            let Some(ref id_tok) = f.identity else { continue };
+            // Find the dedup entry: signal_tok is the last segment of rule_id ("fuzz:{signal}").
+            let signal_tok = f.rule_id.strip_prefix("fuzz:").unwrap_or("").to_string();
+            let key = (id_tok.clone(), signal_tok);
+            if let Some((_first_id, extra)) = dedup_set.get(&key) {
+                if *extra > 0 {
+                    let base = f.evidence.trim_end().to_string();
+                    f.evidence = format!("{base} (+{extra} more)");
+                }
+            }
+        }
+    }
+
+    (findings, errors)
+}
+
 /// Canonical `loc_token` for an IdLocation. Mirrors `id_location_token` in scan.rs
 /// but is defined here so fuzz.rs and scan.rs share the same formula.
 pub fn loc_token(loc: &IdLocation) -> String {
@@ -231,6 +406,7 @@ pub fn derive_fuzz_seeds(
     explicit: Option<&[FuzzSeedCfg]>,
     max: Option<usize>,
     request_id: &str,     // used in the truncation warning message only
+    warn_on_truncate: bool,
 ) -> Vec<(String, String, IdLocation)> {
     let cap = max.unwrap_or(DEFAULT_MAX_SEEDS).max(1); // validated >= 1 at config load
     let mut result: Vec<(String, String, IdLocation)> = Vec::new();
@@ -310,7 +486,9 @@ pub fn derive_fuzz_seeds(
     if result.len() > cap {
         let total = result.len();
         result.truncate(cap);
-        log::warn!("fuzz: target `{request_id}`: fuzzed first {cap} of {total} inputs (raise maxSeedsPerTarget to fuzz all)");
+        if warn_on_truncate {
+            log::warn!("fuzz: target `{request_id}`: fuzzed first {cap} of {total} inputs (raise maxSeedsPerTarget to fuzz all)");
+        }
     }
 
     result
@@ -483,6 +661,7 @@ mod tests {
         let seeds = derive_fuzz_seeds(
             "https://api.example.com/orders/123/items",
             &[], None, None, None, "r",
+            false,
         );
         let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
         assert!(toks.contains(&"path:0"), "path:0 for 'orders'");
@@ -495,7 +674,7 @@ mod tests {
     fn derive_seeds_query_structured_uses_raw_key() {
         use crate::config::Kv;
         let q = vec![Kv { key: "user_id".into(), value: "42".into() }];
-        let seeds = derive_fuzz_seeds("https://api.example.com/u", &q, None, None, None, "r");
+        let seeds = derive_fuzz_seeds("https://api.example.com/u", &q, None, None, None, "r", false);
         let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
         assert!(toks.contains(&"query:user_id"));
     }
@@ -503,7 +682,7 @@ mod tests {
     #[test]
     fn derive_seeds_body_leaves_via_walk_json() {
         let body = serde_json::json!({ "order": { "id": 1 }, "tag": "x" });
-        let seeds = derive_fuzz_seeds("https://api.example.com/u", &[], Some(&body), None, None, "r");
+        let seeds = derive_fuzz_seeds("https://api.example.com/u", &[], Some(&body), None, None, "r", false);
         let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
         assert!(toks.contains(&"body:order.id"));
         assert!(toks.contains(&"body:tag"));
@@ -518,6 +697,7 @@ mod tests {
         let seeds = derive_fuzz_seeds(
             "https://api.example.com/a/b/c/d/e/f",
             &[], None, Some(&explicit), Some(1), "r",
+            false,
         );
         assert_eq!(seeds.len(), 1, "cap=1 keeps exactly 1 seed");
         assert_eq!(seeds[0].0, "my-id", "explicit seed must be the survivor (explicit-first)");
@@ -531,7 +711,7 @@ mod tests {
             FuzzSeedCfg { name: "id-A".into(), location: IdLocation::Path { index: 0 } },
             FuzzSeedCfg { name: "id-B".into(), location: IdLocation::Path { index: 0 } },
         ];
-        let seeds = derive_fuzz_seeds("https://h/x", &[], None, Some(&explicit), None, "r");
+        let seeds = derive_fuzz_seeds("https://h/x", &[], None, Some(&explicit), None, "r", false);
         let path0: Vec<_> = seeds.iter().filter(|(_, t, _)| t == "path:0").collect();
         assert_eq!(path0.len(), 1, "duplicate loc_token must produce only one seed");
     }

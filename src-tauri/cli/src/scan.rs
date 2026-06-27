@@ -210,6 +210,7 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
                 explicit,
                 max,
                 &t.request,
+                false, // build_scope_descriptor: never warn (not the canonical runner)
             );
             let mut seed_toks: Vec<String> = seeds.iter().map(|(_, tok, _)| tok.clone()).collect();
             seed_toks.sort();
@@ -331,6 +332,11 @@ pub async fn run_scan(
     if want("ratelimit") {
         let (f, e) = qa_touchstone_core::security::ratelimit::run_ratelimit(&cfg, env.as_deref()).await;
         engines.push(EngineSummary { engine: "ratelimit".into(), ran: true, findings: f.len(), errors: e.len() });
+        findings.extend(f); errors.extend(e);
+    }
+    if want("fuzz") {
+        let (f, e) = qa_touchstone_core::security::fuzz::run_fuzz(&cfg, env.as_deref()).await;
+        engines.push(EngineSummary { engine: "fuzz".into(), ran: true, findings: f.len(), errors: e.len() });
         findings.extend(f); errors.extend(e);
     }
 
