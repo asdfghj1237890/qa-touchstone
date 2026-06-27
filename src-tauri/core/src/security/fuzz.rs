@@ -1,11 +1,13 @@
 //! Port of src/qa/fuzz.ts — input fuzzing engine (pure logic + runner).
 //! Mutates request inputs with 12 boundary/injection payloads and classifies
 //! responses for server errors, internal-error leaks, and dangerous reflections.
-use crate::config::IdLocation;
+use crate::config::{FuzzSeedCfg, IdLocation};
+use crate::security::bola::walk_json;
 use crate::security::finding::{EngineId, Finding, Severity};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// Tags a payload whose verbatim reflection is a vulnerability.
@@ -197,6 +199,123 @@ fn signal_wire_token(signal: FuzzSignal) -> &'static str {
     }
 }
 
+const DEFAULT_MAX_SEEDS: usize = 50;
+
+/// Canonical `loc_token` for an IdLocation. Mirrors `id_location_token` in scan.rs
+/// but is defined here so fuzz.rs and scan.rs share the same formula.
+pub fn loc_token(loc: &IdLocation) -> String {
+    match loc {
+        IdLocation::Path { index } => format!("path:{index}"),
+        IdLocation::Query { key } => format!("query:{key}"),
+        IdLocation::Body { path } => format!("body:{path}"),
+    }
+}
+
+/// Derive the effective seed set for one fuzz target.
+///
+/// Arguments:
+///   `resolved_url`    — the request URL AFTER `{{var}}` substitution (so path-segment
+///                       indexing uses the real resolved path, matching apply_id_location).
+///   `structured_query`— the `Request.query` key-value pairs (BEFORE any URL-append).
+///   `body`            — the parsed request body JSON (None if absent or non-JSON).
+///   `explicit`        — the `target.seeds` list from config (may be None or empty).
+///   `max`             — the per-target seed cap (default 50 when None).
+///
+/// Returns `Vec<(seed_name, loc_token_str, IdLocation)>` in explicit-first, deduped,
+/// capped order. The caller (both runner and build_scope_descriptor) iterates this to
+/// drive the fuzz loop and the scopeHash respectively.
+pub fn derive_fuzz_seeds(
+    resolved_url: &str,
+    structured_query: &[crate::config::Kv],
+    body: Option<&Value>,
+    explicit: Option<&[FuzzSeedCfg]>,
+    max: Option<usize>,
+    request_id: &str,     // used in the truncation warning message only
+) -> Vec<(String, String, IdLocation)> {
+    let cap = max.unwrap_or(DEFAULT_MAX_SEEDS).max(1); // validated >= 1 at config load
+    let mut result: Vec<(String, String, IdLocation)> = Vec::new();
+    let mut seen_tokens: HashSet<String> = HashSet::new();
+
+    // 1. Explicit seeds — FIRST, so cap never drops them.
+    if let Some(seeds) = explicit {
+        for s in seeds {
+            let tok = loc_token(&s.location);
+            if seen_tokens.insert(tok.clone()) {
+                result.push((s.name.clone(), tok, s.location.clone()));
+            }
+        }
+    }
+
+    // 2. Auto-derive path seeds: parse resolved URL, enumerate NON-EMPTY segments.
+    //    Indexing matches apply_id_location's Path branch (bola.rs:334-335).
+    let path_only = resolved_url.split('?').next().unwrap_or(resolved_url).split('#').next().unwrap_or("");
+    if let Ok(url) = reqwest::Url::parse(resolved_url) {
+        let all_segs: Vec<String> = url.path_segments()
+            .map(|s| s.map(str::to_string).collect())
+            .unwrap_or_default();
+        let non_empty_positions: Vec<usize> = all_segs.iter().enumerate()
+            .filter(|(_, s)| !s.is_empty())
+            .map(|(i, _)| i)
+            .collect();
+        for (path_idx, _raw_pos) in non_empty_positions.iter().enumerate() {
+            let tok = format!("path:{path_idx}");
+            if seen_tokens.insert(tok.clone()) {
+                result.push((format!("path[{path_idx}]"), tok, IdLocation::Path { index: path_idx }));
+            }
+        }
+    } else {
+        // Non-parseable (e.g. still-templated) URL: parse path manually.
+        let segs: Vec<&str> = path_only.split('/').filter(|s| !s.is_empty()).collect();
+        for (i, _) in segs.iter().enumerate() {
+            let tok = format!("path:{i}");
+            if seen_tokens.insert(tok.clone()) {
+                result.push((format!("path[{i}]"), tok, IdLocation::Path { index: i }));
+            }
+        }
+    }
+
+    // 3. Auto-derive query seeds: structured query first (RAW keys), then inline URL decoded keys.
+    for kv in structured_query {
+        let tok = format!("query:{}", kv.key);
+        if seen_tokens.insert(tok.clone()) {
+            result.push((kv.key.clone(), tok, IdLocation::Query { key: kv.key.clone() }));
+        }
+    }
+    // Inline URL query keys (decoded — apply_id_location drops the same-key URL pair).
+    if let Ok(url) = reqwest::Url::parse(resolved_url) {
+        for (k, _v) in url.query_pairs() {
+            let key = k.into_owned();
+            // Skip if the same key already in structured query.
+            let tok = format!("query:{key}");
+            if seen_tokens.insert(tok.clone()) {
+                result.push((key.clone(), tok, IdLocation::Query { key }));
+            }
+        }
+    }
+
+    // 4. Auto-derive body seeds via walk_json (scalar leaves only).
+    if let Some(body_val) = body {
+        if body_val.is_object() || body_val.is_array() {
+            walk_json(body_val, "", 0, &mut |path, _key, val| {
+                if val.is_null() || val.is_object() || val.is_array() { return; }
+                let tok = format!("body:{path}");
+                if seen_tokens.insert(tok.clone()) {
+                    result.push((path.to_string(), tok, IdLocation::Body { path: path.to_string() }));
+                }
+            });
+        }
+    }
+
+    // 5. Cap: keep first N. Truncation is a WARN (not an EngineError).
+    if result.len() > cap {
+        let total = result.len();
+        result.truncate(cap);
+        log::warn!("fuzz: target `{request_id}`: fuzzed first {cap} of {total} inputs (raise maxSeedsPerTarget to fuzz all)");
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,5 +473,73 @@ mod tests {
         assert_eq!(cases.len(), 12);
         assert!(cases.iter().all(|c| c.seed_name == "id"));
         assert!(cases.iter().all(|c| std::ptr::eq(c.location, &loc)));
+    }
+
+    #[test]
+    fn derive_seeds_path_indexes_non_empty_segments() {
+        // URL: https://api.example.com/orders/123/items
+        // Non-empty segments: ["orders","123","items"] at raw positions [1,2,3]
+        // → path:0, path:1, path:2 (index into the non-empty subset)
+        let seeds = derive_fuzz_seeds(
+            "https://api.example.com/orders/123/items",
+            &[], None, None, None, "r",
+        );
+        let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
+        assert!(toks.contains(&"path:0"), "path:0 for 'orders'");
+        assert!(toks.contains(&"path:1"), "path:1 for '123'");
+        assert!(toks.contains(&"path:2"), "path:2 for 'items'");
+        assert!(!toks.iter().any(|t| t.starts_with("path:3")), "only 3 non-empty segments");
+    }
+
+    #[test]
+    fn derive_seeds_query_structured_uses_raw_key() {
+        use crate::config::Kv;
+        let q = vec![Kv { key: "user_id".into(), value: "42".into() }];
+        let seeds = derive_fuzz_seeds("https://api.example.com/u", &q, None, None, None, "r");
+        let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
+        assert!(toks.contains(&"query:user_id"));
+    }
+
+    #[test]
+    fn derive_seeds_body_leaves_via_walk_json() {
+        let body = serde_json::json!({ "order": { "id": 1 }, "tag": "x" });
+        let seeds = derive_fuzz_seeds("https://api.example.com/u", &[], Some(&body), None, None, "r");
+        let toks: Vec<&str> = seeds.iter().map(|(_, t, _)| t.as_str()).collect();
+        assert!(toks.contains(&"body:order.id"));
+        assert!(toks.contains(&"body:tag"));
+    }
+
+    #[test]
+    fn derive_seeds_explicit_first_and_not_dropped_by_cap() {
+        use crate::config::{Kv, FuzzSeedCfg};
+        // Explicit seed for path:0, cap=1 → explicit survives, auto path:0 is deduped.
+        let explicit = vec![FuzzSeedCfg { name: "my-id".into(), location: IdLocation::Path { index: 0 } }];
+        // Use a URL with many path segments to generate lots of auto seeds.
+        let seeds = derive_fuzz_seeds(
+            "https://api.example.com/a/b/c/d/e/f",
+            &[], None, Some(&explicit), Some(1), "r",
+        );
+        assert_eq!(seeds.len(), 1, "cap=1 keeps exactly 1 seed");
+        assert_eq!(seeds[0].0, "my-id", "explicit seed must be the survivor (explicit-first)");
+    }
+
+    #[test]
+    fn derive_seeds_dedup_by_loc_token_not_name() {
+        use crate::config::FuzzSeedCfg;
+        // Two explicit seeds with same loc_token but different names → second is deduped
+        let explicit = vec![
+            FuzzSeedCfg { name: "id-A".into(), location: IdLocation::Path { index: 0 } },
+            FuzzSeedCfg { name: "id-B".into(), location: IdLocation::Path { index: 0 } },
+        ];
+        let seeds = derive_fuzz_seeds("https://h/x", &[], None, Some(&explicit), None, "r");
+        let path0: Vec<_> = seeds.iter().filter(|(_, t, _)| t == "path:0").collect();
+        assert_eq!(path0.len(), 1, "duplicate loc_token must produce only one seed");
+    }
+
+    #[test]
+    fn loc_token_formats() {
+        assert_eq!(loc_token(&IdLocation::Path { index: 2 }), "path:2");
+        assert_eq!(loc_token(&IdLocation::Query { key: "user_id".into() }), "query:user_id");
+        assert_eq!(loc_token(&IdLocation::Body { path: "order.id".into() }), "body:order.id");
     }
 }

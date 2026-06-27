@@ -177,6 +177,55 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
         let mut deny = bf.deny_set.clone(); deny.sort();
         root.insert("bfla".into(), serde_json::json!({ "endpoints": eps_sorted, "denySet": deny }));
     }
+    if let Some(fz) = sec.and_then(|s| s.fuzz.as_ref()) {
+        use qa_touchstone_core::engine::{qa_substitute, qa_var_map, RealDynamics};
+        use qa_touchstone_core::security::fuzz::derive_fuzz_seeds;
+
+        let scoped = cfg.scoped_vars();
+        let var_map = qa_var_map(&scoped, env, None, None);
+
+        let mut fuzz_entries: Vec<serde_json::Value> = Vec::new();
+        let max = fz.max_seeds_per_target;
+
+        for t in &fz.targets {
+            req_ids.insert(t.request.clone());
+            let req = match cfg.requests.iter().find(|r| r.id == t.request) {
+                Some(r) => r,
+                None => continue,
+            };
+            // Substitute {{vars}} in the URL to get the resolved path for seed derivation,
+            // mirroring how the runner calls qa_substitute before apply_id_location.
+            let resolved_url = qa_substitute(&req.url, &var_map, &mut RealDynamics);
+            // Parse body JSON for body-leaf seed derivation (None if absent or non-JSON).
+            let body_val: Option<serde_json::Value> = req.body.as_ref().and_then(|b| {
+                serde_json::from_str(&b.content).ok()
+            });
+            let explicit = t.seeds.as_deref();
+            // derive_fuzz_seeds returns (name, loc_token_str, location) — we need only loc_tokens for the hash.
+            // Call with request_id for warning messages (though build_scope_descriptor won't truncate in practice).
+            let seeds = derive_fuzz_seeds(
+                &resolved_url,
+                &req.query,
+                body_val.as_ref(),
+                explicit,
+                max,
+                &t.request,
+            );
+            let mut seed_toks: Vec<String> = seeds.iter().map(|(_, tok, _)| tok.clone()).collect();
+            seed_toks.sort();
+
+            fuzz_entries.push(serde_json::json!({
+                "request":           t.request,
+                "identity":          t.identity,
+                "maxSeedsPerTarget": max,
+                "seedLocTokens":     seed_toks,
+            }));
+        }
+        fuzz_entries.sort_by(|a, b| {
+            a["request"].as_str().unwrap_or("").cmp(b["request"].as_str().unwrap_or(""))
+        });
+        root.insert("fuzz".into(), serde_json::Value::Array(fuzz_entries));
+    }
     let reqs: Map<String, Value> = req_ids.into_iter().map(|id| { let sh = req_shape(&id); (id, sh) }).collect();
     root.insert("requests".into(), Value::Object(reqs));
     serde_json::to_string(&Value::Object(root)).unwrap()
@@ -510,5 +559,42 @@ mod tests {
         let priv_true = load_config(&mk_priv("true"), &|_| None).unwrap();
         let priv_false = load_config(&mk_priv("false"), &|_| None).unwrap();
         assert_ne!(build_scope_descriptor(&priv_true, None), build_scope_descriptor(&priv_false, None), "privileged flag change must flip descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_fuzz_seed_tokens_flip_hash_on_body_change() {
+        use qa_touchstone_core::config::load_config;
+        // A fuzz target with a JSON body: changing a body leaf path must flip the descriptor
+        // (the fuzz seed-loc-token set changes).
+        let mk = |body: &str| format!(r#"{{
+          "version":1,"environments":[],"identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
+          "requests":[{{"id":"r","method":"POST","url":"https://h/r/1","body":{{"mode":"json","content":"{body}"}}}}],
+          "security":{{"fuzz":{{"targets":[{{"request":"r"}}]}}}}
+        }}"#);
+        // Two configs with different body leaf paths (different keys): seed sets differ → hash differs.
+        let a = load_config(&mk(r#"{\"itemId\":1}"#), &|_| None).unwrap();
+        let b = load_config(&mk(r#"{\"orderId\":1}"#), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None),
+            "a body leaf path change must flip the fuzz scope descriptor");
+    }
+
+    #[test]
+    fn scope_descriptor_fuzz_identity_and_max_flip_hash() {
+        use qa_touchstone_core::config::load_config;
+        let mk = |identity: &str, max: usize| format!(r#"{{
+          "version":1,"environments":[],"identities":[
+            {{"id":"anon","auth":{{"type":"none"}}}},
+            {{"id":"user","auth":{{"type":"none"}}}}
+          ],
+          "requests":[{{"id":"r","method":"GET","url":"https://h/r/1"}}],
+          "security":{{"fuzz":{{"targets":[{{"request":"r","identity":"{identity}"}}],"maxSeedsPerTarget":{max}}}}}
+        }}"#);
+        let a = load_config(&mk("anon", 10), &|_| None).unwrap();
+        let b = load_config(&mk("user", 10), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&b, None),
+            "identity change must flip fuzz descriptor");
+        let c = load_config(&mk("anon", 5), &|_| None).unwrap();
+        assert_ne!(build_scope_descriptor(&a, None), build_scope_descriptor(&c, None),
+            "maxSeedsPerTarget change must flip fuzz descriptor");
     }
 }

@@ -18,7 +18,7 @@ const MUTATING_METHODS: [&str; 4] = ["POST", "PUT", "PATCH", "DELETE"];
 
 // ── JSON walk (mirror oracles.ts walkJson): visit (path, key|None, value) for every
 //    descendant of an object/array, depth-capped, with the SAME path format. ──
-fn walk_json(node: &Value, path: &str, depth: u32, visit: &mut dyn FnMut(&str, Option<&str>, &Value)) {
+pub(crate) fn walk_json(node: &Value, path: &str, depth: u32, visit: &mut dyn FnMut(&str, Option<&str>, &Value)) {
     if depth >= WALK_MAX_DEPTH { return; }
     match node {
         Value::Array(a) => for (i, v) in a.iter().enumerate() {

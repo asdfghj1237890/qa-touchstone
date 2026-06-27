@@ -178,6 +178,34 @@ pub struct BflaConfig {
     #[serde(default = "default_deny_set", rename = "denySet")] pub deny_set: Vec<i64>,
 }
 
+/// One explicit seed location for a fuzz target. Reuses IdLocation.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FuzzSeedCfg {
+    pub name: String,
+    pub location: IdLocation,
+}
+
+/// One target for the fuzz engine.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FuzzTarget {
+    pub request: String,
+    pub identity: Option<String>,
+    pub seeds: Option<Vec<FuzzSeedCfg>>,
+}
+
+/// security.fuzz block — opt-in engine config.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FuzzConfig {
+    #[serde(default)]
+    pub targets: Vec<FuzzTarget>,
+    /// Default 50; must be >= 1 when set explicitly.
+    #[serde(default, rename = "maxSeedsPerTarget")]
+    pub max_seeds_per_target: Option<usize>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
@@ -186,6 +214,7 @@ pub struct SecurityConfig {
     #[serde(default)] pub bfla: Option<BflaConfig>,
     #[serde(default, rename = "rateLimit")] pub rate_limit: Option<RateLimitConfig>,
     #[serde(default)] pub oracles: Option<OracleConfigRaw>,
+    #[serde(default)] pub fuzz: Option<FuzzConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -348,6 +377,25 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                 if !req_ids.contains(e.as_str()) {
                     return Err(format!("security.bfla endpoint references unknown request `{e}`"));
                 }
+            }
+        }
+        if let Some(fz) = &sec.fuzz {
+            // maxSeedsPerTarget must be >= 1 when set (0 would cause a target to run zero seeds)
+            if let Some(0) = fz.max_seeds_per_target {
+                return Err("security.fuzz: maxSeedsPerTarget must be >= 1 (got 0)".into());
+            }
+            for (ti, t) in fz.targets.iter().enumerate() {
+                if !req_ids.contains(t.request.as_str()) {
+                    return Err(format!("security.fuzz target[{ti}] references unknown request `{}`", t.request));
+                }
+                if let Some(idid) = &t.identity {
+                    if !id_ids.contains(idid.as_str()) {
+                        return Err(format!("security.fuzz target[{ti}] references unknown identity `{idid}`"));
+                    }
+                }
+                // Explicit seed locations: validate by kind
+                // (IdLocation is already well-typed by serde; no further structural check needed,
+                // but Body path must be non-empty string — the type guarantees this via String)
             }
         }
     }
@@ -736,5 +784,55 @@ mod tests {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{"endpoints":["noexist"]}}}"#;
         let err = load_config(j, &|_| None).unwrap_err();
         assert!(err.contains("security.bfla endpoint references unknown request `noexist`"), "error: {err}");
+    }
+
+    #[test]
+    fn fuzz_config_parses() {
+        let j = r#"{"version":1,"environments":[],"identities":[{"id":"anon","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://h/r/1"}],
+          "security":{"fuzz":{"targets":[{"request":"r","seeds":[{"name":"id","location":{"kind":"path","index":1}}]}],"maxSeedsPerTarget":10}}}"#;
+        let c = load_config(j, &|_| None).unwrap();
+        let fz = c.security.unwrap().fuzz.unwrap();
+        assert_eq!(fz.targets.len(), 1);
+        assert_eq!(fz.targets[0].request, "r");
+        assert_eq!(fz.max_seeds_per_target, Some(10));
+        match &fz.targets[0].seeds.as_ref().unwrap()[0].location {
+            crate::config::IdLocation::Path { index } => assert_eq!(*index, 1),
+            _ => panic!("expected path location"),
+        }
+    }
+
+    #[test]
+    fn fuzz_config_rejects_zero_max_seeds() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],
+          "security":{"fuzz":{"targets":[{"request":"r"}],"maxSeedsPerTarget":0}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.contains("maxSeedsPerTarget"), "error must mention maxSeedsPerTarget: {err}");
+    }
+
+    #[test]
+    fn fuzz_config_rejects_unknown_request() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[],
+          "security":{"fuzz":{"targets":[{"request":"ghost"}]}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.contains("ghost"), "{err}");
+    }
+
+    #[test]
+    fn fuzz_config_rejects_unknown_identity() {
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],
+          "security":{"fuzz":{"targets":[{"request":"r","identity":"ghost"}]}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.contains("ghost"), "{err}");
+    }
+
+    #[test]
+    fn fuzz_config_no_fuzz_block_ok() {
+        // security.fuzz is optional; absent = engine skipped
+        let j = r#"{"version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
+          "requests":[{"id":"r","method":"GET","url":"https://h/r"}],
+          "security":{"matrix":{"endpoints":["r"]}}}"#;
+        let c = load_config(j, &|_| None).unwrap();
+        assert!(c.security.unwrap().fuzz.is_none());
     }
 }
