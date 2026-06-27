@@ -3,6 +3,7 @@
 //!
 //! Exit codes:
 //!   0  ok (even when a baseUrl warning is emitted)
+//!   1  runtime error (cannot write --out file)
 //!   2  invalid input (file read error / non-JSON / unrecognized format)
 use qa_touchstone_core::import::{qa_parse_import, to_config};
 use std::process::ExitCode;

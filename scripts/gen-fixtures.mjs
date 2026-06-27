@@ -462,6 +462,26 @@ const SAMPLE_POSTMAN = JSON.stringify({
         body: { mode: 'raw', raw: '{"name":"Buddy","species":"dog"}' },
       },
     },
+    // String-url with percent-encoded multibyte query → exercises the string-url query
+    // branch + pct_decode. Real decodeURIComponent yields q="é", tag="a b" (locks FIX 2).
+    {
+      name: 'Search',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.io/search?q=%C3%A9&tag=a%20b',
+        header: [],
+      },
+    },
+    // Object url that is RELATIVE raw-only (no path[]/query[]) → new URL throws → TS catch
+    // returns raw verbatim, query kept. Emitted path = "orders/recent?status=open" (locks FIX 3).
+    {
+      name: 'Recent Orders',
+      request: {
+        method: 'GET',
+        url: { raw: 'orders/recent?status=open' },
+        header: [],
+      },
+    },
     // Folder with a nested request (structured url with query)
     {
       name: 'Users',

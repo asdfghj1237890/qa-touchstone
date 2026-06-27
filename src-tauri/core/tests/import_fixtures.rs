@@ -103,6 +103,12 @@ fn import_postman_matches_ts() {
                 "url": { "raw": "https://api.pets.io/v1/pets", "path": ["v1","pets"], "query": [] },
                 "header": [{ "key": "Content-Type", "value": "application/json", "disabled": false }],
                 "body": { "mode": "raw", "raw": "{\"name\":\"Buddy\",\"species\":\"dog\"}" } } },
+            { "name": "Search", "request": { "method": "GET",
+                "url": "https://api.example.io/search?q=%C3%A9&tag=a%20b",
+                "header": [] } },
+            { "name": "Recent Orders", "request": { "method": "GET",
+                "url": { "raw": "orders/recent?status=open" },
+                "header": [] } },
             { "name": "Users", "item": [
                 { "name": "Get User", "request": { "method": "GET",
                     "url": { "raw": "https://api.pets.io/v1/users/{{userId}}",

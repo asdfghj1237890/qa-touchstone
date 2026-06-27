@@ -44,6 +44,35 @@
             ],
             "body": "{\"name\":\"Buddy\",\"species\":\"dog\"}",
             "auth": "none"
+          },
+          {
+            "method": "GET",
+            "name": "Search",
+            "path": "https://api.example.io/search?q=%C3%A9&tag=a%20b",
+            "params": [
+              {
+                "key": "q",
+                "value": "é",
+                "on": true
+              },
+              {
+                "key": "tag",
+                "value": "a b",
+                "on": true
+              }
+            ],
+            "headers": [],
+            "body": null,
+            "auth": "none"
+          },
+          {
+            "method": "GET",
+            "name": "Recent Orders",
+            "path": "orders/recent?status=open",
+            "params": [],
+            "headers": [],
+            "body": null,
+            "auth": "none"
           }
         ]
       },

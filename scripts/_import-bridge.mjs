@@ -47,7 +47,10 @@ function tsToRustShape(tsResult) {
   const folders = collection.folders.map(folder => ({
     name: folder.name,
     requests: folder.requests.map(meta => {
-      const d = details[meta.id] || { params: [], headers: [], body: null, auth: 'none' };
+      // Throw (don't default) so the golden fixture proves every TS request detail was
+      // actually inlined — a shape regression can't vacuously pass.
+      const d = details[meta.id];
+      if (!d) throw new Error('bridge: missing detail for ' + meta.id);
       return {
         method: meta.method,
         name: meta.name,

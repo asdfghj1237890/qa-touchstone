@@ -45,10 +45,12 @@ pub struct ImportParsed {
 pub fn qa_detect_format(obj: &Value) -> Option<Format> {
     let o = obj.as_object()?;
     // Postman: info is truthy AND (item OR _postman_id OR schema matching v2.[01]).
-    // TS: obj.info && (...) — null/false/etc. info must NOT be treated as Postman.
+    // TS: obj.info && (obj.item || obj.info._postman_id || /v2\.[01]/.test(...)) — all
+    // JS-truthy, not mere presence. js_truthy([]) is true (empty array is truthy), so
+    // item:[] still detects; item:null and _postman_id:"" correctly do NOT.
     if o.get("info").map(js_truthy).unwrap_or(false) {
-        let has_item = o.contains_key("item");
-        let has_postman_id = o["info"].get("_postman_id").is_some();
+        let has_item = o.get("item").map(js_truthy).unwrap_or(false);
+        let has_postman_id = o["info"].get("_postman_id").map(js_truthy).unwrap_or(false);
         let schema_matches = o["info"].get("schema")
             .and_then(|s| s.as_str())
             .map(|s| s.contains("v2.0") || s.contains("v2.1"))
@@ -141,13 +143,15 @@ fn strip_scheme_host(s: &str) -> String {
 fn raw_to_pathname(raw: &str) -> String {
     // Find "://" then the first "/" after it → that's the path start
     if let Some(p) = raw.find("://") {
+        // absolute raw: emulate new URL(raw).pathname (excludes the query)
         let after_scheme = &raw[p + 3..];
         match after_scheme.find('/') {
             Some(i) => after_scheme[i..].split('?').next().unwrap_or("").to_string(),
             None => String::new(),
         }
     } else {
-        raw.split('?').next().unwrap_or(raw).to_string()
+        // relative raw: new URL(raw) throws → TS catch returns url.raw verbatim (keep query)
+        raw.to_string()
     }
 }
 
@@ -333,23 +337,32 @@ pub fn parse_postman(obj: &Value) -> ImportParsed {
 }
 
 /// Percent-decode a query parameter component (mirrors TS decodeURIComponent with fallback).
+/// TS: `try { return decodeURIComponent(s); } catch { return s; }` — the percent BYTES are
+/// decoded as UTF-8 as a whole; on ANY malformed escape OR invalid UTF-8 it throws and the
+/// catch returns the ORIGINAL full string.
 fn pct_decode(s: &str) -> String {
-    // Simple percent-decode: replace %XX sequences; on failure return original.
-    let mut out = String::with_capacity(s.len());
     let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(h), Some(l)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
-                out.push(char::from(h * 16 + l));
-                i += 3;
-                continue;
+        if bytes[i] == b'%' {
+            if i + 2 < bytes.len() {
+                if let (Some(h), Some(l)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
+                    out.push(h * 16 + l);
+                    i += 3;
+                    continue;
+                }
             }
+            // malformed % escape → decodeURIComponent throws → TS catch returns original
+            return s.to_string();
         }
-        out.push(bytes[i] as char);
+        out.push(bytes[i]);
         i += 1;
     }
-    out
+    match String::from_utf8(out) {
+        Ok(decoded) => decoded,
+        Err(_) => s.to_string(), // invalid UTF-8 → throw → original
+    }
 }
 fn hex_digit(b: u8) -> Option<u8> {
     match b {
@@ -461,6 +474,8 @@ pub fn parse_openapi(obj: &Value) -> ImportParsed {
 /// Produce a deterministic, URL-safe id slug from a string.
 /// Mirrors the spec: lowercase, non-alphanumeric → '-', collapse repeats, trim;
 /// empty → "req" (for requests) or "coll" (for collections — callers supply fallback).
+/// ASCII-only: any non-ASCII char becomes '-', so an all-non-ASCII name yields an empty
+/// slug here and the caller's `dedup_slug` fallback supplies the id.
 pub fn make_slug(s: &str) -> String {
     let lower = s.to_lowercase();
     let mut out = String::with_capacity(lower.len());
@@ -475,8 +490,7 @@ pub fn make_slug(s: &str) -> String {
         }
     }
     // Trim trailing dash
-    let slug = out.trim_end_matches('-').to_string();
-    if slug.is_empty() { String::new() } else { slug }
+    out.trim_end_matches('-').to_string()
 }
 
 /// Deduplicate a slug against a set of already-used ids.
@@ -650,6 +664,27 @@ mod tests {
         assert_eq!(qa_detect_format(&v), None);
     }
 
+    #[test]
+    fn detect_postman_item_null_not_postman() {
+        // TS: obj.item is JS-truthy; null is falsy → not Postman (and no openapi keys → None)
+        let v = json!({ "info": {}, "item": Value::Null });
+        assert_eq!(qa_detect_format(&v), None);
+    }
+
+    #[test]
+    fn detect_postman_empty_postman_id_not_postman() {
+        // TS: obj.info._postman_id is JS-truthy; "" is falsy → not Postman
+        let v = json!({ "info": { "_postman_id": "" } });
+        assert_eq!(qa_detect_format(&v), None);
+    }
+
+    #[test]
+    fn detect_postman_empty_item_array_is_postman() {
+        // empty array is JS-truthy → item:[] still detects as Postman
+        let v = json!({ "info": {}, "item": json!([]) });
+        assert_eq!(qa_detect_format(&v), Some(Format::Postman));
+    }
+
     // ── pm_url_to_path ────────────────────────────────────────────────────
 
     #[test]
@@ -695,6 +730,46 @@ mod tests {
     #[test]
     fn pm_url_null_returns_slash() {
         assert_eq!(pm_url_to_path(&Value::Null), "/");
+    }
+
+    #[test]
+    fn pm_url_object_relative_raw_only_keeps_query() {
+        // relative raw, no path[]/query[]: TS new URL(raw) throws → catch returns raw verbatim
+        // (query preserved). The structured-query append is skipped (no query[]).
+        let v = json!({ "raw": "orders/recent?status=open" });
+        assert_eq!(pm_url_to_path(&v), "orders/recent?status=open");
+    }
+
+    // ── pct_decode (mirror decodeURIComponent) ────────────────────────────
+
+    #[test]
+    fn pct_decode_utf8_two_byte() {
+        assert_eq!(pct_decode("%C3%A9"), "é");
+    }
+
+    #[test]
+    fn pct_decode_utf8_three_byte() {
+        assert_eq!(pct_decode("%E2%9C%93"), "✓");
+    }
+
+    #[test]
+    fn pct_decode_space() {
+        assert_eq!(pct_decode("a%20b"), "a b");
+    }
+
+    #[test]
+    fn pct_decode_malformed_returns_original() {
+        assert_eq!(pct_decode("%ZZ"), "%ZZ");
+    }
+
+    #[test]
+    fn pct_decode_truncated_returns_original() {
+        assert_eq!(pct_decode("%2"), "%2");
+    }
+
+    #[test]
+    fn pct_decode_plain_passthru() {
+        assert_eq!(pct_decode("plain"), "plain");
     }
 
     // ── schema_stub truthiness ────────────────────────────────────────────

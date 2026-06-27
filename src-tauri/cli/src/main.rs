@@ -104,7 +104,7 @@ enum Command {
         /// Override or supply the base URL (sets globals.variables.baseUrl in the output).
         #[arg(long)]
         base_url: Option<String>,
-        /// Write the generated config to this file (default: stdout).
+        /// Write the generated config to this file (default: stdout). Prefer --out for specs that embed credentials — stdout may surface secret literals into CI logs.
         #[arg(long)]
         out: Option<String>,
     },
