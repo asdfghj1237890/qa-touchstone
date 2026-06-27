@@ -196,10 +196,11 @@ fn build_scope_descriptor(cfg: &Config, env: Option<&str>) -> String {
             // Substitute {{vars}} in the URL to get the resolved path for seed derivation,
             // mirroring how the runner calls qa_substitute before apply_id_location.
             let resolved_url = qa_substitute(&req.url, &var_map, &mut RealDynamics);
-            // Parse body JSON for body-leaf seed derivation (None if absent or non-JSON).
-            let body_val: Option<serde_json::Value> = req.body.as_ref().and_then(|b| {
-                serde_json::from_str(&b.content).ok()
-            });
+            // Substitute {{vars}} in the body before parsing for body-leaf seeds — mirrors
+            // run_fuzz so a templated body ("{{bodyJson}}" → JSON object) produces the same
+            // seed-loc-tokens in the scope hash as the runner sees at runtime (drift-complete).
+            let body_val: Option<serde_json::Value> = req.body.as_ref()
+                .and_then(|b| serde_json::from_str(&qa_substitute(&b.content, &var_map, &mut RealDynamics)).ok());
             let explicit = t.seeds.as_deref();
             // derive_fuzz_seeds returns (name, loc_token_str, location) — we need only loc_tokens for the hash.
             // Call with request_id for warning messages (though build_scope_descriptor won't truncate in practice).

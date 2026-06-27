@@ -393,9 +393,25 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                         return Err(format!("security.fuzz target[{ti}] references unknown identity `{idid}`"));
                     }
                 }
-                // Explicit seed locations: validate by kind
-                // (IdLocation is already well-typed by serde; no further structural check needed,
-                // but Body path must be non-empty string — the type guarantees this via String)
+                // Validate explicit seeds: name, Body path, and Query key must all be non-empty.
+                // (serde deserializes them as String, but String does NOT guarantee non-empty —
+                // an empty name or path is meaningless and would produce a zero-width loc_token.)
+                if let Some(seeds) = &t.seeds {
+                    for s in seeds {
+                        if s.name.is_empty() {
+                            return Err(format!("security.fuzz target[{ti}] seed has an empty name"));
+                        }
+                        match &s.location {
+                            IdLocation::Body { path } if path.is_empty() => {
+                                return Err(format!("security.fuzz target[{ti}] seed `{}` has an empty Body path", s.name));
+                            }
+                            IdLocation::Query { key } if key.is_empty() => {
+                                return Err(format!("security.fuzz target[{ti}] seed `{}` has an empty Query key", s.name));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
             }
         }
     }
@@ -834,5 +850,23 @@ mod tests {
           "security":{"matrix":{"endpoints":["r"]}}}"#;
         let c = load_config(j, &|_| None).unwrap();
         assert!(c.security.unwrap().fuzz.is_none());
+    }
+
+    #[test]
+    fn fuzz_config_rejects_empty_seed_name() {
+        // An explicit seed with an empty name is meaningless (zero-width loc_token identifier).
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r/1"}],
+          "security":{"fuzz":{"targets":[{"request":"r","seeds":[{"name":"","location":{"kind":"path","index":0}}]}]}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.to_lowercase().contains("empty"), "error must mention empty: {err}");
+    }
+
+    #[test]
+    fn fuzz_config_rejects_empty_body_path() {
+        // An explicit Body seed with an empty path is meaningless.
+        let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"POST","url":"https://h/r","body":{"mode":"json","content":"{}"}}],
+          "security":{"fuzz":{"targets":[{"request":"r","seeds":[{"name":"item-id","location":{"kind":"body","path":""}}]}]}}}"#;
+        let err = load_config(j, &|_| None).unwrap_err();
+        assert!(err.to_lowercase().contains("empty"), "error must mention empty: {err}");
     }
 }

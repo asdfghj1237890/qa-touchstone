@@ -261,9 +261,15 @@ pub async fn run_fuzz(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
         // Substitute {{vars}} in the URL first so path-segment seeds index the resolved path.
         let mut req_resolved = req.clone();
         req_resolved.url = qa_substitute(&req.url, &var_map, &mut RealDynamics);
+        // Substitute {{vars}} in the body so a fully-templated body (e.g. body.content =
+        // "{{bodyJson}}" resolving to a JSON object) is parsed for body-leaf seeds and
+        // fuzzed correctly. Secret-safe: only keys/loc_tokens enter findings/hash, never values.
+        if let Some(b) = req_resolved.body.as_mut() {
+            b.content = qa_substitute(&b.content, &var_map, &mut RealDynamics);
+        }
 
-        // Parse body JSON for derive_fuzz_seeds.
-        let body_val: Option<Value> = req.body.as_ref().and_then(|b| {
+        // Parse body JSON for derive_fuzz_seeds (use the substituted body, not the raw one).
+        let body_val: Option<Value> = req_resolved.body.as_ref().and_then(|b| {
             serde_json::from_str(&b.content).ok()
         });
 
