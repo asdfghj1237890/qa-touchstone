@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 // 單一版本來源：build/dev/test 都從 package.json 注入 __APP_VERSION__，
 // UI 不再寫死版號（先前 HomePage/Sidebar 寫死 0.20.2，發版時漏改而過時）。
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+const githubRepo = process.env.VITE_GITHUB_REPO || 'asdfghj1237890/qa-touchstone';
 
 export default defineConfig({
   plugins: [
@@ -46,6 +47,7 @@ export default defineConfig({
   define: {
     global: 'globalThis',
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __GITHUB_REPO__: JSON.stringify(githubRepo),
   },
   test: {
     environment: 'jsdom',
@@ -76,4 +78,4 @@ export default defineConfig({
       }
     }
   }
-}); 
+});

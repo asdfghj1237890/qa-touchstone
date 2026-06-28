@@ -1,6 +1,6 @@
 {
   "name": "qa-touchstone-ci",
-  "version": "0.22.1",
+  "version": "0.22.2",
   "description": "Thin npx launcher for the QA Touchstone headless CI runner.",
   "type": "module",
   "bin": {

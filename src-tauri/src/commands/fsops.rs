@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use tauri::path::BaseDirectory;
 use tauri::Manager;
 
+const MAX_UPDATE_DOWNLOAD_BYTES: u64 = 1024 * 1024 * 1024;
+
 fn canonical_temp_dir() -> Option<PathBuf> {
     std::fs::canonicalize(std::env::temp_dir()).ok()
 }
@@ -110,6 +112,64 @@ pub fn save_text_file(path: String, contents: String) -> AppResult<()> {
     Ok(())
 }
 
+fn is_allowed_update_download_url(raw: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(raw) else {
+        return false;
+    };
+    if url.scheme() != "https" {
+        return false;
+    }
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    host == "github.com" && url.path().contains("/releases/download/")
+}
+
+/// Download an app update asset to a user-chosen path. The renderer chooses the
+/// path via the native save dialog first; this command only accepts GitHub
+/// release-asset URLs so it cannot be reused as a general arbitrary downloader.
+#[tauri::command]
+pub async fn download_update_asset(url: String, path: String) -> AppResult<()> {
+    if path.trim().is_empty() {
+        return Err(AppError::Other("No save path provided.".into()));
+    }
+    if !is_allowed_update_download_url(&url) {
+        return Err(AppError::Other(
+            "Refusing to download a non-GitHub release asset.".into(),
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("QA Touchstone updater")
+        .build()
+        .map_err(|e| AppError::Other(format!("Create download client failed: {e}")))?;
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| AppError::Other(format!("Download failed: {e}")))?;
+    if !resp.status().is_success() {
+        return Err(AppError::Other(format!(
+            "Download failed with HTTP {}",
+            resp.status()
+        )));
+    }
+    if let Some(len) = resp.content_length() {
+        if len > MAX_UPDATE_DOWNLOAD_BYTES {
+            return Err(AppError::Other("Update asset is too large.".into()));
+        }
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| AppError::Other(format!("Read download failed: {e}")))?;
+    if bytes.len() as u64 > MAX_UPDATE_DOWNLOAD_BYTES {
+        return Err(AppError::Other("Update asset is too large.".into()));
+    }
+    tokio::fs::write(&path, &bytes)
+        .await
+        .map_err(|e| AppError::Other(format!("Save failed: {e}")))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +186,22 @@ mod tests {
     #[test]
     fn save_text_file_rejects_empty_path() {
         assert!(save_text_file("   ".into(), "x".into()).is_err());
+    }
+
+    #[test]
+    fn update_download_url_must_be_github_release_asset() {
+        assert!(is_allowed_update_download_url(
+            "https://github.com/asdfghj1237890/qa-touchstone/releases/download/v0.23.0/app.dmg"
+        ));
+        assert!(!is_allowed_update_download_url(
+            "https://example.com/asdfghj1237890/qa-touchstone/releases/download/v0.23.0/app.dmg"
+        ));
+        assert!(!is_allowed_update_download_url(
+            "http://github.com/asdfghj1237890/qa-touchstone/releases/download/v0.23.0/app.dmg"
+        ));
+        assert!(!is_allowed_update_download_url(
+            "https://github.com/asdfghj1237890/qa-touchstone/archive/refs/tags/v0.23.0.zip"
+        ));
     }
 
     #[test]

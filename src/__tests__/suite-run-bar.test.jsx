@@ -28,6 +28,14 @@ describe('SuiteRunBar', () => {
     fireEvent.click(screen.getByText('Stop'));
     expect(onStop).toHaveBeenCalledTimes(1);
   });
+  it('shows a security test setup guide from the help button', () => {
+    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}} />);
+    fireEvent.click(screen.getByLabelText('How to run security tests'));
+    expect(screen.getByText('Security test setup')).toBeTruthy();
+    expect(screen.getByText(/If every engine is skipped/)).toBeTruthy();
+    expect(screen.getByText(/Matrix: add endpoints and identities/)).toBeTruthy();
+    expect(screen.getByText(/Then click Run full security suite/)).toBeTruthy();
+  });
 });
 
 describe('SuiteRunBar export menu', () => {

@@ -56,6 +56,7 @@ pub fn run() {
             commands::fsops::cleanup_temp_file,
             commands::fsops::get_k6_path,
             commands::fsops::save_text_file,
+            commands::fsops::download_update_asset,
             commands::process::run_k6,
             commands::process::stop_command,
             commands::postman::get_postman_collection_path,

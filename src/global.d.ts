@@ -8,6 +8,8 @@ export {};
 declare global {
   /** App 版本，由 vite.config.mjs 從 package.json 注入（build 時 define）。 */
   const __APP_VERSION__: string;
+  /** GitHub repo slug（owner/name），用於公開版本檢查。 */
+  const __GITHUB_REPO__: string;
 
   interface Window {
     /** Demo/canned 資料 + runtime collections（src/qa/setup.js 建立）。 */

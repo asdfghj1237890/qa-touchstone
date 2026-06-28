@@ -25,6 +25,14 @@ import api from './api/index';
 import { loadAiPolicy } from './qa/aiPolicy';
 import { loadString, saveString } from './qa/storage';
 import { ErrorBoundary } from './qa/ErrorBoundary';
+import { Icon } from './qa/components';
+import {
+  checkForUpdate,
+  detectUpdatePlatform,
+  pickUpdateAsset,
+  type GitHubUpdateAsset,
+  type UpdateCheckResult,
+} from './qa/updateCheck';
 import { WorkspaceProvider, useWorkspace } from './qa/state/WorkspaceContext';
 import { RequestProvider, useRequest } from './qa/state/RequestContext';
 import { MonitorsProvider, useMonitors } from './qa/state/MonitorsContext';
@@ -143,6 +151,181 @@ const ROUTE_KEYS: Record<string, string> = {
   security: 'route.security',
 };
 
+const PAGE_HELP: Record<string, { title: string; intro: string; tips: string[] }> = {
+  home: {
+    title: 'pageHelp.home.title',
+    intro: 'pageHelp.home.intro',
+    tips: ['pageHelp.home.tip1', 'pageHelp.home.tip2', 'pageHelp.home.tip3'],
+  },
+  testgen: {
+    title: 'pageHelp.testgen.title',
+    intro: 'pageHelp.testgen.intro',
+    tips: ['pageHelp.testgen.tip1', 'pageHelp.testgen.tip2', 'pageHelp.testgen.tip3'],
+  },
+  api: {
+    title: 'pageHelp.api.title',
+    intro: 'pageHelp.api.intro',
+    tips: ['pageHelp.api.tip1', 'pageHelp.api.tip2', 'pageHelp.api.tip3'],
+  },
+  realtime: {
+    title: 'pageHelp.realtime.title',
+    intro: 'pageHelp.realtime.intro',
+    tips: ['pageHelp.realtime.tip1', 'pageHelp.realtime.tip2', 'pageHelp.realtime.tip3'],
+  },
+  runner: {
+    title: 'pageHelp.runner.title',
+    intro: 'pageHelp.runner.intro',
+    tips: ['pageHelp.runner.tip1', 'pageHelp.runner.tip2', 'pageHelp.runner.tip3'],
+  },
+  security: {
+    title: 'pageHelp.security.title',
+    intro: 'pageHelp.security.intro',
+    tips: ['pageHelp.security.tip1', 'pageHelp.security.tip2', 'pageHelp.security.tip3'],
+  },
+  monitors: {
+    title: 'pageHelp.monitors.title',
+    intro: 'pageHelp.monitors.intro',
+    tips: ['pageHelp.monitors.tip1', 'pageHelp.monitors.tip2', 'pageHelp.monitors.tip3'],
+  },
+  docs: {
+    title: 'pageHelp.docs.title',
+    intro: 'pageHelp.docs.intro',
+    tips: ['pageHelp.docs.tip1', 'pageHelp.docs.tip2', 'pageHelp.docs.tip3'],
+  },
+  perf: {
+    title: 'pageHelp.perf.title',
+    intro: 'pageHelp.perf.intro',
+    tips: ['pageHelp.perf.tip1', 'pageHelp.perf.tip2', 'pageHelp.perf.tip3'],
+  },
+  settings: {
+    title: 'pageHelp.settings.title',
+    intro: 'pageHelp.settings.intro',
+    tips: ['pageHelp.settings.tip1', 'pageHelp.settings.tip2', 'pageHelp.settings.tip3'],
+  },
+};
+
+function PageHelpButton({ route, routeLabel }: { route: string; routeLabel: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useStateApp(false);
+  const help = PAGE_HELP[route] || PAGE_HELP.home;
+  const dialogId = `qa-page-help-${route}`;
+  const label = t('pageHelp.label', { page: routeLabel });
+
+  useEffectApp(() => {
+    setOpen(false);
+  }, [route]);
+
+  return (
+    <span className="qa-page-help">
+      <button
+        type="button"
+        className="qa-iconbtn qa-page-help-btn"
+        aria-label={label}
+        aria-expanded={open ? 'true' : 'false'}
+        aria-controls={dialogId}
+        title={label}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="circleHelp" size={15} />
+      </button>
+      {open && (
+        <div id={dialogId} className="qa-page-help-pop" role="dialog" aria-label={label}>
+          <div className="qa-page-help-head">
+            <strong>{t(help.title)}</strong>
+            <button
+              type="button"
+              className="qa-iconbtn"
+              aria-label={t('common.close')}
+              onClick={() => setOpen(false)}
+            >
+              <Icon name="x" size={14} />
+            </button>
+          </div>
+          <p>{t(help.intro)}</p>
+          <ul>
+            {help.tips.map((key) => (
+              <li key={key}>{t(key)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </span>
+  );
+}
+
+function shouldSkipUpdateCheck(): boolean {
+  if (typeof window !== 'undefined' && (window as any).__QA_ENABLE_UPDATE_CHECK__) return false;
+  try {
+    return import.meta.env && import.meta.env.MODE === 'test';
+  } catch {
+    return false;
+  }
+}
+
+function updateAssetFilters(name: string): Array<{ name: string; extensions: string[] }> {
+  const ext = (name.split('.').pop() || 'bin').toLowerCase();
+  return [
+    { name: ext.toUpperCase(), extensions: [ext] },
+    { name: 'All files', extensions: ['*'] },
+  ];
+}
+
+function UpdateNotice({
+  result,
+  onDismiss,
+  onDownloadAsset,
+}: {
+  result: UpdateCheckResult | null;
+  onDismiss: (version: string) => void;
+  onDownloadAsset: (asset: GitHubUpdateAsset) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [downloading, setDownloading] = useStateApp(false);
+  if (!result || result.status !== 'update' || !result.latestVersion) return null;
+  const asset = pickUpdateAsset(result.assets, detectUpdatePlatform());
+  const url = asset?.url || result.url || `https://github.com/${__GITHUB_REPO__}/releases/latest`;
+  const version = result.latestVersion;
+  const handleClick = async (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!asset || !tauriReady()) return;
+    event.preventDefault();
+    setDownloading(true);
+    try {
+      await onDownloadAsset(asset);
+    } finally {
+      setDownloading(false);
+    }
+  };
+  return (
+    <span className="qa-update-notice">
+      <a
+        className="qa-update-link"
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        download={asset?.name}
+        title={asset ? t('update.downloadTitle', { file: asset.name }) : t('update.open')}
+        onClick={handleClick}
+      >
+        <Icon name="download" size={13} />
+        {downloading
+          ? t('update.downloading')
+          : asset
+            ? t('update.download', { version })
+            : t('update.available', { version })}
+      </a>
+      <button
+        type="button"
+        className="qa-update-dismiss"
+        aria-label={t('update.dismiss')}
+        title={t('update.dismiss')}
+        onClick={() => onDismiss(version)}
+      >
+        <Icon name="x" size={12} />
+      </button>
+    </span>
+  );
+}
+
 function AppShell() {
   const { t } = useI18n();
   const rootRef = useRefApp(null);
@@ -150,6 +333,10 @@ function AppShell() {
   const [route, setRoute] = useStateApp('home');
   const [settingsTab, setSettingsTab] = useStateApp('appearance');
   const [perfRunning, setPerfRunning] = useStateApp(false); // true while a performance test is in flight
+  const [updateResult, setUpdateResult] = useStateApp<UpdateCheckResult | null>(null);
+  const [dismissedUpdate, setDismissedUpdate] = useStateApp(() =>
+    loadString('qa_dismissed_update_version', '')
+  );
 
   const { env, vars, setVars, cookies, setCookies, sslVerify, setSslVerify, tests, oauthTokens } =
     useWorkspace();
@@ -169,6 +356,19 @@ function AppShell() {
   // Resolve backend AI policy once at boot; failures are harmless (web/dev fallback).
   useEffectApp(() => {
     loadAiPolicy().catch(() => {});
+  }, []);
+
+  // Public GitHub check: if this local build is older than the latest release/tag,
+  // show a small reminder. Fail closed and stay quiet when offline/rate-limited.
+  useEffectApp(() => {
+    if (shouldSkipUpdateCheck()) return;
+    let live = true;
+    checkForUpdate(__APP_VERSION__, __GITHUB_REPO__).then((result) => {
+      if (live) setUpdateResult(result);
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   // Apply theme whenever the accent changes; persist it.
@@ -193,6 +393,26 @@ function AppShell() {
   const onImportCollection = (payload: { collection: any; details: any; responses: any }) => {
     const first = importCollection(payload);
     if (first) setRoute('api');
+  };
+  const routeLabel = t(ROUTE_KEYS[route] || 'route.home');
+  const visibleUpdate =
+    updateResult && updateResult.latestVersion !== dismissedUpdate ? updateResult : null;
+  const dismissUpdate = (version: string) => {
+    saveString('qa_dismissed_update_version', version);
+    setDismissedUpdate(version);
+  };
+  const downloadUpdateAsset = async (asset: GitHubUpdateAsset) => {
+    try {
+      const path = await api.saveFileDialog({
+        defaultPath: asset.name,
+        filters: updateAssetFilters(asset.name),
+      });
+      if (!path) return;
+      await api.downloadUpdateAsset(asset.url, path);
+    } catch (err) {
+      console.error('downloadUpdateAsset failed', err);
+      window.alert?.(t('update.downloadFailed'));
+    }
   };
 
   return (
@@ -223,10 +443,16 @@ function AppShell() {
               /
             </span>
             <span className="qa-titlebar-route" data-tauri-drag-region>
-              {t(ROUTE_KEYS[route] || 'route.home')}
+              {routeLabel}
             </span>
+            {route !== 'home' && <PageHelpButton route={route} routeLabel={routeLabel} />}
           </div>
           <div className="qa-titlebar-right" data-tauri-drag-region>
+            <UpdateNotice
+              result={visibleUpdate}
+              onDismiss={dismissUpdate}
+              onDownloadAsset={downloadUpdateAsset}
+            />
             {route === 'api' && (
               <span className="qa-titlebar-env" data-tauri-drag-region>
                 <span className="qa-env-dot" /> {env.label}
@@ -243,6 +469,7 @@ function AppShell() {
               history={history}
               onOpenRequest={openFromHistory}
               env={env}
+              pageHelp={<PageHelpButton route="home" routeLabel={t('route.home')} />}
             />
           )}
           {route === 'settings' && (

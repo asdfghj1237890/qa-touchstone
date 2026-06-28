@@ -69,6 +69,8 @@ export const api = {
   }): Promise<string | null> => saveDialog(opts),
   saveTextFile: (path: string, contents: string): Promise<void> =>
     invoke('save_text_file', { path, contents }),
+  downloadUpdateAsset: (url: string, path: string): Promise<void> =>
+    invoke('download_update_asset', { url, path }),
 
   // --- 本機資料（qaStorage 磁碟鏡像）---
   loadUserData: (): Promise<unknown> => invoke('load_user_data'),

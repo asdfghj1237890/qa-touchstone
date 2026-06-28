@@ -11,9 +11,10 @@ export interface HomePageProps {
   history: any[];
   onOpenRequest: (entry: any) => void;
   env: QaEnv;
+  pageHelp?: React.ReactNode;
 }
 
-function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
+function HomePage({ setRoute, history, onOpenRequest, env, pageHelp }: HomePageProps) {
   const { t } = useI18n();
   const tiles = [
     {
@@ -68,7 +69,10 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
             <h1>QA Touchstone</h1>
             <p>{t('home.subtitle')}</p>
           </div>
-          <span className="qa-chip">v{__APP_VERSION__}</span>
+          <div className="qa-home-head-actions">
+            <span className="qa-chip">v{__APP_VERSION__}</span>
+            {pageHelp}
+          </div>
         </header>
 
         <div className="qa-home-grid">

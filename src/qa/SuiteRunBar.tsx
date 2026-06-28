@@ -63,8 +63,17 @@ function SuiteRunBar({
   const { t } = useI18n();
   const rec = suite.lastRecord;
   const [expOpen, setExpOpen] = useS(false);
+  const [helpOpen, setHelpOpen] = useS(false);
   const [redaction, setRedaction] = useS<ReportRedaction>('redacted');
   const FORMATS: ReportFormat[] = ['json', 'html', 'junit', 'sarif'];
+  const helpItems = [
+    'suite.help.matrix',
+    'suite.help.conformance',
+    'suite.help.bfla',
+    'suite.help.bola',
+    'suite.help.fuzz',
+    'suite.help.ratelimit',
+  ];
   return (
     <div className="qa-suite">
       {suite.running ? (
@@ -119,6 +128,41 @@ function SuiteRunBar({
           ) : (
             <span className="qa-suite-status">{t('suite.idle')}</span>
           )}
+          <span className="qa-suite-help">
+            <button
+              type="button"
+              className="qa-iconbtn qa-suite-help-btn"
+              aria-label={t('suite.help.label')}
+              aria-expanded={helpOpen ? 'true' : 'false'}
+              aria-controls="qa-suite-help-popover"
+              title={t('suite.help.label')}
+              onClick={() => setHelpOpen((v) => !v)}
+            >
+              <Icon name="circleHelp" size={16} />
+            </button>
+            {helpOpen && (
+              <div id="qa-suite-help-popover" className="qa-suite-help-pop" role="dialog">
+                <div className="qa-suite-help-head">
+                  <strong>{t('suite.help.title')}</strong>
+                  <button
+                    type="button"
+                    className="qa-iconbtn"
+                    aria-label={t('common.close')}
+                    onClick={() => setHelpOpen(false)}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+                <p>{t('suite.help.intro')}</p>
+                <ul>
+                  {helpItems.map((key) => (
+                    <li key={key}>{t(key)}</li>
+                  ))}
+                </ul>
+                <p>{t('suite.help.cta')}</p>
+              </div>
+            )}
+          </span>
           {canExport && onExport && (
             <span className="qa-report-export">
               <button className="qa-btn qa-btn--sm" onClick={() => setExpOpen((v) => !v)}>
