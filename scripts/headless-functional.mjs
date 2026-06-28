@@ -51,6 +51,7 @@ function file(name) {
 
 function write(name, body) {
   const target = path.join(tmp, name);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, body);
   return target;
 }
@@ -68,6 +69,11 @@ function resolveToolPath(tool) {
   if (path.isAbsolute(tool)) return tool;
   if (tool.includes('/') || tool.includes('\\')) return path.resolve(repo, tool);
   return tool;
+}
+
+function envWithPathPrefix(dir) {
+  const value = `${dir}${path.delimiter}${process.env.PATH || process.env.Path || ''}`;
+  return process.platform === 'win32' ? { PATH: value, Path: value } : { PATH: value };
 }
 
 function pass(name) {
@@ -103,9 +109,9 @@ function runRaw(name, command, args, options = {}) {
 
 function qtc(name, args, options = {}) {
   return runRaw(name, qtcCommand.command, [...qtcCommand.args, ...args], {
+    ...options,
     cwd: tmp,
     env: { ...qtcEnv, ...(options.env || {}) },
-    ...options,
   });
 }
 
@@ -333,6 +339,7 @@ function makeConfigs(base) {
         assertions: [{ type: 'status', op: 'eq', value: 200 }],
       },
     ],
+    collections: [{ id: 'down-suite', requests: ['down'] }],
   });
 
   const openapi = writeJson('openapi.json', {
@@ -660,10 +667,12 @@ node "$GITHUB_ACTION_PATH/../packages/qa-touchstone-ci/bin/qa-touchstone-ci.mjs"
   fs.writeFileSync(file('base.txt'), `${base}\n`);
 }
 
-function createFakeK6() {
+function createFakeK6({ name, exitCode = 0 } = {}) {
+  const targetName =
+    name || (process.platform === 'win32' ? `fake-k6-${exitCode}.cmd` : `fake-k6-${exitCode}.sh`);
   if (process.platform === 'win32') {
     return write(
-      'fake-k6.cmd',
+      targetName,
       [
         '@echo off',
         'setlocal EnableDelayedExpansion',
@@ -681,14 +690,14 @@ function createFakeK6() {
         ':done',
         'if not "%summary%"=="" > "%summary%" echo {"metrics":{"http_reqs":{"count":1}}}',
         'echo fake k6 ran %last%',
-        'exit /b 0',
+        `exit /b ${exitCode}`,
         '',
       ].join('\r\n')
     );
   }
   const fakeK6 = write(
-    'fake-k6.sh',
-    `#!/bin/sh\nset -eu\nsummary=""\nlast=""\nwhile [ "$#" -gt 0 ]; do\n  if [ "$1" = "--summary-export" ]; then\n    shift\n    summary="$1"\n  fi\n  last="$1"\n  shift\ndone\nif [ -n "$summary" ]; then\n  printf '{"metrics":{"http_reqs":{"count":1}}}\\n' > "$summary"\nfi\nprintf 'fake k6 ran %s\\n' "$last"\nexit 0\n`
+    targetName,
+    `#!/bin/sh\nset -eu\nsummary=""\nlast=""\nwhile [ "$#" -gt 0 ]; do\n  if [ "$1" = "--summary-export" ]; then\n    shift\n    summary="$1"\n  fi\n  last="$1"\n  shift\ndone\nif [ -n "$summary" ]; then\n  printf '{"metrics":{"http_reqs":{"count":1}}}\\n' > "$summary"\nfi\nprintf 'fake k6 ran %s\\n' "$last"\nexit ${exitCode}\n`
   );
   fs.chmodSync(fakeK6, 0o755);
   return fakeK6;
@@ -970,6 +979,34 @@ try {
   pass('run assertion failure exit 4');
 
   qtc(
+    'run-runtime-error',
+    [
+      'run',
+      '--config',
+      sendDown,
+      '--collection',
+      'down-suite',
+      '--identity',
+      'anon',
+      '--env',
+      'staging',
+      '--junit',
+      file('run-runtime-error.xml'),
+      '--json',
+    ],
+    { expected: 4, stdout: file('run-runtime-error.json') }
+  );
+  runReport = readJson(file('run-runtime-error.json'));
+  if (
+    runReport.ok !== false ||
+    runReport.totals.errors < 1 ||
+    !fs.readFileSync(file('run-runtime-error.xml'), 'utf8').includes('<error')
+  ) {
+    throw new Error('run runtime error not reported');
+  }
+  pass('run runtime error exit 4');
+
+  qtc(
     'scan-clean',
     [
       'scan',
@@ -1060,6 +1097,78 @@ try {
     throw new Error('vuln reports missing');
   }
   pass('scan vuln exit 3 reports redacted');
+
+  const corruptBaseline = file('corrupt-baseline.json');
+  fs.writeFileSync(corruptBaseline, '{');
+  qtc(
+    'scan-corrupt-baseline',
+    ['scan', '--config', scanVuln, '--env', 'staging', '--baseline', corruptBaseline, '--json'],
+    { expected: 2, stderr: file('scan-corrupt-baseline.stderr') }
+  );
+  if (!fs.readFileSync(file('scan-corrupt-baseline.stderr'), 'utf8').includes('corrupt baseline')) {
+    throw new Error('corrupt baseline did not fail closed');
+  }
+  pass('scan corrupt baseline exit 2');
+
+  const corruptAnnotations = write('corrupt-annotations.json', '{');
+  qtc(
+    'scan-corrupt-annotations',
+    [
+      'scan',
+      '--config',
+      scanVuln,
+      '--env',
+      'staging',
+      '--annotations',
+      corruptAnnotations,
+      '--json',
+    ],
+    { expected: 2, stderr: file('scan-corrupt-annotations.stderr') }
+  );
+  if (
+    !fs
+      .readFileSync(file('scan-corrupt-annotations.stderr'), 'utf8')
+      .includes('corrupt annotations')
+  ) {
+    throw new Error('corrupt annotations did not fail closed');
+  }
+  pass('scan corrupt annotations exit 2');
+
+  const severityFp = scan.findings[0]?.fp;
+  if (!severityFp) throw new Error('scan vuln did not include a fingerprint for severity override');
+  const severityAnnotations = writeJson('severity-annotations.json', {
+    fpVersion: 1,
+    records: { [severityFp]: { severityOverride: 'low' } },
+  });
+  qtc(
+    'scan-severity-override',
+    [
+      'scan',
+      '--config',
+      scanVuln,
+      '--env',
+      'staging',
+      '--annotations',
+      severityAnnotations,
+      '--fail-on',
+      'high',
+      '--html',
+      file('scan-severity-override.html'),
+      '--junit',
+      file('scan-severity-override.xml'),
+      '--json',
+    ],
+    { stdout: file('scan-severity-override.json') }
+  );
+  const overrideScan = readJson(file('scan-severity-override.json'));
+  if (
+    overrideScan.ok !== true ||
+    !fs.readFileSync(file('scan-severity-override.html'), 'utf8').includes('sev-low') ||
+    fs.readFileSync(file('scan-severity-override.xml'), 'utf8').includes('<failure')
+  ) {
+    throw new Error('severity override did not lower the gate/report severity');
+  }
+  pass('scan severity override ungates');
 
   qtc(
     'scan-engine-matrix',
@@ -1248,7 +1357,22 @@ try {
 
   qtc(
     'baseline-scope-drift',
-    ['scan', '--config', scanDrift, '--env', 'staging', '--baseline', baseline, '--json'],
+    [
+      'scan',
+      '--config',
+      scanDrift,
+      '--env',
+      'staging',
+      '--baseline',
+      baseline,
+      '--html',
+      file('baseline-scope-drift.html'),
+      '--junit',
+      file('baseline-scope-drift.xml'),
+      '--sarif',
+      file('baseline-scope-drift.sarif'),
+      '--json',
+    ],
     {
       expected: [0, 3],
       stdout: file('baseline-scope-drift.json'),
@@ -1260,7 +1384,16 @@ try {
   ) {
     throw new Error('baseline scope drift did not warn');
   }
-  pass('scan baseline scope drift warning');
+  if (
+    !fs
+      .readFileSync(file('baseline-scope-drift.html'), 'utf8')
+      .includes('baseline scope differs') ||
+    !fs.readFileSync(file('baseline-scope-drift.xml'), 'utf8').includes('<testsuites') ||
+    readJson(file('baseline-scope-drift.sarif')).version !== '2.1.0'
+  ) {
+    throw new Error('baseline scope drift reports invalid');
+  }
+  pass('scan baseline scope drift warning + reports');
 
   qtc('bola-suggest', ['bola-suggest', '--config', fullConfig, '--env', 'staging', '--json'], {
     stdout: file('bola-suggest.json'),
@@ -1313,6 +1446,120 @@ try {
     throw new Error('perf artifacts invalid');
   }
   pass('perf fake k6 summary redacted json');
+
+  const pathK6 = createFakeK6({
+    name: path.join('fake-k6-path', process.platform === 'win32' ? 'k6.cmd' : 'k6'),
+  });
+  qtc(
+    'perf-default-path-k6',
+    [
+      'perf',
+      '--config',
+      fullConfig,
+      '--request',
+      'perf-post',
+      '--identity',
+      'hkey',
+      '--env',
+      'staging',
+      '--stage',
+      '1s:1',
+      '--summary-out',
+      file('perf-default-path-summary.json'),
+      '--json',
+    ],
+    {
+      stdout: file('perf-default-path-k6.json'),
+      env: envWithPathPrefix(path.dirname(pathK6)),
+    }
+  );
+  const defaultPathPerf = readJson(file('perf-default-path-k6.json'));
+  if (
+    !defaultPathPerf.ok ||
+    defaultPathPerf.k6ExitCode !== 0 ||
+    !String(defaultPathPerf.stdout).includes('fake k6 ran') ||
+    !fs.readFileSync(file('perf-default-path-summary.json'), 'utf8').includes('http_reqs')
+  ) {
+    throw new Error('perf default PATH k6 failed');
+  }
+  pass('perf default PATH k6');
+
+  const failingK6 = createFakeK6({ exitCode: 7 });
+  qtc(
+    'perf-k6-nonzero',
+    [
+      'perf',
+      '--config',
+      fullConfig,
+      '--request',
+      'perf-post',
+      '--identity',
+      'hkey',
+      '--env',
+      'staging',
+      '--stage',
+      '1s:1',
+      '--k6-bin',
+      failingK6,
+      '--json',
+    ],
+    { expected: 4, stdout: file('perf-k6-nonzero.json') }
+  );
+  const failingPerf = readJson(file('perf-k6-nonzero.json'));
+  if (failingPerf.ok !== false || failingPerf.k6ExitCode !== 7) {
+    throw new Error('perf k6 nonzero did not report exit 4');
+  }
+  pass('perf k6 nonzero exit 4');
+
+  qtc(
+    'perf-invalid-stage',
+    [
+      'perf',
+      '--config',
+      fullConfig,
+      '--request',
+      'perf-post',
+      '--identity',
+      'hkey',
+      '--env',
+      'staging',
+      '--stage',
+      'not-a-stage',
+      '--k6-bin',
+      fakeK6,
+      '--json',
+    ],
+    { expected: 2, stdout: file('perf-invalid-stage.json') }
+  );
+  if (!String(readJson(file('perf-invalid-stage.json')).error).includes('invalid --stage')) {
+    throw new Error('perf invalid stage did not fail correctly');
+  }
+  pass('perf invalid stage exit 2');
+
+  qtc(
+    'perf-human',
+    [
+      'perf',
+      '--config',
+      fullConfig,
+      '--request',
+      'perf-post',
+      '--identity',
+      'hkey',
+      '--env',
+      'staging',
+      '--stage',
+      '1s:1',
+      '--k6-bin',
+      fakeK6,
+    ],
+    { stdout: file('perf-human.txt') }
+  );
+  const perfHuman = fs.readFileSync(file('perf-human.txt'), 'utf8');
+  if (!perfHuman.includes('k6 POST') || !perfHuman.includes('fake k6 ran')) {
+    throw new Error('perf human output missing expected lines');
+  }
+  pass('perf human output');
 
   if (realK6Bin) {
     qtc(

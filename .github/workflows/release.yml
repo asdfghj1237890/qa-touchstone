@@ -359,6 +359,25 @@ jobs:
           npm version "$version" --no-git-tag-version --allow-same-version
           npm publish --access public --provenance
 
+  npx-install-smoke:
+    needs: publish-npm
+    if: ${{ vars.PUBLISH_NPM == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+
       - name: Functional test npx launcher
         shell: bash
         run: |
