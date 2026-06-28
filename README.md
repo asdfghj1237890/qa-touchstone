@@ -135,48 +135,7 @@ The current public-facing scope is API testing only:
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  User["QA engineer"] --> Shell["Tauri desktop shell"]
-  Shell --> UI["React + Vite UI"]
-
-  UI --> Client["API Client (REST / GraphQL)"]
-  UI --> Runner["Collection Runner"]
-  UI --> Security["Security suite (RBAC / BOLA / rate-limit)"]
-  UI --> Monitors["Background Monitors"]
-  UI --> Perf["Performance Page"]
-  UI --> AI["Test Gen + AI Review"]
-  UI --> Realtime["Realtime (WS / SSE)"]
-  UI --> Docs["Docs / Codegen / Reports"]
-
-  Client --> Executor["Shared Request Executor"]
-  Runner --> Executor
-  Monitors --> Executor
-  Security --> Executor
-
-  Security --> Findings["Findings lifecycle + baseline diff (RunRecord)"]
-  Findings --> Evidence["Redacted evidence artifact (mask-by-default)"]
-  Findings --> Reports["Security reports: JSON / HTML / JUnit / SARIF"]
-  Evidence --> Reports
-
-  Executor --> Vars["Variables + Environments"]
-  Executor --> Cookies["Local Cookie Jar"]
-  Executor --> Rust["Rust Tauri Commands"]
-  Rust --> APIs["Target APIs"]
-  Rust --> Keychain["OS keychain (AWS secret keys)"]
-
-  Perf --> K6["Bundled k6"]
-  K6 --> APIs
-  Realtime --> APIs
-
-  AI --> AIGate["AI privacy chokepoint (qaAiSend): redact + preview + egress policy"]
-  Security --> AIGate
-  AIGate --> LLM["Built-in / OpenAI / self-managed LLM"]
-  AIGate --> AIPolicy["Egress policy (Rust get_ai_policy / lockdown)"]
-  Findings --> Storage["Storage layer (versioned, disk-mirrored)"]
-  Storage --> Disk["Rust app-data files (user_data.json, config.json)"]
-  UI --> Storage
-```
+![Animated QA Touchstone architecture diagram](docs/architecture.svg)
 
 - **Frontend**: React 19 + Vite, **100% TypeScript** (strict). Workspace,
   request/send, and monitor state live in typed React context providers

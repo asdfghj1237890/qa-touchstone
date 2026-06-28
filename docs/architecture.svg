@@ -1,0 +1,284 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 860" role="img" aria-labelledby="title desc">
+  <title id="title">QA Touchstone Architecture</title>
+  <desc id="desc">Animated architecture diagram showing the Tauri desktop shell, React UI, request executor, security engines, storage, AI privacy gate, k6, and target APIs.</desc>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    svg {
+      background: #07111f;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .grid {
+      stroke: #23405f;
+      stroke-width: 1;
+      opacity: 0.24;
+    }
+    .halo {
+      fill: none;
+      stroke-width: 1.5;
+      opacity: 0.5;
+    }
+    .group-label {
+      fill: #9fb6d8;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .node rect {
+      fill: #0d1d31;
+      stroke: #5fb1ff;
+      stroke-width: 1.4;
+      filter: url(#softShadow);
+    }
+    .node.alt rect {
+      stroke: #41d6a4;
+    }
+    .node.warn rect {
+      stroke: #f2bf5e;
+    }
+    .node.ai rect {
+      stroke: #d58cff;
+    }
+    .node text {
+      fill: #edf6ff;
+      font-size: 16px;
+      font-weight: 700;
+      text-anchor: middle;
+    }
+    .node .sub {
+      fill: #98aac2;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .flow {
+      fill: none;
+      stroke: #6cbcff;
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 8 12;
+      marker-end: url(#arrowBlue);
+      animation: dash 1.8s linear infinite;
+    }
+    .flow.green {
+      stroke: #48dfaa;
+      marker-end: url(#arrowGreen);
+      animation-duration: 2.2s;
+    }
+    .flow.gold {
+      stroke: #f2bf5e;
+      marker-end: url(#arrowGold);
+      animation-duration: 2.6s;
+    }
+    .flow.purple {
+      stroke: #d58cff;
+      marker-end: url(#arrowPurple);
+      animation-duration: 2.35s;
+    }
+    .pulse {
+      animation: pulse 2.8s ease-in-out infinite;
+    }
+    .pulse.delay-1 {
+      animation-delay: 0.45s;
+    }
+    .pulse.delay-2 {
+      animation-delay: 0.9s;
+    }
+    .pulse.delay-3 {
+      animation-delay: 1.35s;
+    }
+    .spark {
+      fill: #e9f8ff;
+      opacity: 0.9;
+    }
+    .spark.blue {
+      offset-path: path("M 300 152 H 505 V 250 H 625");
+      animation: travel 4.8s linear infinite;
+    }
+    .spark.green {
+      offset-path: path("M 700 250 H 930 V 520 H 1090");
+      animation: travel 5.6s linear infinite 0.8s;
+    }
+    .spark.purple {
+      offset-path: path("M 700 465 H 870 V 680 H 1090");
+      animation: travel 6.2s linear infinite 1.2s;
+    }
+    .spark.gold {
+      offset-path: path("M 700 565 H 930 V 250 H 1090");
+      animation: travel 5.2s linear infinite 1.7s;
+    }
+    @keyframes dash {
+      to {
+        stroke-dashoffset: -20;
+      }
+    }
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.82;
+      }
+    }
+    @keyframes travel {
+      from {
+        offset-distance: 0%;
+      }
+      to {
+        offset-distance: 100%;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .flow,
+      .pulse,
+      .spark {
+        animation: none;
+      }
+    }
+  </style>
+  <defs>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path class="grid" d="M 36 0 H 0 V 36"/>
+    </pattern>
+    <filter id="softShadow" x="-20%" y="-30%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000814" flood-opacity="0.35"/>
+    </filter>
+    <linearGradient id="bgGlow" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#0c2340"/>
+      <stop offset="0.48" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#10221d"/>
+    </linearGradient>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6cbcff"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#48dfaa"/>
+    </marker>
+    <marker id="arrowGold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f2bf5e"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#d58cff"/>
+    </marker>
+  </defs>
+
+  <rect width="1440" height="860" fill="url(#bgGlow)"/>
+  <rect width="1440" height="860" fill="url(#grid)"/>
+  <circle cx="225" cy="156" r="132" fill="#1e84ff" opacity="0.08"/>
+  <circle cx="1168" cy="560" r="210" fill="#48dfaa" opacity="0.08"/>
+  <circle cx="930" cy="706" r="142" fill="#d58cff" opacity="0.08"/>
+
+  <text x="72" y="64" fill="#f1f8ff" font-size="32" font-weight="800">QA Touchstone Architecture</text>
+  <text x="72" y="94" fill="#9fb6d8" font-size="15">Local-first API QA workspace: UI workflows, safe execution, security evidence, AI egress controls, and CI artifacts.</text>
+
+  <rect x="54" y="120" width="356" height="170" rx="18" fill="#09182a" stroke="#274966" stroke-width="1"/>
+  <text class="group-label" x="78" y="150">Desktop</text>
+  <g class="node pulse" transform="translate(88 174)">
+    <rect width="212" height="72" rx="13"/>
+    <text x="106" y="32">QA engineer</text>
+    <text class="sub" x="106" y="53">local operator</text>
+  </g>
+
+  <rect x="454" y="120" width="300" height="595" rx="18" fill="#09182a" stroke="#274966" stroke-width="1"/>
+  <text class="group-label" x="478" y="150">Frontend</text>
+  <g class="node pulse delay-1" transform="translate(505 190)">
+    <rect width="195" height="120" rx="13"/>
+    <text x="97.5" y="38">React + Vite UI</text>
+    <text class="sub" x="97.5" y="61">typed workspace state</text>
+    <text class="sub" x="97.5" y="82">themes + bilingual UX</text>
+  </g>
+  <g class="node" transform="translate(494 350)">
+    <rect width="215" height="58" rx="12"/>
+    <text x="107.5" y="34">API Client + Runner</text>
+  </g>
+  <g class="node" transform="translate(494 436)">
+    <rect width="215" height="58" rx="12"/>
+    <text x="107.5" y="34">Security Suite</text>
+  </g>
+  <g class="node" transform="translate(494 522)">
+    <rect width="215" height="58" rx="12"/>
+    <text x="107.5" y="34">Performance + k6</text>
+  </g>
+  <g class="node" transform="translate(494 608)">
+    <rect width="215" height="58" rx="12"/>
+    <text x="107.5" y="34">Docs + Codegen</text>
+  </g>
+
+  <rect x="812" y="120" width="292" height="255" rx="18" fill="#09182a" stroke="#274966" stroke-width="1"/>
+  <text class="group-label" x="836" y="150">Rust backend</text>
+  <g class="node alt pulse delay-2" transform="translate(860 190)">
+    <rect width="196" height="120" rx="13"/>
+    <text x="98" y="38">Request Executor</text>
+    <text class="sub" x="98" y="61">reqwest + redirects</text>
+    <text class="sub" x="98" y="82">SigV4 + SSRF guard</text>
+  </g>
+
+  <rect x="1160" y="120" width="226" height="255" rx="18" fill="#09182a" stroke="#274966" stroke-width="1"/>
+  <text class="group-label" x="1184" y="150">Targets</text>
+  <g class="node alt pulse delay-3" transform="translate(1192 190)">
+    <rect width="162" height="72" rx="13"/>
+    <text x="81" y="32">Target APIs</text>
+    <text class="sub" x="81" y="53">HTTP / WS / SSE</text>
+  </g>
+  <g class="node warn" transform="translate(1192 284)">
+    <rect width="162" height="52" rx="12"/>
+    <text x="81" y="32">OS keychain</text>
+  </g>
+
+  <rect x="812" y="420" width="574" height="315" rx="18" fill="#09182a" stroke="#274966" stroke-width="1"/>
+  <text class="group-label" x="836" y="450">Evidence, AI, and persistence</text>
+  <g class="node" transform="translate(852 484)">
+    <rect width="214" height="76" rx="13"/>
+    <text x="107" y="32">Findings lifecycle</text>
+    <text class="sub" x="107" y="53">baseline diff + status</text>
+  </g>
+  <g class="node" transform="translate(852 594)">
+    <rect width="214" height="76" rx="13"/>
+    <text x="107" y="32">Redacted evidence</text>
+    <text class="sub" x="107" y="53">mask-by-default artifacts</text>
+  </g>
+  <g class="node ai pulse delay-1" transform="translate(1110 484)">
+    <rect width="214" height="76" rx="13"/>
+    <text x="107" y="32">AI privacy gate</text>
+    <text class="sub" x="107" y="53">redact + preview + policy</text>
+  </g>
+  <g class="node ai" transform="translate(1110 594)">
+    <rect width="214" height="76" rx="13"/>
+    <text x="107" y="32">LLM providers</text>
+    <text class="sub" x="107" y="53">OpenAI / self-managed</text>
+  </g>
+  <g class="node warn" transform="translate(968 704)">
+    <rect width="240" height="72" rx="13"/>
+    <text x="120" y="32">Versioned storage</text>
+    <text class="sub" x="120" y="53">user_data.json + config.json</text>
+  </g>
+
+  <path class="flow" d="M 300 210 H 505"/>
+  <path class="flow" d="M 602 310 V 350"/>
+  <path class="flow" d="M 602 408 V 436"/>
+  <path class="flow" d="M 602 494 V 522"/>
+  <path class="flow" d="M 602 580 V 608"/>
+  <path class="flow green" d="M 709 379 H 860"/>
+  <path class="flow green" d="M 709 465 H 852"/>
+  <path class="flow gold" d="M 709 551 H 930 V 310"/>
+  <path class="flow purple" d="M 709 637 H 950 V 484"/>
+  <path class="flow green" d="M 1056 250 H 1192"/>
+  <path class="flow gold" d="M 1056 284 H 1192 V 310"/>
+  <path class="flow" d="M 959 560 V 594"/>
+  <path class="flow" d="M 1066 632 H 1110"/>
+  <path class="flow purple" d="M 1066 522 H 1110"/>
+  <path class="flow purple" d="M 1217 560 V 594"/>
+  <path class="flow gold" d="M 959 670 V 704"/>
+  <path class="flow gold" d="M 1217 670 V 740 H 1208"/>
+  <path class="flow gold" d="M 602 666 V 740 H 968"/>
+
+  <circle class="spark blue" r="5"/>
+  <circle class="spark green" r="5"/>
+  <circle class="spark purple" r="5"/>
+  <circle class="spark gold" r="5"/>
+
+  <path class="halo" d="M 70 806 H 1370" stroke="#5fb1ff" stroke-dasharray="2 10"/>
+  <text x="72" y="824" fill="#9fb6d8" font-size="13">Animated dashed lines show request, evidence, AI, and persistence flows. The diagram remains readable as a static SVG when motion is disabled.</text>
+</svg>
