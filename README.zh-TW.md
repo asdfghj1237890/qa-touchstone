@@ -220,6 +220,26 @@ npm run tauri:build
 - `qa-touchstone-ci-windows-x64.zip`
 - 對應的 `.sha256` checksum 檔
 
+從包含 npm/action wrappers 的 release 開始，可以用這兩種方式安裝：
+
+```bash
+# npm package version 不含開頭的 "v"。
+npx qa-touchstone-ci@<version> --version
+```
+
+或在 GitHub Actions 裡：
+
+```yaml
+- uses: asdfghj1237890/qa-touchstone/setup-ci@vX.Y.Z
+  with:
+    version: vX.Y.Z
+```
+
+兩個 wrapper 都會下載對應的 GitHub Release asset、驗 `.sha256`、cache 或安裝
+binary，最後執行同一個 `qa-touchstone-ci`。受限較嚴格的 CI 環境仍可使用手動
+artifact 下載方式。release workflow 只有在 repository variable `PUBLISH_NPM`
+為 `true` 且有 `NPM_TOKEN` 時，才會 publish npm launcher。
+
 CI 可用的功能就是下面這組 `qa-touchstone-ci` 指令。它刻意比桌面 app 小：
 CI job 會從檔案與環境變數執行可重現的 API、安全與效能檢查，不啟動 Tauri UI，
 也不使用 OS keychain。
@@ -364,15 +384,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install QA Touchstone CLI
-        run: |
-          set -euo pipefail
-          asset="qa-touchstone-ci-linux-x64.tar.gz"
-          base="https://github.com/asdfghj1237890/qa-touchstone/releases/download/${QA_TOUCHSTONE_VERSION}"
-          curl -fsSLO "${base}/${asset}"
-          curl -fsSLO "${base}/${asset}.sha256"
-          sha256sum -c "${asset}.sha256"
-          tar -xzf "${asset}"
-          sudo mv qa-touchstone-ci-linux-x64/qa-touchstone-ci /usr/local/bin/qa-touchstone-ci
+        uses: asdfghj1237890/qa-touchstone/setup-ci@vX.Y.Z
+        with:
+          version: ${{ env.QA_TOUCHSTONE_VERSION }}
 
       - name: Run API smoke collection
         run: |

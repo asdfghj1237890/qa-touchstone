@@ -240,6 +240,28 @@ alongside the desktop installers:
 - `qa-touchstone-ci-windows-x64.zip`
 - matching `.sha256` checksum files
 
+From releases that include the npm/action wrappers, install it with either:
+
+```bash
+# npm package versions do not include the leading "v".
+npx qa-touchstone-ci@<version> --version
+```
+
+or in GitHub Actions:
+
+```yaml
+- uses: asdfghj1237890/qa-touchstone/setup-ci@vX.Y.Z
+  with:
+    version: vX.Y.Z
+```
+
+Both wrappers download the matching GitHub Release asset, verify its `.sha256`
+file, cache or install the binary, and then run the same `qa-touchstone-ci`
+executable documented below. Manual artifact download remains supported for
+locked-down CI environments. The release workflow publishes the npm launcher
+only when the repository variable `PUBLISH_NPM` is `true` and `NPM_TOKEN` is
+available.
+
 The CI surface is the `qa-touchstone-ci` command set below. It is intentionally
 smaller than the desktop app: CI jobs run deterministic API, security, and
 performance checks from files and environment variables, without the Tauri UI or
@@ -388,15 +410,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install QA Touchstone CLI
-        run: |
-          set -euo pipefail
-          asset="qa-touchstone-ci-linux-x64.tar.gz"
-          base="https://github.com/asdfghj1237890/qa-touchstone/releases/download/${QA_TOUCHSTONE_VERSION}"
-          curl -fsSLO "${base}/${asset}"
-          curl -fsSLO "${base}/${asset}.sha256"
-          sha256sum -c "${asset}.sha256"
-          tar -xzf "${asset}"
-          sudo mv qa-touchstone-ci-linux-x64/qa-touchstone-ci /usr/local/bin/qa-touchstone-ci
+        uses: asdfghj1237890/qa-touchstone/setup-ci@vX.Y.Z
+        with:
+          version: ${{ env.QA_TOUCHSTONE_VERSION }}
 
       - name: Run API smoke collection
         run: |

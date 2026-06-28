@@ -1,0 +1,38 @@
+{
+  "name": "qa-touchstone-ci",
+  "version": "0.22.1",
+  "description": "Thin npx launcher for the QA Touchstone headless CI runner.",
+  "type": "module",
+  "bin": {
+    "qa-touchstone-ci": "bin/qa-touchstone-ci.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "api",
+    "qa",
+    "security",
+    "ci",
+    "postman",
+    "sarif",
+    "k6"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asdfghj1237890/qa-touchstone.git",
+    "directory": "packages/qa-touchstone-ci"
+  },
+  "bugs": {
+    "url": "https://github.com/asdfghj1237890/qa-touchstone/issues"
+  },
+  "homepage": "https://github.com/asdfghj1237890/qa-touchstone#headless-ci-runner",
+  "license": "ISC",
+  "publishConfig": {
+    "access": "public"
+  }
+}

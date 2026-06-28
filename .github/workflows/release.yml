@@ -106,7 +106,7 @@ jobs:
             - **Portable** (`-x64-portable.zip`): no install, no admin rights. Unzip and run `QA Touchstone.exe`. Keep the sibling `resources/` folder — it holds the bundled k6 used for performance testing.
 
             ### Headless CI
-            Download `qa-touchstone-ci-<os>-<arch>` plus its `.sha256` file to run deterministic checks in another repository's CI without the desktop UI. Supported CI commands are `ping`, `import`, `send`, `run`, `scan`, `bola-suggest`, and k6-backed `perf`. The headless CLI does not bundle k6; install k6 on the runner before using `qa-touchstone-ci perf`.
+            Use the `asdfghj1237890/qa-touchstone/setup-ci@${{ github.ref_name }}` GitHub Action to install the headless runner in CI. If npm publishing is enabled for this release, `npx qa-touchstone-ci@<version> --help` works too (same version as this release, without the leading `v`). You can also download `qa-touchstone-ci-<os>-<arch>` plus its `.sha256` file manually. Supported CI commands are `ping`, `import`, `send`, `run`, `scan`, `bola-suggest`, and k6-backed `perf`. The headless CLI does not bundle k6; install k6 on the runner before using `qa-touchstone-ci perf`.
 
             ### macOS (DMG · Apple Silicon / arm64)
             Gatekeeper blocks unsigned, un-notarized apps. Pick one:
@@ -129,7 +129,7 @@ jobs:
             - **免安裝版**（`-x64-portable.zip`）：免安裝、免系統管理員權限。解壓後執行 `QA Touchstone.exe`，並保留旁邊的 `resources/` 資料夾（內含效能測試用的 k6）。
 
             ### Headless CI
-            下載 `qa-touchstone-ci-<os>-<arch>` 與對應 `.sha256` 檔，即可在其他 repo 的 CI 裡執行可重現檢查，不需要桌面 UI。支援的 CI 指令為 `ping`、`import`、`send`、`run`、`scan`、`bola-suggest`，以及 k6-backed `perf`。Headless CLI 不會 bundle k6；使用 `qa-touchstone-ci perf` 前請先在 runner 安裝 k6。
+            在 CI 可用 `asdfghj1237890/qa-touchstone/setup-ci@${{ github.ref_name }}` GitHub Action 安裝 headless runner。若這次 release 有啟用 npm publish，也可用 `npx qa-touchstone-ci@<version> --help`（與本 release 相同版本，但不含開頭的 `v`）。也可以手動下載 `qa-touchstone-ci-<os>-<arch>` 與對應 `.sha256` 檔。支援的 CI 指令為 `ping`、`import`、`send`、`run`、`scan`、`bola-suggest`，以及 k6-backed `perf`。Headless CLI 不會 bundle k6；使用 `qa-touchstone-ci perf` 前請先在 runner 安裝 k6。
 
             ### macOS（DMG · Apple Silicon / arm64）
             因未簽章、未公證，Gatekeeper 會擋。任選一種：
@@ -234,3 +234,35 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: gh release upload "${{ github.ref_name }}" "$ASSET" "$SHA_ASSET" --clobber
+
+  publish-npm:
+    needs: headless-cli
+    if: ${{ vars.PUBLISH_NPM == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish npm launcher
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if npm view "qa-touchstone-ci@${version}" version >/dev/null 2>&1; then
+            echo "qa-touchstone-ci@${version} is already published; skipping."
+            exit 0
+          fi
+          cd packages/qa-touchstone-ci
+          npm version "$version" --no-git-tag-version --allow-same-version
+          npm publish --access public --provenance
