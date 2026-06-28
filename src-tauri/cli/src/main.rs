@@ -368,7 +368,7 @@ async fn run_send(
     };
 
     // Step 6: execute + measure wall-clock ms
-    let exec_opts = qa_touchstone_core::buildreq::exec_opts_for(&identity.auth);
+    let exec_opts = qa_touchstone_core::buildreq::exec_opts_for(&identity.auth, &rd);
 
     // Steps 6-9: execute, adapt, and assert via run_step (no printing/redaction inside).
     let step = qa_touchstone_core::step::run_step(&rd, &req.assertions, exec_opts).await;

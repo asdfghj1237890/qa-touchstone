@@ -19,7 +19,7 @@ pub async fn run_security_step(
     let scoped = cfg.scoped_vars();
     let map = qa_var_map(&scoped, env, None, None);
     match build_request(req, identity, &map, &mut RealDynamics) {
-        Ok(rd) => run_step(&rd, &[], crate::buildreq::exec_opts_for(&identity.auth)).await,
+        Ok(rd) => run_step(&rd, &[], crate::buildreq::exec_opts_for(&identity.auth, &rd)).await,
         Err(e) => StepResult {
             success: false,
             status: 0,

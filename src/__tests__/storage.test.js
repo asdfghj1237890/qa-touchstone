@@ -4,6 +4,7 @@ import {
   saveJSON,
   loadString,
   saveString,
+  removeStorageKey,
   initStorageMirror,
   flushMirror,
   MIRRORED_KEYS,
@@ -198,6 +199,47 @@ describe('qaStorage — 磁碟鏡像', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('monitors use the live storage key in the disk mirror', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = {
+        loadUserData: vi.fn().mockResolvedValue([]),
+        saveUserData: vi.fn().mockResolvedValue({ success: true }),
+      };
+      await initStorageMirror(api);
+      expect(MIRRORED_KEYS).toContain('qa_monitors');
+      expect(MIRRORED_KEYS).not.toContain('qa_monitor_storage');
+
+      saveJSON('qa_monitors', [{ id: 'm1' }]);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(api.saveUserData).toHaveBeenCalledTimes(1);
+      const written = api.saveUserData.mock.calls[0][0];
+      expect(written.qa_monitors).toBe('[{"id":"m1"}]');
+      expect(written.qa_monitor_storage).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('removeStorageKey removes mirrored data from the next disk snapshot', async () => {
+    const api = {
+      loadUserData: vi.fn().mockResolvedValue([]),
+      saveUserData: vi.fn().mockResolvedValue({ success: true }),
+    };
+    await initStorageMirror(api);
+    localStorage.setItem('qa_perf_runs', '[1]');
+    localStorage.setItem('qa_accent', 'jade');
+
+    expect(removeStorageKey('qa_perf_runs')).toBe(true);
+    await flushMirror();
+
+    expect(api.saveUserData).toHaveBeenCalledTimes(1);
+    const written = api.saveUserData.mock.calls[0][0];
+    expect(written.qa_perf_runs).toBeUndefined();
+    expect(written.qa_accent).toBe('jade');
   });
 
   it('非鏡像 key 不觸發 flush', async () => {

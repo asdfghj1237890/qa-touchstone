@@ -167,13 +167,14 @@ export function buildPayload(
       value: 'Basic ' + b64(`${sub(a.basic.user, map)}:${sub(a.basic.pass, map)}`),
     });
   else if (a.type === 'apiKey') {
+    const apiKeyName = sub(a.apiKey.key, map);
     if (a.apiKey.placement === 'query')
       query.push(
-        `${encodeURIComponent(a.apiKey.key)}=${encodeURIComponent(sub(a.apiKey.value, map))}`
+        `${encodeURIComponent(apiKeyName)}=${encodeURIComponent(sub(a.apiKey.value, map))}`
       );
     else {
-      headers.push({ key: a.apiKey.key, value: sub(a.apiKey.value, map) });
-      addSensitiveHeaderName(sensitiveHeaderNames, a.apiKey.key);
+      headers.push({ key: apiKeyName, value: sub(a.apiKey.value, map) });
+      addSensitiveHeaderName(sensitiveHeaderNames, apiKeyName);
     }
   }
 

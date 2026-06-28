@@ -8,7 +8,7 @@ import { makeState, feed, snapshot } from './k6parse';
 import type { K6Metrics, K6ParseState, K6Slo, K6Snapshot } from './k6parse';
 import { useI18n } from './useI18n';
 import { downloadFile } from './download';
-import { loadJSON, saveJSON } from './storage';
+import { loadJSON, removeStorageKey, saveJSON } from './storage';
 import type { QaEnv } from './state/WorkspaceContext';
 
 // ── QA Touchstone — Performance / Load / Stress (SLO · stages · history) ────
@@ -559,9 +559,7 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
       setLive(null);
       setPhase('idle');
     }
-    try {
-      localStorage.removeItem(PERF_KEY);
-    } catch {}
+    removeStorageKey(PERF_KEY);
   };
 
   // Abort any in-flight k6 process if the user leaves the Performance route.

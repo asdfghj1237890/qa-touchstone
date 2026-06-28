@@ -701,7 +701,7 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
         for o in &owners {
             match build_bola_request(req, o, &test.id_values[&o.id], &test.id_location, &var_map) {
                 Ok(rd) => {
-                    let step = run_step(&rd, &[], exec_opts_for(&o.auth)).await;
+                    let step = run_step(&rd, &[], exec_opts_for(&o.auth, &rd)).await;
                     if !step.success {
                         errors.push(err(
                             o.id.clone(),
@@ -741,7 +741,7 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
                 &var_map,
             ) {
                 Ok(rd) => {
-                    let step = run_step(&rd, &[], exec_opts_for(&co.auth)).await;
+                    let step = run_step(&rd, &[], exec_opts_for(&co.auth, &rd)).await;
                     if !step.success {
                         errors.push(err(
                             co.id.clone(),
@@ -799,7 +799,7 @@ pub async fn run_bola(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
                         continue;
                     }
                 };
-                let step = run_step(&rd, &[], exec_opts_for(&a.auth)).await;
+                let step = run_step(&rd, &[], exec_opts_for(&a.auth, &rd)).await;
                 if !step.success {
                     errors.push(err(
                         format!("{}→{}", a.id, o.id),

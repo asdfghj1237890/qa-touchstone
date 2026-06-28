@@ -253,7 +253,7 @@ pub async fn run_burst(
                 let mut dyn_ = RealDynamics;
                 let cell = match build_request(&req, &identity, &var_map, &mut dyn_) {
                     Ok(rd) => {
-                        cell_from_step(run_step(&rd, &[], exec_opts_for(&identity.auth)).await)
+                        cell_from_step(run_step(&rd, &[], exec_opts_for(&identity.auth, &rd)).await)
                     }
                     Err(e) => BurstResponse {
                         status: None,

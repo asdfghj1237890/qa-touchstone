@@ -14,7 +14,7 @@ export const MIRRORED_KEYS = [
   'qa_security_lifecycle',
   'qa_security_snapshots',
   'qa_perf_runs',
-  'qa_monitor_storage',
+  'qa_monitors',
   'qa_ai_privacy',
   'qa_accent',
   'qa_locale',
@@ -148,6 +148,18 @@ export function saveString(key: string, value: unknown): boolean {
     localStorage.setItem(key, String(value));
   } catch (e) {
     console.error(`qaStorage: failed to write ${key}`, e);
+    notifyError(key, e);
+    return false;
+  }
+  scheduleMirrorFlush(key);
+  return true;
+}
+
+export function removeStorageKey(key: string): boolean {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.error(`qaStorage: failed to remove ${key}`, e);
     notifyError(key, e);
     return false;
   }

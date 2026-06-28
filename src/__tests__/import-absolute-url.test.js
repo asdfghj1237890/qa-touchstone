@@ -142,6 +142,42 @@ describe('absolute-URL imports stay callable', () => {
     expect(payload.sensitiveHeaderNames).toEqual(['X-Api-Key', 'X-Tenant-Token']);
   });
 
+  it('buildPayload substitutes API key auth names for header and query placement', () => {
+    const headerPayload = buildPayload(
+      {
+        ...baseReq('https://api.test/thing'),
+        auth: {
+          type: 'apiKey',
+          apiKey: { key: '{{tenantHeader}}', value: '{{tenantToken}}', placement: 'header' },
+        },
+      },
+      { baseUrl: '' },
+      { tenantHeader: 'X-Tenant-Token', tenantToken: 'tk' }
+    );
+    expect(headerPayload.requestDetails.request.header).toContainEqual({
+      key: 'X-Tenant-Token',
+      value: 'tk',
+    });
+    expect(headerPayload.requestDetails.request.header).not.toContainEqual({
+      key: '{{tenantHeader}}',
+      value: 'tk',
+    });
+    expect(headerPayload.sensitiveHeaderNames).toEqual(['X-Tenant-Token']);
+
+    const queryPayload = buildPayload(
+      {
+        ...baseReq('https://api.test/thing'),
+        auth: {
+          type: 'apiKey',
+          apiKey: { key: '{{apiKeyParam}}', value: '{{apiKeyValue}}', placement: 'query' },
+        },
+      },
+      { baseUrl: '' },
+      { apiKeyParam: 'api_key', apiKeyValue: 'tk' }
+    );
+    expect(queryPayload.requestDetails.request.url).toBe('https://api.test/thing?api_key=tk');
+  });
+
   it('buildReq preserves imported request headers', () => {
     window.QA.COLLECTIONS = [
       {

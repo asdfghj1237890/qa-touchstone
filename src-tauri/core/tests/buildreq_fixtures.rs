@@ -83,6 +83,13 @@ fn no_map() -> BTreeMap<String, String> {
     BTreeMap::new()
 }
 
+fn var_map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect()
+}
+
 // ── Test cases (mirror gen-fixtures.mjs brCases in order) ────────────────────
 
 #[test]
@@ -146,6 +153,62 @@ fn apikey_query() {
     assert_eq!(
         got, expected,
         "apikey_query: Rust output must match TS buildPayload golden"
+    );
+}
+
+#[test]
+fn apikey_header_template_key() {
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "apikey_header_template_key");
+
+    let req = bare_req("GET", "https://x.example/u");
+    let id = Identity {
+        id: "id".into(),
+        auth: Auth::ApiKey {
+            key: "{{tenantHeader}}".into(),
+            value: "AK".into(),
+            location: ApiKeyIn::Header,
+        },
+        privileged: false,
+    };
+    let got = build_request(
+        &req,
+        &id,
+        &var_map(&[("tenantHeader", "X-Tenant-Token")]),
+        &mut NoDynamics,
+    )
+    .unwrap();
+    assert_eq!(
+        got, expected,
+        "apikey_header_template_key: Rust output must match TS buildPayload golden"
+    );
+}
+
+#[test]
+fn apikey_query_template_key() {
+    let fix = load_fixtures();
+    let expected = get_expected(&fix.cases, "apikey_query_template_key");
+
+    let req = bare_req("GET", "https://x.example/u");
+    let id = Identity {
+        id: "id".into(),
+        auth: Auth::ApiKey {
+            key: "{{apiKeyParam}}".into(),
+            value: "AK".into(),
+            location: ApiKeyIn::Query,
+        },
+        privileged: false,
+    };
+    let got = build_request(
+        &req,
+        &id,
+        &var_map(&[("apiKeyParam", "api_key")]),
+        &mut NoDynamics,
+    )
+    .unwrap();
+    assert_eq!(
+        got, expected,
+        "apikey_query_template_key: Rust output must match TS buildPayload golden"
     );
 }
 

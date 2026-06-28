@@ -276,6 +276,36 @@ const brCases = [
     varMap: {},
   },
   {
+    name: 'apikey_header_template_key',
+    req: mkReq({
+      url: 'https://x.example/u',
+      auth: {
+        type: 'apiKey',
+        bearer: '',
+        apiKey: { key: '{{tenantHeader}}', value: 'AK', placement: 'header' },
+        basic: {},
+        aws: {},
+        oauth2: {},
+      },
+    }),
+    varMap: { tenantHeader: 'X-Tenant-Token' },
+  },
+  {
+    name: 'apikey_query_template_key',
+    req: mkReq({
+      url: 'https://x.example/u',
+      auth: {
+        type: 'apiKey',
+        bearer: '',
+        apiKey: { key: '{{apiKeyParam}}', value: 'AK', placement: 'query' },
+        basic: {},
+        aws: {},
+        oauth2: {},
+      },
+    }),
+    varMap: { apiKeyParam: 'api_key' },
+  },
+  {
     name: 'basic',
     req: mkReq({
       url: 'https://x.example/u',

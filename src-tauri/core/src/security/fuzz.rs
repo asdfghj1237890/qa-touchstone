@@ -434,7 +434,7 @@ pub async fn run_fuzz(cfg: &Config, env: Option<&str>) -> (Vec<Finding>, Vec<Eng
 
                 // Execute; transport failure → resp=None (swallowed, faithful to fuzz.ts:129).
                 let step: StepResult =
-                    run_step(&prepared, &[], exec_opts_for(&anon_identity.auth)).await;
+                    run_step(&prepared, &[], exec_opts_for(&anon_identity.auth, &prepared)).await;
                 let qa_resp = if step.success || step.status > 0 {
                     Some(QaResponse {
                         status: Some(step.status),

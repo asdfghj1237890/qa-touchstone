@@ -8,6 +8,18 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ### Changed
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
+## [0.22.1] — 2026-06-28
+
+### Fixed
+- Code generation now emits valid snippets for Unicode Basic auth credentials,
+  JSON booleans/nulls in Python, malformed JSON request bodies, HTTPie form
+  payloads, and non-object JSON bodies.
+- Disk mirroring now uses the live monitors storage key and removes perf run
+  history from the mirrored snapshot when history is cleared.
+- API key auth names are substituted consistently in the frontend, CLI, and
+  Rust security runners, including redirect-sensitive stripping for resolved
+  header names.
+
 ## [0.22.0] — 2026-06-11
 
 ### Security

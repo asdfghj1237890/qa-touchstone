@@ -25,13 +25,33 @@ pub fn enc(s: &str) -> String {
 
 /// ExecOptions for an identity's auth: mark a custom api-key-in-header sensitive so it is
 /// stripped on cross-origin redirects (Authorization/Cookie/x-amz-* are built into the executor).
-pub fn exec_opts_for(auth: &crate::config::Auth) -> ExecOptions {
+pub fn exec_opts_for(auth: &crate::config::Auth, prepared_request: &Value) -> ExecOptions {
     let sensitive_header_names = match auth {
         crate::config::Auth::ApiKey {
             key,
+            value,
             location: crate::config::ApiKeyIn::Header,
             ..
-        } => vec![key.clone()],
+        } => {
+            let mut names = vec![key.clone()];
+            if let Some(headers) = prepared_request
+                .get("request")
+                .and_then(|r| r.get("header"))
+                .and_then(|h| h.as_array())
+            {
+                for h in headers {
+                    let resolved_key = h.get("key").and_then(|v| v.as_str()).unwrap_or("");
+                    let header_value = h.get("value").and_then(|v| v.as_str()).unwrap_or("");
+                    if !resolved_key.is_empty()
+                        && header_value == value
+                        && !names.iter().any(|n| n.eq_ignore_ascii_case(resolved_key))
+                    {
+                        names.push(resolved_key.to_string());
+                    }
+                }
+            }
+            names
+        }
         _ => vec![],
     };
     ExecOptions {
@@ -94,7 +114,7 @@ pub fn build_request(
 
     // auth (Task 3 fills none/bearer/apiKey/basic) — apiKey-in-query may push to `query`
     // Secrets (token/value/password/username) are opaque literals from config load; NOT re-substituted.
-    apply_auth(identity, &mut headers, &mut query)?;
+    apply_auth(identity, map, dynamics, &mut headers, &mut query)?;
 
     if let Some(ct) = content_type {
         if !headers.iter().any(|h| {
@@ -132,12 +152,14 @@ pub fn build_request(
     Ok(json!({ "request": request }))
 }
 
-/// Apply identity auth — port of executor.ts:97-104.
-/// Secrets (token/value/password/username) are opaque literals from config load; NOT re-substituted.
+/// Apply identity auth — port of executor.ts.
+/// API key names are normal, non-secret config fields, so they follow request
+/// variable substitution. Secret values remain opaque literals from config load.
 /// Basic: Authorization: Basic <base64(utf8("user:pass"))>.
-// Authorization: Basic base64(utf8(user:pass)). Matches TS btoa(unescape(encodeURIComponent(...))) for ALL Unicode — both base64 the UTF-8 bytes.
 fn apply_auth(
     id: &Identity,
+    map: &BTreeMap<String, String>,
+    dynamics: &mut dyn Dynamics,
     headers: &mut Vec<Value>,
     query: &mut Vec<String>,
 ) -> Result<(), String> {
@@ -156,9 +178,14 @@ fn apply_auth(
             value,
             location,
         } => match location {
-            // TS: apiKey header uses value as-is (opaque), key is literal. (executor.ts:101-103)
-            ApiKeyIn::Header => headers.push(json!({ "key": key, "value": value })),
-            ApiKeyIn::Query => query.push(format!("{}={}", enc(key), enc(value))),
+            ApiKeyIn::Header => {
+                let resolved_key = qa_substitute(key, map, dynamics);
+                headers.push(json!({ "key": resolved_key, "value": value }));
+            }
+            ApiKeyIn::Query => {
+                let resolved_key = qa_substitute(key, map, dynamics);
+                query.push(format!("{}={}", enc(&resolved_key), enc(value)));
+            }
         },
     }
     Ok(())
@@ -167,7 +194,7 @@ fn apply_auth(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Auth, Identity, Request};
+    use crate::config::{ApiKeyIn, Auth, Identity, Request};
     use crate::engine::NoDynamics;
     use std::collections::BTreeMap;
 
@@ -212,6 +239,34 @@ mod tests {
         assert_eq!(
             out["request"]["url"],
             serde_json::json!("https://x.example/s?q=a%20b%26c")
+        );
+    }
+
+    #[test]
+    fn api_key_auth_name_is_substituted_and_marked_sensitive() {
+        let mut map = BTreeMap::new();
+        map.insert("tenantHeader".to_string(), "X-Tenant-Token".to_string());
+        let id = Identity {
+            id: "id".into(),
+            auth: Auth::ApiKey {
+                key: "{{tenantHeader}}".into(),
+                value: "AK".into(),
+                location: ApiKeyIn::Header,
+            },
+            privileged: false,
+        };
+        let out = build_request(&req("https://x.example/u"), &id, &map, &mut NoDynamics).unwrap();
+        assert_eq!(
+            out["request"]["header"][0]["key"],
+            serde_json::json!("X-Tenant-Token")
+        );
+        let opts = exec_opts_for(&id.auth, &out);
+        assert!(
+            opts.sensitive_header_names
+                .iter()
+                .any(|n| n == "X-Tenant-Token"),
+            "resolved API key header must be stripped on cross-origin redirects: {:?}",
+            opts.sensitive_header_names
         );
     }
 }

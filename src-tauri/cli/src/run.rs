@@ -134,7 +134,7 @@ pub async fn run_collection(
                     let step = run_step(
                         &rd,
                         &req.assertions,
-                        qa_touchstone_core::buildreq::exec_opts_for(&identity.auth),
+                        qa_touchstone_core::buildreq::exec_opts_for(&identity.auth, &rd),
                     )
                     .await;
                     if !step.success {

@@ -49,6 +49,31 @@
       }
     },
     {
+      "name": "apikey_header_template_key",
+      "expected": {
+        "request": {
+          "method": "GET",
+          "url": "https://x.example/u",
+          "header": [
+            {
+              "key": "X-Tenant-Token",
+              "value": "AK"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "apikey_query_template_key",
+      "expected": {
+        "request": {
+          "method": "GET",
+          "url": "https://x.example/u?api_key=AK",
+          "header": []
+        }
+      }
+    },
+    {
       "name": "basic",
       "expected": {
         "request": {

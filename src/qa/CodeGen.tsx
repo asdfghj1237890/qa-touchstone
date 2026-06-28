@@ -57,7 +57,10 @@ function qaEffectiveRequest(
       'Bearer ' + (a.oauth2 && a.oauth2.scope ? '<access_token>' : '<access_token>'),
     ]);
   else if (a.type === 'basic')
-    headers.push(['Authorization', 'Basic ' + btoa(`${sub(a.basic.user)}:${sub(a.basic.pass)}`)]);
+    headers.push([
+      'Authorization',
+      'Basic ' + b64Utf8(`${sub(a.basic.user)}:${sub(a.basic.pass)}`),
+    ]);
   else if (a.type === 'apiKey' && a.apiKey.placement === 'header')
     headers.push([sub(a.apiKey.key), sub(a.apiKey.value)]);
   else if (a.type === 'aws')
@@ -101,11 +104,25 @@ function safeJson(s: string): any {
     return null;
   }
 }
+function parseJsonLiteral(s: string): { ok: true; value: any } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(s) };
+  } catch {
+    return { ok: false };
+  }
+}
+function b64Utf8(str: string): string {
+  try {
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch {
+    return btoa(str);
+  }
+}
 function qShell(s: unknown): string {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 function qPy(s: unknown): string {
-  return `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return JSON.stringify(String(s));
 }
 
 // ── Generators ─────────────────────────────────────────────────────────────
@@ -117,12 +134,16 @@ function genCurl(e: QaEffectiveReq) {
 }
 function genPython(e: QaEffectiveReq) {
   const hdr = e.headers.map(([k, v]) => `    ${qPy(k)}: ${qPy(v)},`).join('\n');
-  const out = [`import requests`, ``, `url = ${qPy(e.url)}`];
+  const isJsonBody = e.body != null && (e.bodyMode === 'json' || e.bodyMode === 'graphql');
+  const parsedJson = isJsonBody ? parseJsonLiteral(e.body!) : null;
+  const out =
+    parsedJson && parsedJson.ok ? [`import json`, `import requests`] : [`import requests`];
+  out.push(``, `url = ${qPy(e.url)}`);
   if (e.headers.length) out.push(`headers = {\n${hdr}\n}`);
   let dataArg = '';
   if (e.body != null) {
-    if (e.bodyMode === 'json' || e.bodyMode === 'graphql') {
-      out.push(`payload = ${e.body}`);
+    if (parsedJson && parsedJson.ok) {
+      out.push(`payload = json.loads(${qPy(e.body)})`);
       dataArg = ', json=payload';
     } else {
       out.push(`payload = ${qPy(e.body)}`);
@@ -146,20 +167,34 @@ function genFetch(e: QaEffectiveReq) {
     opts.push(`  headers: {\n${hdr}\n  },`);
   }
   if (e.body != null) {
-    if (e.bodyMode === 'json' || e.bodyMode === 'graphql')
-      opts.push(`  body: JSON.stringify(${e.body}),`);
-    else opts.push(`  body: ${JSON.stringify(e.body)},`);
+    if (e.bodyMode === 'json' || e.bodyMode === 'graphql') {
+      const parsedJson = parseJsonLiteral(e.body);
+      opts.push(
+        parsedJson.ok ? `  body: JSON.stringify(${e.body}),` : `  body: ${JSON.stringify(e.body)},`
+      );
+    } else {
+      opts.push(`  body: ${JSON.stringify(e.body)},`);
+    }
   }
   return `const res = await fetch(${JSON.stringify(e.url)}, {\n${opts.join('\n')}\n});\nconst data = await res.json();\nconsole.log(res.status, data);`;
 }
 function genHttpie(e: QaEffectiveReq) {
   const parts = [`http ${e.method} ${qShell(e.url)}`];
   e.headers.forEach(([k, v]) => parts.push(`${qShell(`${k}:${v}`)}`));
-  if (e.body != null && (e.bodyMode === 'json' || e.bodyMode === 'graphql')) {
-    try {
-      const o = JSON.parse(e.body);
-      Object.entries(o).forEach(([k, v]) => parts.push(`${k}:=${qShell(JSON.stringify(v))}`));
-    } catch {
+  if (e.body != null) {
+    if (e.bodyMode === 'json' || e.bodyMode === 'graphql') {
+      const parsedJson = parseJsonLiteral(e.body);
+      if (parsedJson.ok) {
+        const o = parsedJson.value;
+        if (o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length) {
+          Object.entries(o).forEach(([k, v]) => parts.push(qShell(`${k}:=${JSON.stringify(v)}`)));
+        } else {
+          parts.push(`<<< ${qShell(e.body)}`);
+        }
+      } else {
+        parts.push(`<<< ${qShell(e.body)}`);
+      }
+    } else {
       parts.push(`<<< ${qShell(e.body)}`);
     }
   }
