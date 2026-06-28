@@ -6,11 +6,38 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoPackage = JSON.parse(fs.readFileSync(path.join(repo, 'package.json'), 'utf8'));
 const exe = process.platform === 'win32' ? 'qa-touchstone-ci.exe' : 'qa-touchstone-ci';
 const defaultBin = path.join(repo, 'src-tauri/target/debug', exe);
+const npxUnderTest = process.env.QA_TOUCHSTONE_CI_NPX_UNDER_TEST;
+const pathUnderTest = process.env.QA_TOUCHSTONE_CI_PATH_UNDER_TEST === '1';
+const commandTimeoutMs =
+  Number.parseInt(process.env.QA_TOUCHSTONE_CI_COMMAND_TIMEOUT_MS || '', 10) || 180_000;
+const realK6Bin = resolveToolPath(
+  process.env.QA_TOUCHSTONE_CI_REAL_K6_BIN ||
+    (process.env.QA_TOUCHSTONE_CI_TEST_REAL_K6 === '1' ? 'k6' : '')
+);
 const qtcBin = process.env.QA_TOUCHSTONE_CI_UNDER_TEST
   ? path.resolve(process.env.QA_TOUCHSTONE_CI_UNDER_TEST)
   : defaultBin;
+const qtcCommand = (() => {
+  if (npxUnderTest) {
+    return {
+      command: 'npx',
+      args: ['--yes', `qa-touchstone-ci@${npxUnderTest.replace(/^v/, '')}`],
+      label: `npx qa-touchstone-ci@${npxUnderTest.replace(/^v/, '')}`,
+    };
+  }
+  if (pathUnderTest) {
+    return { command: 'qa-touchstone-ci', args: [], label: 'qa-touchstone-ci from PATH' };
+  }
+  return { command: qtcBin, args: [], label: qtcBin };
+})();
+const expectedVersion = (
+  process.env.QA_TOUCHSTONE_CI_EXPECT_VERSION ||
+  npxUnderTest ||
+  repoPackage.version
+).replace(/^v/, '');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-headless-functional-'));
 const reports = path.join(tmp, 'reports');
 fs.mkdirSync(reports, { recursive: true });
@@ -36,6 +63,13 @@ function readJson(target) {
   return JSON.parse(fs.readFileSync(target, 'utf8'));
 }
 
+function resolveToolPath(tool) {
+  if (!tool) return '';
+  if (path.isAbsolute(tool)) return tool;
+  if (tool.includes('/') || tool.includes('\\')) return path.resolve(repo, tool);
+  return tool;
+}
+
 function pass(name) {
   passes.push(name);
   fs.appendFileSync(file('summary.txt'), `PASS ${name}\n`);
@@ -47,30 +81,60 @@ function runRaw(name, command, args, options = {}) {
     env: { ...process.env, ...(options.env || {}) },
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024,
+    timeout: options.timeout ?? commandTimeoutMs,
+    killSignal: 'SIGTERM',
   });
   if (options.stdout) fs.writeFileSync(options.stdout, result.stdout || '');
   if (options.stderr) fs.writeFileSync(options.stderr, result.stderr || '');
-  const expected = options.expected ?? 0;
-  if (result.status !== expected) {
+  const expected = Array.isArray(options.expected) ? options.expected : [options.expected ?? 0];
+  if (!expected.includes(result.status)) {
+    const processError = result.error ? `error: ${result.error.message}\n` : '';
     throw new Error(
-      `${name} expected exit ${expected}, got ${result.status}\n` +
-        `command: ${command} ${args.join(' ')}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+      `${name} expected exit ${expected.join(' or ')}, got ${result.status} signal ${
+        result.signal || 'none'
+      }\n` +
+        `${processError}command: ${command} ${args.join(' ')}\nstdout:\n${
+          result.stdout
+        }\nstderr:\n${result.stderr}`
     );
   }
   return result;
 }
 
+function qtc(name, args, options = {}) {
+  return runRaw(name, qtcCommand.command, [...qtcCommand.args, ...args], {
+    cwd: tmp,
+    env: { ...qtcEnv, ...(options.env || {}) },
+    ...options,
+  });
+}
+
 function ensureLocalBinary() {
-  if (process.env.QA_TOUCHSTONE_CI_UNDER_TEST || process.env.QA_TOUCHSTONE_CI_SKIP_BUILD === '1') {
+  if (
+    npxUnderTest ||
+    pathUnderTest ||
+    process.env.QA_TOUCHSTONE_CI_UNDER_TEST ||
+    process.env.QA_TOUCHSTONE_CI_SKIP_BUILD === '1'
+  ) {
     return;
   }
   runRaw('cargo-build-cli', 'cargo', ['build', '--manifest-path', 'src-tauri/cli/Cargo.toml']);
+}
+
+function parseVersionOutput(stdout) {
+  const trimmed = stdout.trim();
+  const match = trimmed.match(
+    /^qa-touchstone-ci\s+(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/
+  );
+  if (!match) throw new Error(`version output has unexpected format: ${trimmed}`);
+  return match[1];
 }
 
 async function startServer() {
   const serverCode = String.raw`
 const http = require('node:http');
 const basic = 'Basic ' + Buffer.from('robot:p@ss').toString('base64');
+let schemaHits = 0;
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   const send = (status, body) => {
@@ -96,6 +160,21 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url.pathname.startsWith('/row/')) return send(200, { row: url.pathname.slice('/row/'.length) });
   if (req.method === 'GET' && url.pathname.startsWith('/orders/')) return send(200, { order: url.pathname.slice('/orders/'.length) });
   if (url.pathname === '/leaky') return send(200, { leaky: true });
+  if (req.method === 'GET' && url.pathname === '/admin/secret') return send(200, { secret: true });
+  if (req.method === 'POST' && url.pathname === '/login') return send(200, { login: true });
+  if (req.method === 'GET' && url.pathname === '/oracle') {
+    return send(200, { token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ4In0.abcdEFsig' });
+  }
+  if (req.method === 'GET' && url.pathname === '/schema') {
+    schemaHits += 1;
+    if (schemaHits === 1) return send(200, { id: 1, name: 'ok' });
+    return send(200, { id: 'wrong', extra: true });
+  }
+  if (req.method === 'GET' && url.pathname === '/items') {
+    const id = url.searchParams.get('id') || '';
+    if (id === 'A'.repeat(8192)) return send(500, { error: 'long id exploded' });
+    return send(200, { ok: true, id });
+  }
   if (req.method === 'POST' && url.pathname === '/perf') {
     req.resume();
     return send(200, { perf: true });
@@ -242,6 +321,20 @@ function makeConfigs(base) {
     requests: [{ id: 'health', method: 'GET', url: '{{baseUrl}}/health' }],
   });
 
+  const sendDown = writeJson('send-down.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [
+      {
+        id: 'down',
+        method: 'GET',
+        url: 'http://127.0.0.1:1/down',
+        assertions: [{ type: 'status', op: 'eq', value: 200 }],
+      },
+    ],
+  });
+
   const openapi = writeJson('openapi.json', {
     openapi: '3.0.0',
     info: { title: 'Functional API', version: '1.0.0' },
@@ -258,7 +351,189 @@ function makeConfigs(base) {
     },
   });
 
-  return { fullConfig, scanClean, scanVuln, missingEnv, openapi };
+  const postman = writeJson('postman.json', {
+    info: {
+      name: 'Functional Postman',
+      _postman_id: 'functional-postman',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+    },
+    item: [
+      {
+        name: 'Health',
+        request: {
+          method: 'GET',
+          url: `${base}/health`,
+          header: [{ key: 'Accept', value: 'application/json', disabled: false }],
+        },
+      },
+      {
+        name: 'Create Perf',
+        request: {
+          method: 'POST',
+          url: { raw: `${base}/perf`, path: ['perf'], query: [] },
+          header: [{ key: 'Content-Type', value: 'application/json', disabled: false }],
+          body: { mode: 'raw', raw: '{"ok":true}' },
+        },
+      },
+    ],
+  });
+
+  const scanBola = writeJson('scan-bola.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [
+      { id: 'alice', auth: { type: 'none' } },
+      { id: 'bob', auth: { type: 'none' } },
+    ],
+    requests: [{ id: 'getOrder', method: 'GET', url: '{{baseUrl}}/orders/PLACEHOLDER' }],
+    security: {
+      bola: {
+        tests: [
+          {
+            id: 'order-owner',
+            request: 'getOrder',
+            idLocation: { kind: 'path', index: 1 },
+            idValues: { alice: 'ordA', bob: 'ordB' },
+          },
+        ],
+      },
+    },
+  });
+
+  const scanBfla = writeJson('scan-bfla.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [
+      { id: 'admin', auth: { type: 'bearer', token: 'ADMIN-TOK' }, privileged: true },
+      { id: 'anon', auth: { type: 'none' } },
+    ],
+    requests: [
+      { id: 'getSecret', method: 'GET', url: '{{baseUrl}}/admin/secret', privileged: true },
+    ],
+    security: { bfla: {} },
+  });
+
+  const scanRateLimit = writeJson('scan-ratelimit.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [{ id: 'login', method: 'POST', url: '{{baseUrl}}/login' }],
+    security: {
+      rateLimit: {
+        tests: [
+          {
+            id: 'login-burst',
+            request: 'login',
+            identity: 'anon',
+            n: 6,
+            concurrency: 2,
+            sensitivity: 'sensitive',
+          },
+        ],
+      },
+    },
+  });
+
+  const scanOracle = writeJson('scan-oracle.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [{ id: 'oracle-leak', method: 'GET', url: '{{baseUrl}}/oracle' }],
+    security: {
+      matrix: { endpoints: ['oracle-leak'], expect: { 'oracle-leak': { anon: 'allow' } } },
+    },
+  });
+
+  const scanFuzz = writeJson('scan-fuzz.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [
+      {
+        id: 'getItem',
+        method: 'GET',
+        url: '{{baseUrl}}/items',
+        query: [{ key: 'id', value: '1' }],
+      },
+    ],
+    security: {
+      fuzz: {
+        targets: [
+          {
+            request: 'getItem',
+            seeds: [{ name: 'id', location: { kind: 'query', key: 'id' } }],
+          },
+        ],
+        maxSeedsPerTarget: 1,
+      },
+    },
+  });
+
+  const scanNoSecurity = writeJson('scan-no-security.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [{ id: 'health', method: 'GET', url: '{{baseUrl}}/health' }],
+  });
+
+  const scanError = writeJson('scan-error.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'anon', auth: { type: 'none' } }],
+    requests: [{ id: 'down', method: 'GET', url: 'http://127.0.0.1:1/down' }],
+    security: { matrix: { endpoints: ['down'], expect: { down: { anon: 'allow' } } } },
+  });
+
+  const scanSchema = writeJson('scan-schema.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [
+      { id: 'first', auth: { type: 'none' } },
+      { id: 'second', auth: { type: 'none' } },
+    ],
+    requests: [{ id: 'schema-drift', method: 'GET', url: '{{baseUrl}}/schema' }],
+    security: {
+      matrix: {
+        endpoints: ['schema-drift'],
+        expect: { 'schema-drift': { first: 'allow', second: 'allow' } },
+      },
+      oracles: { sensitive: false, schema: true },
+    },
+  });
+
+  const scanDrift = writeJson('scan-drift.json', {
+    version: 1,
+    environments: [{ name: 'staging', variables: { baseUrl: base } }],
+    identities: [{ id: 'lp', auth: { type: 'bearer', token: 'SUPERSECRET' } }],
+    requests: [
+      {
+        id: 'leaky',
+        method: 'GET',
+        url: '{{baseUrl}}/leaky',
+        query: [{ key: 'scope', value: 'changed' }],
+      },
+    ],
+    security: { matrix: { endpoints: ['leaky'], expect: { leaky: { lp: 'deny' } } } },
+  });
+
+  return {
+    fullConfig,
+    scanClean,
+    scanVuln,
+    missingEnv,
+    sendDown,
+    openapi,
+    postman,
+    scanBola,
+    scanBfla,
+    scanRateLimit,
+    scanOracle,
+    scanFuzz,
+    scanNoSecurity,
+    scanError,
+    scanSchema,
+    scanDrift,
+  };
 }
 
 function assertReportFiles(scanName) {
@@ -291,7 +566,9 @@ function runOptionalReleaseInstallerChecks(base, scanClean) {
         stdout: file('npx-version.txt'),
       }
     ).stdout;
-    if (!out.includes(npxVersion.replace(/^v/, ''))) throw new Error('npx version mismatch');
+    if (parseVersionOutput(out) !== npxVersion.replace(/^v/, '')) {
+      throw new Error('npx version mismatch');
+    }
     pass(`npx ${npxVersion} --version`);
   }
 
@@ -383,31 +660,100 @@ node "$GITHUB_ACTION_PATH/../packages/qa-touchstone-ci/bin/qa-touchstone-ci.mjs"
   fs.writeFileSync(file('base.txt'), `${base}\n`);
 }
 
+function createFakeK6() {
+  if (process.platform === 'win32') {
+    return write(
+      'fake-k6.cmd',
+      [
+        '@echo off',
+        'setlocal EnableDelayedExpansion',
+        'set "summary="',
+        'set "last="',
+        ':loop',
+        'if "%~1"=="" goto done',
+        'if "%~1"=="--summary-export" (',
+        '  shift',
+        '  set "summary=%~1"',
+        ')',
+        'set "last=%~1"',
+        'shift',
+        'goto loop',
+        ':done',
+        'if not "%summary%"=="" > "%summary%" echo {"metrics":{"http_reqs":{"count":1}}}',
+        'echo fake k6 ran %last%',
+        'exit /b 0',
+        '',
+      ].join('\r\n')
+    );
+  }
+  const fakeK6 = write(
+    'fake-k6.sh',
+    `#!/bin/sh\nset -eu\nsummary=""\nlast=""\nwhile [ "$#" -gt 0 ]; do\n  if [ "$1" = "--summary-export" ]; then\n    shift\n    summary="$1"\n  fi\n  last="$1"\n  shift\ndone\nif [ -n "$summary" ]; then\n  printf '{"metrics":{"http_reqs":{"count":1}}}\\n' > "$summary"\nfi\nprintf 'fake k6 ran %s\\n' "$last"\nexit 0\n`
+  );
+  fs.chmodSync(fakeK6, 0o755);
+  return fakeK6;
+}
+
+const qtcEnv = {
+  HOME: path.join(tmp, 'home'),
+  npm_config_cache: path.join(tmp, 'npm-cache'),
+  QA_TOUCHSTONE_CI_CACHE_DIR: path.join(tmp, 'qtc-cache'),
+  API_TOKEN: 'functional-token',
+  HEADER_KEY: 'header-secret',
+  QUERY_KEY: 'query-secret',
+  BASIC_USER: 'robot',
+  BASIC_PASS: 'p@ss',
+};
+
 try {
   ensureLocalBinary();
   const base = await startServer();
-  const { fullConfig, scanClean, scanVuln, missingEnv, openapi } = makeConfigs(base);
-  const env = {
-    API_TOKEN: 'functional-token',
-    HEADER_KEY: 'header-secret',
-    QUERY_KEY: 'query-secret',
-    BASIC_USER: 'robot',
-    BASIC_PASS: 'p@ss',
-  };
-  const qtc = (name, args, options = {}) =>
-    runRaw(name, qtcBin, args, {
-      cwd: tmp,
-      env: { ...env, ...(options.env || {}) },
-      ...options,
-    });
+  const {
+    fullConfig,
+    scanClean,
+    scanVuln,
+    missingEnv,
+    sendDown,
+    openapi,
+    postman,
+    scanBola,
+    scanBfla,
+    scanRateLimit,
+    scanOracle,
+    scanFuzz,
+    scanNoSecurity,
+    scanError,
+    scanSchema,
+    scanDrift,
+  } = makeConfigs(base);
 
   const version = qtc('version', ['--version'], { stdout: file('version.txt') }).stdout;
-  if (!version.includes('qa-touchstone-ci')) throw new Error('version output missing binary name');
+  const actualVersion = parseVersionOutput(version);
+  if (actualVersion !== expectedVersion) {
+    throw new Error(`version output mismatch: expected ${expectedVersion}, got ${actualVersion}`);
+  }
   pass('version');
 
   qtc('import', ['import', '--input', openapi, '--base-url', base, '--out', file('imported.json')]);
   if (readJson(file('imported.json')).requests.length < 2) throw new Error('import output invalid');
   pass('import openapi');
+
+  qtc('import-postman', ['import', '--input', postman], { stdout: file('imported-postman.json') });
+  const postmanCfg = readJson(file('imported-postman.json'));
+  if (!postmanCfg.requests?.some((r) => r.method === 'POST') || !postmanCfg.identities?.length) {
+    throw new Error('Postman import output invalid');
+  }
+  pass('import postman stdout');
+
+  const invalidImport = writeJson('invalid-import.json', { something: 'else' });
+  qtc('import-invalid', ['import', '--input', invalidImport], {
+    expected: 2,
+    stderr: file('import-invalid.stderr'),
+  });
+  if (!fs.readFileSync(file('import-invalid.stderr'), 'utf8').includes('Unrecognized format')) {
+    throw new Error('invalid import did not fail with the expected message');
+  }
+  pass('import invalid exit 2');
 
   qtc('ping', ['ping', '--url', `${base}/health`], { stdout: file('ping.txt') });
   if (!fs.readFileSync(file('ping.txt'), 'utf8').includes('200'))
@@ -466,6 +812,75 @@ try {
     throw new Error('missing env did not fail closed');
   }
   pass('send missing env exit 2');
+
+  qtc(
+    'send-broken-status',
+    [
+      'send',
+      '--config',
+      fullConfig,
+      '--request',
+      'broken-status',
+      '--identity',
+      'api',
+      '--env',
+      'staging',
+      '--json',
+    ],
+    { expected: 4, stdout: file('send-broken-status.json') }
+  );
+  const brokenSend = readJson(file('send-broken-status.json'));
+  if (
+    brokenSend.success !== true ||
+    brokenSend.status !== 200 ||
+    !brokenSend.assertions?.some((a) => a.pass === false)
+  ) {
+    throw new Error('send assertion failure did not report expected JSON shape');
+  }
+  pass('send assertion failure exit 4');
+
+  qtc(
+    'send-health-human',
+    [
+      'send',
+      '--config',
+      fullConfig,
+      '--request',
+      'health',
+      '--identity',
+      'api',
+      '--env',
+      'staging',
+    ],
+    { stdout: file('send-health-human.txt') }
+  );
+  const humanSend = fs.readFileSync(file('send-health-human.txt'), 'utf8');
+  if (!humanSend.includes('GET') || !humanSend.includes('200')) {
+    throw new Error('send human output missing method/status');
+  }
+  pass('send human output');
+
+  qtc(
+    'send-runtime-error',
+    [
+      'send',
+      '--config',
+      sendDown,
+      '--request',
+      'down',
+      '--identity',
+      'anon',
+      '--env',
+      'staging',
+      '--json',
+    ],
+    { expected: 1, stdout: file('send-runtime-error.json') }
+  );
+  const runtimeSend = readJson(file('send-runtime-error.json'));
+  if (runtimeSend.success !== false || !runtimeSend.error) {
+    throw new Error('send runtime error did not report expected JSON shape');
+  }
+  pass('send runtime error exit 1');
 
   qtc(
     'run-smoke',
@@ -581,6 +996,35 @@ try {
   assertReportFiles('scan-clean');
   pass('scan clean reports');
 
+  qtc('scan-no-security', ['scan', '--config', scanNoSecurity, '--env', 'staging', '--json'], {
+    expected: 2,
+    stderr: file('scan-no-security.stderr'),
+  });
+  if (!fs.readFileSync(file('scan-no-security.stderr'), 'utf8').includes('no `security` block')) {
+    throw new Error('scan without security block did not fail closed');
+  }
+  pass('scan missing security exit 2');
+
+  qtc(
+    'scan-bad-fail-on',
+    ['scan', '--config', scanClean, '--env', 'staging', '--fail-on', 'urgent', '--json'],
+    { expected: 2, stderr: file('scan-bad-fail-on.stderr') }
+  );
+  if (!fs.readFileSync(file('scan-bad-fail-on.stderr'), 'utf8').includes('bad --fail-on')) {
+    throw new Error('scan bad --fail-on did not fail with expected message');
+  }
+  pass('scan bad fail-on exit 2');
+
+  qtc('scan-request-error', ['scan', '--config', scanError, '--env', 'staging', '--json'], {
+    expected: 1,
+    stdout: file('scan-request-error.json'),
+  });
+  const scanErr = readJson(file('scan-request-error.json'));
+  if (scanErr.ok !== false || scanErr.totals.errors < 1 || !scanErr.errors?.length) {
+    throw new Error('scan request error did not surface engine errors');
+  }
+  pass('scan request error exit 1');
+
   qtc(
     'scan-vuln',
     [
@@ -617,6 +1061,160 @@ try {
   }
   pass('scan vuln exit 3 reports redacted');
 
+  qtc(
+    'scan-engine-matrix',
+    ['scan', '--config', scanVuln, '--env', 'staging', '--engine', 'matrix', '--json'],
+    {
+      expected: 3,
+      stdout: file('scan-engine-matrix.json'),
+    }
+  );
+  const matrixOnly = readJson(file('scan-engine-matrix.json'));
+  if (!matrixOnly.findings.some((f) => f.rule_id === 'matrix.deny-bypass')) {
+    throw new Error('matrix engine filter did not run matrix');
+  }
+  pass('scan engine filter matrix');
+
+  const refusedBaseline = file('baseline-refused.json');
+  fs.writeFileSync(refusedBaseline, '');
+  qtc(
+    'scan-update-engine-refused',
+    [
+      'scan',
+      '--config',
+      scanVuln,
+      '--env',
+      'staging',
+      '--baseline',
+      refusedBaseline,
+      '--update-baseline',
+      '--engine',
+      'matrix',
+      '--json',
+    ],
+    { expected: 2, stderr: file('scan-update-engine-refused.stderr') }
+  );
+  if (
+    !fs
+      .readFileSync(file('scan-update-engine-refused.stderr'), 'utf8')
+      .includes('cannot be combined with --engine') ||
+    fs.readFileSync(refusedBaseline, 'utf8') !== ''
+  ) {
+    throw new Error('scan update-baseline engine guard failed');
+  }
+  pass('scan update-baseline refuses partial engine');
+
+  qtc(
+    'scan-bola',
+    ['scan', '--config', scanBola, '--env', 'staging', '--engine', 'bola', '--json'],
+    {
+      expected: 3,
+      stdout: file('scan-bola.json'),
+    }
+  );
+  const bolaScan = readJson(file('scan-bola.json'));
+  if (!bolaScan.findings.some((f) => f.rule_id === 'bola.cross-object')) {
+    throw new Error('BOLA scan did not find cross-object access');
+  }
+  if (JSON.stringify(bolaScan).includes('ordA') || JSON.stringify(bolaScan).includes('ordB')) {
+    throw new Error('BOLA id values leaked into report');
+  }
+  pass('scan bola engine');
+
+  qtc(
+    'scan-bfla',
+    ['scan', '--config', scanBfla, '--env', 'staging', '--engine', 'bfla', '--json'],
+    {
+      expected: 3,
+      stdout: file('scan-bfla.json'),
+    }
+  );
+  const bflaScan = readJson(file('scan-bfla.json'));
+  if (
+    !bflaScan.findings.some((f) => f.engine === 'bfla') ||
+    JSON.stringify(bflaScan).includes('ADMIN-TOK')
+  ) {
+    throw new Error('BFLA scan missing finding or leaked admin token');
+  }
+  pass('scan bfla engine');
+
+  qtc(
+    'scan-ratelimit',
+    ['scan', '--config', scanRateLimit, '--env', 'staging', '--engine', 'ratelimit', '--json'],
+    { expected: 3, stdout: file('scan-ratelimit.json') }
+  );
+  if (!readJson(file('scan-ratelimit.json')).findings.some((f) => f.rule_id === 'ratelimit.none')) {
+    throw new Error('rate-limit scan did not find missing throttling');
+  }
+  pass('scan ratelimit engine');
+
+  qtc('scan-oracle', ['scan', '--config', scanOracle, '--env', 'staging', '--json'], {
+    expected: 3,
+    stdout: file('scan-oracle.json'),
+  });
+  const oracleScan = readJson(file('scan-oracle.json'));
+  const jwt = oracleScan.findings.find((f) => f.rule_id === 'jwt');
+  if (!jwt || jwt.engine !== 'oracle' || JSON.stringify(oracleScan).includes('abcdEFsig')) {
+    throw new Error('oracle scan missing redacted JWT finding');
+  }
+  pass('scan oracle sensitive-data');
+
+  qtc(
+    'scan-schema',
+    ['scan', '--config', scanSchema, '--env', 'staging', '--fail-on', 'medium', '--json'],
+    { expected: 3, stdout: file('scan-schema.json') }
+  );
+  if (!readJson(file('scan-schema.json')).findings.some((f) => f.rule_id.startsWith('schema:'))) {
+    throw new Error('schema oracle scan did not find schema drift');
+  }
+  pass('scan oracle schema drift');
+
+  qtc(
+    'scan-fuzz',
+    ['scan', '--config', scanFuzz, '--env', 'staging', '--engine', 'fuzz', '--json'],
+    {
+      expected: 3,
+      stdout: file('scan-fuzz.json'),
+    }
+  );
+  if (!readJson(file('scan-fuzz.json')).findings.some((f) => f.rule_id === 'fuzz:server-error')) {
+    throw new Error('fuzz scan did not find server-error signal');
+  }
+  pass('scan fuzz engine');
+
+  const suppressedFp = scan.findings[0]?.fp;
+  if (!suppressedFp) throw new Error('scan vuln did not include a fingerprint for annotations');
+  const annotations = writeJson('annotations.json', {
+    fpVersion: 1,
+    records: { [suppressedFp]: { suppressed: true, suppressReason: 'accepted' } },
+  });
+  qtc(
+    'scan-annotations',
+    [
+      'scan',
+      '--config',
+      scanVuln,
+      '--env',
+      'staging',
+      '--annotations',
+      annotations,
+      '--junit',
+      file('scan-annotations.xml'),
+      '--sarif',
+      file('scan-annotations.sarif'),
+    ],
+    { stdout: file('scan-annotations.txt') }
+  );
+  const annotationsXml = fs.readFileSync(file('scan-annotations.xml'), 'utf8');
+  const annotationsSarif = fs.readFileSync(file('scan-annotations.sarif'), 'utf8');
+  if (!annotationsXml.includes('<skipped') || !annotationsSarif.includes('"suppressions"')) {
+    throw new Error('annotations did not suppress findings in reports');
+  }
+  if (annotationsXml.includes('SUPERSECRET') || annotationsSarif.includes('SUPERSECRET')) {
+    throw new Error('annotations reports leaked secret');
+  }
+  pass('scan annotations suppression');
+
   const baseline = file('security-baseline.json');
   fs.writeFileSync(baseline, '');
   qtc(
@@ -648,6 +1246,22 @@ try {
     throw new Error('secret leaked into baseline');
   pass('scan baseline new/update/carried redacted');
 
+  qtc(
+    'baseline-scope-drift',
+    ['scan', '--config', scanDrift, '--env', 'staging', '--baseline', baseline, '--json'],
+    {
+      expected: [0, 3],
+      stdout: file('baseline-scope-drift.json'),
+      stderr: file('baseline-scope-drift.stderr'),
+    }
+  );
+  if (
+    !fs.readFileSync(file('baseline-scope-drift.stderr'), 'utf8').includes('baseline scope differs')
+  ) {
+    throw new Error('baseline scope drift did not warn');
+  }
+  pass('scan baseline scope drift warning');
+
   qtc('bola-suggest', ['bola-suggest', '--config', fullConfig, '--env', 'staging', '--json'], {
     stdout: file('bola-suggest.json'),
   });
@@ -656,11 +1270,7 @@ try {
     throw new Error('bola suggest did not find candidate');
   pass('bola-suggest json');
 
-  const fakeK6 = write(
-    'fake-k6.sh',
-    `#!/bin/sh\nset -eu\nsummary=""\nlast=""\nwhile [ "$#" -gt 0 ]; do\n  if [ "$1" = "--summary-export" ]; then\n    shift\n    summary="$1"\n  fi\n  last="$1"\n  shift\ndone\nif [ -n "$summary" ]; then\n  printf '{"metrics":{"http_reqs":{"count":1}}}\\n' > "$summary"\nfi\nprintf 'fake k6 ran %s\\n' "$last"\nexit 0\n`
-  );
-  fs.chmodSync(fakeK6, 0o755);
+  const fakeK6 = createFakeK6();
   qtc(
     'perf',
     [
@@ -704,6 +1314,47 @@ try {
   }
   pass('perf fake k6 summary redacted json');
 
+  if (realK6Bin) {
+    qtc(
+      'perf-real-k6',
+      [
+        'perf',
+        '--config',
+        fullConfig,
+        '--request',
+        'perf-post',
+        '--identity',
+        'hkey',
+        '--env',
+        'staging',
+        '--collection',
+        'perf-suite',
+        '--stage',
+        '1s:1',
+        '--stage',
+        '1s:0',
+        '--k6-bin',
+        realK6Bin,
+        '--summary-out',
+        file('perf-real-summary.json'),
+        '--no-keepalive',
+        '--timeout-ms',
+        '5000',
+        '--json',
+      ],
+      { stdout: file('perf-real-k6.json'), timeout: 300_000 }
+    );
+    const realPerf = readJson(file('perf-real-k6.json'));
+    if (
+      !realPerf.ok ||
+      realPerf.k6ExitCode !== 0 ||
+      !fs.readFileSync(file('perf-real-summary.json'), 'utf8').includes('http_reqs')
+    ) {
+      throw new Error('perf real k6 smoke failed');
+    }
+    pass('perf real k6 optional');
+  }
+
   qtc(
     'perf-missing',
     [
@@ -730,7 +1381,7 @@ try {
 
   console.log('\nHEADLESS FUNCTIONAL SUMMARY');
   for (const name of passes) console.log(`PASS ${name}`);
-  console.log(`binary=${qtcBin}`);
+  console.log(`binary=${qtcCommand.label}`);
   console.log(`reports=${reports}`);
   console.log(`base=${base}`);
   console.log(`artifact count=${fs.readdirSync(reports).length}`);

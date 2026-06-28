@@ -49,6 +49,11 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
+      - name: Run headless functional test
+        env:
+          QA_TOUCHSTONE_CI_REAL_K6_BIN: src-tauri/resources/k6.exe
+        run: node scripts/headless-functional.mjs
+
   build:
     needs: test
     strategy:
@@ -179,6 +184,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
@@ -229,14 +239,96 @@ jobs:
           "ASSET=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
           "SHA_ASSET=$name.zip.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Functional test packaged headless CLI (Unix)
+        if: matrix.osName != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist-functional
+          mkdir -p dist-functional
+          tar -xzf "$ASSET" -C dist-functional
+          bin="$(find dist-functional -type f -name qa-touchstone-ci | head -n 1)"
+          if [[ -z "$bin" ]]; then
+            echo "::error::packaged qa-touchstone-ci binary not found"
+            exit 1
+          fi
+          QA_TOUCHSTONE_CI_UNDER_TEST="$PWD/$bin" \
+          QA_TOUCHSTONE_CI_SKIP_BUILD=1 \
+          QA_TOUCHSTONE_CI_EXPECT_VERSION="${GITHUB_REF_NAME#v}" \
+            node scripts/headless-functional.mjs
+
+      - name: Functional test packaged headless CLI (Windows)
+        if: matrix.osName == 'windows'
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force dist-functional -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path dist-functional | Out-Null
+          Expand-Archive -LiteralPath $env:ASSET -DestinationPath dist-functional -Force
+          $bin = Get-ChildItem dist-functional -Recurse -Filter qa-touchstone-ci.exe | Select-Object -First 1
+          if (-not $bin) { throw "packaged qa-touchstone-ci.exe binary not found" }
+          $env:QA_TOUCHSTONE_CI_UNDER_TEST = $bin.FullName
+          $env:QA_TOUCHSTONE_CI_SKIP_BUILD = '1'
+          $env:QA_TOUCHSTONE_CI_EXPECT_VERSION = "${{ github.ref_name }}" -replace '^v',''
+          node scripts/headless-functional.mjs
+
       - name: Upload headless CLI release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: gh release upload "${{ github.ref_name }}" "$ASSET" "$SHA_ASSET" --clobber
 
-  publish-npm:
+  headless-install-smoke:
     needs: headless-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+
+      - name: Install QA Touchstone CI from release asset
+        id: setup
+        uses: ./setup-ci
+        with:
+          version: ${{ github.ref_name }}
+
+      - name: Smoke setup-ci output path
+        env:
+          QTC_BIN: ${{ steps.setup.outputs.path }}
+          QTC_EXPECT_VERSION: ${{ github.ref_name }}
+        run: |
+          node -e '
+            const { spawnSync } = require("node:child_process");
+            const expected = process.env.QTC_EXPECT_VERSION.replace(/^v/, "");
+            const r = spawnSync(process.env.QTC_BIN, ["--version"], { encoding: "utf8" });
+            if (r.status !== 0) {
+              process.stderr.write(r.stderr || r.stdout || "qa-touchstone-ci --version failed");
+              process.exit(r.status || 1);
+            }
+            const m = r.stdout.trim().match(/^qa-touchstone-ci\s+(\S+)$/);
+            if (!m || m[1] !== expected) {
+              process.stderr.write(`version mismatch: expected ${expected}, got ${r.stdout}`);
+              process.exit(1);
+            }
+          '
+
+      - name: Functional test setup-ci PATH CLI
+        env:
+          QA_TOUCHSTONE_CI_PATH_UNDER_TEST: '1'
+          QA_TOUCHSTONE_CI_SKIP_BUILD: '1'
+          QA_TOUCHSTONE_CI_EXPECT_VERSION: ${{ github.ref_name }}
+        run: node scripts/headless-functional.mjs
+
+  publish-npm:
+    needs: headless-install-smoke
     if: ${{ vars.PUBLISH_NPM == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -266,3 +358,12 @@ jobs:
           cd packages/qa-touchstone-ci
           npm version "$version" --no-git-tag-version --allow-same-version
           npm publish --access public --provenance
+
+      - name: Functional test npx launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          QA_TOUCHSTONE_CI_NPX_UNDER_TEST="$version" \
+          QA_TOUCHSTONE_CI_EXPECT_VERSION="$version" \
+            node scripts/headless-functional.mjs
