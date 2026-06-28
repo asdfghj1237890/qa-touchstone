@@ -1,6 +1,6 @@
 {
   "name": "qa-touchstone",
-  "version": "0.22.2",
+  "version": "0.22.3",
   "private": true,
   "description": "A local-first, Postman-compatible desktop workspace for API QA — REST/GraphQL client, collection runner, k6 performance testing, security testing (RBAC/BOLA/rate-limit) with CI-ready reports, realtime (WS/SSE), and AI assistance.",
   "scripts": {
@@ -28,6 +28,7 @@
     "test:html": "vitest run --reporter=html",
     "test:html-view": "(npm run test:html || true) && node scripts/generate-test-index.js && npx vite preview --outDir src/__tests__/test-report --open",
     "test:coverage-view": "(npm run test:coverage || true) && npx vite preview --outDir src/__tests__/test-report/coverage --open",
+    "test:headless": "node scripts/headless-functional.mjs",
     "test:safe": "vitest run || true",
     "clean": "rm -rf node_modules/.cache && rm -rf build"
   },

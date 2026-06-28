@@ -83,6 +83,9 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace
 
+      - name: Run headless functional test
+        run: node scripts/headless-functional.mjs
+
       - name: Assert CLI does not link tauri or keyring
         run: |
           tree=$(cargo tree --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci -e normal)

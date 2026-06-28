@@ -100,11 +100,11 @@ struct RequestOut {
     note: Option<String>,
 }
 
-fn id_location_to_json(loc: &IdLocation) -> Value {
+fn redacted_id_location_to_json(loc: &IdLocation, red: &RedactionSet) -> Value {
     match loc {
         IdLocation::Path { index } => json!({ "kind": "path", "index": index }),
-        IdLocation::Query { key } => json!({ "kind": "query", "key": key }),
-        IdLocation::Body { path } => json!({ "kind": "body", "path": path }),
+        IdLocation::Query { key } => json!({ "kind": "query", "key": red.redact_str(key) }),
+        IdLocation::Body { path } => json!({ "kind": "body", "path": red.redact_str(path) }),
     }
 }
 
@@ -156,7 +156,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
         let candidates_out: Vec<CandidateOut> = candidates
             .iter()
             .map(|c| CandidateOut {
-                id_location: id_location_to_json(&c.id_location),
+                id_location: redacted_id_location_to_json(&c.id_location, &red),
                 value: red.redact_str(&c.value),
                 confidence: c.confidence.clone(),
                 why: red.redact_str(&c.why),
@@ -168,12 +168,12 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
             let id_values: serde_json::Map<String, Value> = cfg
                 .identities
                 .iter()
-                .map(|i| (i.id.clone(), json!("")))
+                .map(|i| (red.redact_str(&i.id), json!("")))
                 .collect();
             json!({
-                "id": format!("{}-bola", req.id),
-                "request": req.id,
-                "idLocation": id_location_to_json(&top.id_location),
+                "id": red.redact_str(&format!("{}-bola", req.id)),
+                "request": red.redact_str(&req.id),
+                "idLocation": redacted_id_location_to_json(&top.id_location, &red),
                 "idValues": id_values,
                 "negativeControl": true,
             })
@@ -186,7 +186,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
         };
 
         results.push(RequestOut {
-            request: req.id.clone(),
+            request: red.redact_str(&req.id),
             candidates: candidates_out,
             stub,
             note,
@@ -195,10 +195,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
 
     // Output: JSON or human-readable.
     if use_json {
-        println!(
-            "{}",
-            red.redact_str(&serde_json::to_string(&results).unwrap())
-        );
+        println!("{}", serde_json::to_string(&results).unwrap());
     } else {
         for r in &results {
             println!("request: {}", red.redact_str(&r.request));
@@ -220,7 +217,7 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
                 if let Some(stub) = &r.stub {
                     println!(
                         "  stub: {}",
-                        red.redact_str(&serde_json::to_string_pretty(stub).unwrap())
+                        serde_json::to_string_pretty(stub).unwrap()
                     );
                 }
             }

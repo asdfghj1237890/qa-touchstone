@@ -211,3 +211,36 @@ fn bola_suggest_redacts_auth_secret() {
         "auth secret must not appear in output"
     );
 }
+
+#[test]
+fn bola_suggest_json_schema_survives_short_basic_secret() {
+    // Regression: redacting the already-serialized JSON string let a one-character
+    // basic username (`u`) corrupt fixed schema keys like `request`, `stub`, and `value`.
+    let cfg_json = r#"{
+      "version": 1, "environments": [], "requests": [
+        {"id": "getOrder", "method": "GET", "url": "https://api.test/orders/42"}
+      ],
+      "identities": [{"id": "basic", "auth": {"type": "basic", "username": "u", "password": "pw_secret_42"}}]
+    }"#;
+    let cfg = write_temp("short_basic_secret.json", cfg_json);
+    let out = bin()
+        .args(["bola-suggest", "--config", cfg.to_str().unwrap(), "--json"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("req***REDACTED***est"),
+        "fixed JSON keys must not be redacted: {stdout}"
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("output must remain valid JSON");
+    let arr = parsed.as_array().expect("top level is array");
+    let order = arr.iter().find(|r| r["request"] == "getOrder").unwrap();
+    assert!(order["candidates"].is_array(), "schema key survives");
+    assert!(order["stub"].is_object(), "stub key survives");
+    assert!(
+        !stdout.contains("pw_secret_42"),
+        "basic password must still be redacted"
+    );
+}

@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "qa-touchstone"
-version = "0.22.2"
+version = "0.22.3"
 description = "QA Touchstone"
 edition = "2021"
 
