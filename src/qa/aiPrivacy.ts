@@ -500,6 +500,46 @@ export const AI_KINDS: Record<string, AiKind> = {
       ].join('\n');
     },
   },
+  'batch-response-review': {
+    redact(p, ctx) {
+      const input = (p.input || []).map((it: any) => {
+        const bodyText =
+          ctx.mode === 'full'
+            ? it.body == null
+              ? '(no body)'
+              : JSON.stringify(it.body).slice(0, 1200)
+            : bodyStrFor(redactBody(it.body, it.headers));
+        return {
+          i: it.i,
+          engine: it.engine,
+          method: it.method,
+          path: ctx.mode === 'full' ? it.path : redactUrlForAI(String(it.path || '')),
+          identity: ctx.mode === 'full' ? it.identity : redactText(it.identity || '', ctx.scrubber),
+          status: it.status,
+          statusText: it.statusText,
+          time: it.time,
+          verdict: it.verdict,
+          expected:
+            ctx.mode === 'full'
+              ? it.expected || []
+              : (it.expected || []).map((x: any) => redactText(x, ctx.scrubber)),
+          bodyText,
+        };
+      });
+      return { input };
+    },
+    buildPrompt(r) {
+      return (
+        'You are a senior QA engineer reviewing a batch of API responses. ' +
+        'Find responses that look semantically wrong, suspicious, inconsistent with expectations, or likely security/reliability bugs. ' +
+        'Group related responses and ignore clean responses. ' +
+        'Return ONLY a JSON object: {"headline": string, "items": [{"title": string, "priority": "p1"|"p2"|"p3", "rationale": string, "responseIndexes": number[], "likelyBug": boolean}]}. ' +
+        'Reference responses only by their `i` index. Never invent responses.\n\n' +
+        'Responses:\n' +
+        JSON.stringify(r.input, null, 2)
+      );
+    },
+  },
   'sensitive-scan': {
     redact(p, ctx) {
       if (ctx.mode === 'full') {

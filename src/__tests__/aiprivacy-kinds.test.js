@@ -55,6 +55,32 @@ describe('AI_KINDS testgen / triage / sensitive-scan', () => {
     );
     expect(p).not.toContain('a@b.com');
   });
+  it('batch-response-review redacts host and body values', () => {
+    const p = AI_KINDS['batch-response-review'].buildPrompt(
+      AI_KINDS['batch-response-review'].redact(
+        {
+          input: [
+            {
+              i: 0,
+              engine: 'matrix',
+              method: 'GET',
+              path: 'https://api.acme.com/users/123',
+              identity: 'alice@example.com',
+              status: 200,
+              body: { email: 'a@b.com' },
+              headers: {},
+              expected: ['user email a@b.com should not leak'],
+            },
+          ],
+        },
+        ctxR
+      )
+    );
+    expect(p).not.toContain('api.acme.com');
+    expect(p).not.toContain('alice@example.com');
+    expect(p).not.toContain('a@b.com');
+    expect(p).toContain('/users/{id}');
+  });
   it('sensitive-scan redacted sends structure (keys) not values', () => {
     const p = AI_KINDS['sensitive-scan'].buildPrompt(
       AI_KINDS['sensitive-scan'].redact({ body: { ssn: '123-45-6789' }, headers: {} }, ctxR)

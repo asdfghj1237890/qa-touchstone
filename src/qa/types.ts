@@ -45,9 +45,10 @@ export type FindingRef = {
   testId?: string;
   attackerId?: string;
   ownerId?: string;
+  seedName?: string;
 };
 
-export type EngineId = 'matrix' | 'bola' | 'ratelimit';
+export type EngineId = 'matrix' | 'conformance' | 'bfla' | 'bola' | 'fuzz' | 'ratelimit';
 
 /** raw 證據的 request 摘要（transient，never persisted）。 */
 export type RawRequest = {
@@ -409,6 +410,61 @@ export type RateLimitResult = {
   severity?: Severity | null;
   finding?: Finding | null;
   stats?: BurstStats | null;
+};
+
+// ── schema conformance / fuzz / BFLA suite results ──────────────────────────
+export type ConformanceTest = {
+  id: string;
+  reqId: string;
+  method: string;
+  path: string;
+  schema: unknown;
+  identityId?: string;
+};
+
+export type ConformanceResult = {
+  test: ConformanceTest;
+  identity?: Identity | null;
+  status: number | null;
+  response: QaResponse | null;
+  findings: Finding[];
+  error: string | null;
+};
+
+export type BflaResult = {
+  endpoint: Endpoint;
+  identity: Identity;
+  status: number | null;
+  verdict: Verdict;
+  severity: Severity | null;
+  finding: Finding | null;
+  response: QaResponse | null;
+  error: string | null;
+};
+
+export type FuzzLocation =
+  | { kind: 'path'; index: number }
+  | { kind: 'query'; key: string }
+  | { kind: 'body'; path: string };
+
+export type FuzzSeed = {
+  name: string;
+  location: FuzzLocation;
+  value?: string;
+};
+
+export type FuzzSuitePlan = {
+  id: string;
+  reqId: string;
+  method: string;
+  path: string;
+  seeds: FuzzSeed[];
+};
+
+export type FuzzSuiteResult = {
+  plan: FuzzSuitePlan;
+  ran: number;
+  findings: Finding[];
 };
 
 // ── evidence artifact（mask-by-default）──────────────────────────────────────

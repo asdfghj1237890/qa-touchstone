@@ -112,6 +112,58 @@ describe('absolute-URL imports stay callable', () => {
     ]);
   });
 
+  it('qaParseImport captures Swagger 2 response schemas', () => {
+    const spec = {
+      swagger: '2.0',
+      info: { title: 'Legacy Pets', version: '1.0.0' },
+      host: 'api.example.test',
+      basePath: '/v1',
+      schemes: ['https'],
+      paths: {
+        '/pets': {
+          get: {
+            tags: ['pets'],
+            summary: 'List pets',
+            responses: {
+              200: {
+                description: 'OK',
+                schema: { type: 'array', items: { $ref: '#/definitions/Pet' } },
+              },
+            },
+          },
+        },
+      },
+      definitions: {
+        Pet: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'integer' },
+            name: { type: 'string' },
+          },
+        },
+      },
+    };
+
+    const parsed = qaParseImport(JSON.stringify(spec));
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.format).toBe('Swagger 2.0');
+    const entry = parsed.collection.folders[0].requests[0];
+    const schemas = parsed.details[entry.id].responseSchemas;
+    expect(schemas['200']).toMatchObject({
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'integer' },
+          name: { type: 'string' },
+        },
+      },
+    });
+    expect(parsed.details[entry.id].responseSchema).toEqual(schemas['200']);
+  });
+
   it('buildPayload runs an absolute URL as-is (ignores env base)', () => {
     const payload = buildPayload(
       baseReq('https://catfact.ninja/fact'),

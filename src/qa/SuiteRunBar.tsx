@@ -7,7 +7,7 @@ import type { EngineId, EngineRunSummary, ReportRedaction } from './types';
 
 const { useState: useS } = React;
 
-const ORDER: EngineId[] = ['matrix', 'bola', 'ratelimit'];
+const ORDER: EngineId[] = ['matrix', 'conformance', 'bfla', 'bola', 'fuzz', 'ratelimit'];
 
 /** 報告匯出格式。 */
 export type ReportFormat = 'json' | 'html' | 'junit' | 'sarif';

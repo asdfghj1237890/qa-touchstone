@@ -34,6 +34,8 @@ export interface QaImportDetail {
   headers: Array<{ key: string; value: string; on: boolean }>;
   body: string | null;
   auth: string;
+  responseSchema?: any;
+  responseSchemas?: Record<string, any>;
 }
 
 /** 匯入請求的合成回應（canned fallback 用）。 */
@@ -221,6 +223,74 @@ function schemaStub(s: any): any {
   }
   return {};
 }
+
+function resolveRef(root: any, ref: string): any {
+  if (!/^#\//.test(ref || '')) return null;
+  return ref
+    .slice(2)
+    .split('/')
+    .map((p) => p.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce((cur, part) => (cur && typeof cur === 'object' ? cur[part] : null), root);
+}
+
+function resolveSchema(s: any, root: any, seen = new Set<string>()): any {
+  if (!s || typeof s !== 'object') return s;
+  if (s.$ref) {
+    const ref = String(s.$ref);
+    if (seen.has(ref)) return {};
+    seen.add(ref);
+    return resolveSchema(resolveRef(root, ref), root, seen);
+  }
+  if (Array.isArray(s.allOf)) {
+    const merged = s.allOf
+      .map((x: any) => resolveSchema(x, root, seen))
+      .reduce(
+        (acc: any, cur: any) => ({
+          ...acc,
+          ...cur,
+          properties: {
+            ...(acc.properties || {}),
+            ...(cur && cur.properties ? cur.properties : {}),
+          },
+          required: [...new Set([...(acc.required || []), ...((cur && cur.required) || [])])],
+        }),
+        {}
+      );
+    return { ...s, ...merged, allOf: undefined };
+  }
+  if (Array.isArray(s.oneOf) && s.oneOf[0]) return resolveSchema(s.oneOf[0], root, seen);
+  if (Array.isArray(s.anyOf) && s.anyOf[0]) return resolveSchema(s.anyOf[0], root, seen);
+  const out: any = { ...s };
+  if (out.properties) {
+    out.properties = Object.fromEntries(
+      Object.entries(out.properties).map(([k, v]) => [k, resolveSchema(v, root, new Set(seen))])
+    );
+  }
+  if (out.items) out.items = resolveSchema(out.items, root, new Set(seen));
+  return out;
+}
+
+function responseSchemasFor(op: any, root: any): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [status, resp] of Object.entries((op && op.responses) || {}) as Array<[string, any]>) {
+    const content = resp && resp.content;
+    const json = content && (content['application/json'] || content['application/*+json']);
+    if (json && json.schema) out[status] = resolveSchema(json.schema, root);
+    else if (resp && resp.schema) out[status] = resolveSchema(resp.schema, root);
+  }
+  return out;
+}
+
+function preferredResponseSchema(schemas: Record<string, any>): any {
+  for (const code of ['200', '201', '202', '204', 'default']) {
+    if (schemas[code]) return schemas[code];
+  }
+  const first2xx = Object.keys(schemas)
+    .sort()
+    .find((code) => /^2\d\d$/.test(code));
+  return first2xx ? schemas[first2xx] : null;
+}
+
 function parseOpenApi(obj: any): QaImportParsed {
   const collId = qaUid('imp');
   const byTag: Record<string, QaImportRequestMeta[]> = {};
@@ -248,7 +318,16 @@ function parseOpenApi(obj: any): QaImportParsed {
       if (ex) body = JSON.stringify(ex, null, 2);
       else if (rb && (rb['application/json'] || {}).schema)
         body = JSON.stringify(schemaStub(rb['application/json'].schema), null, 2);
-      details[id] = { params, headers, body, auth: op.security ? 'bearer' : 'none' };
+      const responseSchemas = responseSchemasFor(op, obj);
+      const responseSchema = preferredResponseSchema(responseSchemas);
+      details[id] = {
+        params,
+        headers,
+        body,
+        auth: op.security ? 'bearer' : 'none',
+        responseSchemas,
+        responseSchema,
+      };
       responses[id] = synthResponse(method);
       const tag = (op.tags && op.tags[0]) || 'default';
       (byTag[tag] = byTag[tag] || []).push({

@@ -296,6 +296,11 @@ const SARIF_RULE_META: Record<
     short: 'Response value does not match the declared format',
     tags: ['quality', 'reliability'],
   },
+  'schema-conformance:summary': {
+    name: 'SchemaConformanceSummary',
+    short: 'Schema conformance violations were capped for a large response',
+    tags: ['quality', 'reliability'],
+  },
   'object-authz': {
     name: 'BrokenObjectLevelAuthorization',
     short: 'BOLA/IDOR: an identity reached another object owner’s data',

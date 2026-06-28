@@ -35,14 +35,21 @@ import {
   worstSeverity,
   SEVERITY_ORDER,
   DEFAULT_ORACLE_CONFIG,
+  walkJson,
 } from './oracles';
+import { conformanceFindings } from './schemaConformance';
 import { BolaPanel } from './BolaPanel';
 import { runBola, applyIdLocation } from './bola';
 import type { BolaRunner } from './bola';
+import { bflaPlan, runBfla } from './bfla';
+import type { BflaRunner } from './bfla';
+import { FUZZ_PAYLOADS, runFuzz } from './fuzz';
 import { RateLimitPanel } from './RateLimitPanel';
 import type { RateLimitResultsMap } from './RateLimitPanel';
 import { runBurst, detectThrottleSignal, classifyRateLimit, rlFindingFor } from './ratelimit';
 import { TriagePanel } from './TriagePanel';
+import { BatchReviewPanel } from './BatchReviewPanel';
+import { CoveragePanel } from './CoveragePanel';
 import { FindingsPanel } from './FindingsPanel';
 import { SuiteRunBar } from './SuiteRunBar';
 import type { ReportFormat, SuiteUiState } from './SuiteRunBar';
@@ -64,18 +71,26 @@ import {
   reportToSarif,
 } from './securityReport';
 import { buildEvidenceMap, embedEvidence } from './evidence';
+import { buildCoverageModel } from './coverage';
 import { downloadFile } from './download';
+import { buildReq } from './buildReq';
 import type { QaRequest } from './buildReq';
 import type { QaCookie, QaEnv } from './state/WorkspaceContext';
 import type {
   BolaAttackCell,
   BolaConfig,
+  BflaResult,
+  ConformanceResult,
+  ConformanceTest,
   BolaRefCell,
   BolaResults,
   Contract,
   EvidenceArtifact,
   Expectation,
   Finding,
+  FuzzSeed,
+  FuzzSuitePlan,
+  FuzzSuiteResult,
   Identity,
   MatrixCell,
   MatrixResults,
@@ -86,6 +101,7 @@ import type {
   UnionFinding,
   Verdict,
 } from './types';
+import type { ReviewSource } from './batchReview';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
 const EXPECTS: Expectation[] = ['allow', 'deny', 'skip'];
@@ -249,6 +265,134 @@ function EndpointPicker({ existing, onAdd, onClose }: EndpointPickerProps) {
   );
 }
 
+function responseSchemaFor(reqId: string): unknown | null {
+  const det = (window.QA.REQUEST_DETAILS && window.QA.REQUEST_DETAILS[reqId]) || {};
+  if (det.responseSchema) return det.responseSchema;
+  const schemas = det.responseSchemas || {};
+  for (const code of ['200', '201', '202', '204', 'default']) {
+    if (schemas[code]) return schemas[code];
+  }
+  const first2xx = Object.keys(schemas)
+    .sort()
+    .find((code) => /^2\d\d$/.test(code));
+  return first2xx ? schemas[first2xx] : null;
+}
+
+function preferredIdentity(
+  ep: SecEndpoint,
+  identities: SecIdentity[],
+  expect: Record<string, Record<string, Expectation>>
+): SecIdentity | null {
+  const row = expect[ep.reqId] || {};
+  return (
+    identities.find((id) => row[id.id] === 'allow') ||
+    identities.find((id) => id.privileged) ||
+    identities.find((id) => id.id !== 'anon') ||
+    identities[0] ||
+    null
+  );
+}
+
+function buildConformanceTests(
+  endpoints: SecEndpoint[],
+  identities: SecIdentity[],
+  expect: Record<string, Record<string, Expectation>>
+): ConformanceTest[] {
+  return endpoints
+    .map((ep) => {
+      const schema = responseSchemaFor(ep.reqId);
+      if (!schema) return null;
+      const identity = preferredIdentity(ep, identities, expect);
+      return {
+        id: `schema-${ep.reqId}`,
+        reqId: ep.reqId,
+        method: ep.method,
+        path: ep.path,
+        schema,
+        identityId: identity ? identity.id : undefined,
+      };
+    })
+    .filter(Boolean) as ConformanceTest[];
+}
+
+function scalarBodySeeds(req: QaRequest, limit: number): FuzzSeed[] {
+  if (!req.body || req.bodyMode !== 'json') return [];
+  try {
+    const body = JSON.parse(req.body);
+    const seeds: FuzzSeed[] = [];
+    walkJson(body, (path, key, value) => {
+      if (seeds.length >= limit) return;
+      if (value == null || typeof value === 'object') return;
+      const name = path || key || `body-${seeds.length + 1}`;
+      seeds.push({
+        name: `body.${name}`,
+        location: { kind: 'body', path: name },
+        value: String(value),
+      });
+    });
+    return seeds;
+  } catch {
+    return [];
+  }
+}
+
+function pathSeeds(req: QaRequest, limit: number): FuzzSeed[] {
+  const url = String(req.url || '').split('?')[0];
+  if (!url || /^https?:\/\//i.test(url)) return [];
+  const seeds: FuzzSeed[] = [];
+  const segs = url.split('/').filter(Boolean);
+  segs.forEach((seg, index) => {
+    if (seeds.length >= limit) return;
+    const isParam = /^\{[^}]+\}$/.test(seg) || /^:[A-Za-z0-9_]+$/.test(seg);
+    const looksLikeId = /^\d+$/.test(seg) || /^[0-9a-f]{8,}/i.test(seg);
+    if (!isParam && !looksLikeId) return;
+    seeds.push({
+      name: `path.${seg.replace(/[{}:]/g, '') || index}`,
+      location: { kind: 'path', index },
+      value: seg,
+    });
+  });
+  return seeds;
+}
+
+function fuzzSeedsForRequest(reqId: string): FuzzSeed[] {
+  const req = buildReq(reqId);
+  const querySeeds: FuzzSeed[] = (req.params || [])
+    .filter((p) => p.on !== false && p.key)
+    .slice(0, 2)
+    .map((p) => ({
+      name: `query.${p.key}`,
+      location: { kind: 'query', key: p.key },
+      value: p.value,
+    }));
+  const seeds = [...querySeeds, ...pathSeeds(req, 2), ...scalarBodySeeds(req, 3)];
+  const seen = new Set<string>();
+  return seeds
+    .filter((seed) => {
+      const key = `${seed.location.kind}:${JSON.stringify(seed.location)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
+}
+
+function buildFuzzPlans(endpoints: SecEndpoint[]): FuzzSuitePlan[] {
+  return endpoints
+    .map((ep) => {
+      const seeds = fuzzSeedsForRequest(ep.reqId);
+      if (!seeds.length) return null;
+      return {
+        id: `fuzz-${ep.reqId}`,
+        reqId: ep.reqId,
+        method: ep.method,
+        path: ep.path,
+        seeds,
+      };
+    })
+    .filter(Boolean) as FuzzSuitePlan[];
+}
+
 export interface SecurityPageProps {
   env?: QaEnv;
   vars?: any;
@@ -318,6 +462,7 @@ function SecurityPage({
   const suiteAbortRef = useRef<AbortController | null>(null);
   const evidenceMapRef = useRef<Map<string, EvidenceArtifact> | null>(null);
   const [evidenceReady, setEvidenceReady] = useS(false);
+  const [suiteUnion, setSuiteUnion] = useS<UnionFinding[]>([]);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(
@@ -333,6 +478,11 @@ function SecurityPage({
       }),
     [identities, endpoints, expect, denySet, oracleConfig, bola, rateLimit]
   );
+  const conformanceTests = useMemo(
+    () => buildConformanceTests(endpoints, identities, state.expect),
+    [endpoints, identities, state.expect]
+  );
+  const fuzzPlans = useMemo(() => buildFuzzPlans(endpoints), [endpoints]);
 
   // Persist config (not results) whenever it changes.
   useE(() => {
@@ -380,24 +530,82 @@ function SecurityPage({
     [results, endpoints, identities]
   );
   const triageUnion = useMemo(
-    () => [...matrixNormalized, ...bolaFindings, ...rlFindings],
-    [matrixNormalized, bolaFindings, rlFindings]
+    () => (suiteUnion.length ? suiteUnion : [...matrixNormalized, ...bolaFindings, ...rlFindings]),
+    [suiteUnion, matrixNormalized, bolaFindings, rlFindings]
+  );
+  const reviewSources = useMemo<ReviewSource[]>(() => {
+    const out: ReviewSource[] = [];
+    for (const ep of endpoints) {
+      for (const id of identities) {
+        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        if (!cell || !cell.response) continue;
+        const expectation = state.expect[ep.reqId] && state.expect[ep.reqId][id.id];
+        out.push({
+          engine: 'matrix',
+          method: ep.method,
+          path: ep.path,
+          identity: id.id === 'anon' ? 'anon' : id.name || id.id,
+          status: cell.status,
+          statusText: (cell.response as any).statusText || '',
+          time: cell.timeMs || cell.response.time || 0,
+          verdict: cell.verdict,
+          expected: [
+            expectation ? `matrix expectation: ${expectation}` : '',
+            cell.verdict ? `matrix verdict: ${cell.verdict}` : '',
+          ].filter(Boolean),
+          body: cell.response.body,
+          headers: cell.response.headers,
+        });
+      }
+    }
+    return out;
+  }, [results, endpoints, identities, state.expect]);
+  const coverageModel = useMemo(
+    () =>
+      buildCoverageModel({
+        requests: allRequests(),
+        endpoints,
+        identities,
+        expect: state.expect,
+        conformanceTests,
+        bolaTests: bola.tests || [],
+        rateLimitTests: rateLimit.tests || [],
+        fuzzPlans,
+      }),
+    [endpoints, identities, state.expect, conformanceTests, bola, rateLimit, fuzzPlans]
   );
 
   const scopeDescriptor = useMemo(
     () => ({
       endpoints: endpoints.map((e) => e.reqId).sort(),
       identities: identities.map((i) => i.id).sort(),
+      conformance: conformanceTests.map((x) => x.reqId).sort(),
+      bfla: endpoints
+        .filter((e) => endpointPrivileged(e).privileged)
+        .map((e) => e.reqId)
+        .sort(),
       bola: (bola.tests || []).map((x) => x.id).sort(),
+      fuzz: fuzzPlans.map((x) => `${x.reqId}:${x.seeds.length}`).sort(),
       rl: (rateLimit.tests || []).map((x) => x.id).sort(),
     }),
-    [endpoints, identities, bola, rateLimit]
+    [endpoints, identities, conformanceTests, bola, fuzzPlans, rateLimit]
   );
   const scopeHash = useMemo(() => scopeHashOf(scopeDescriptor), [scopeDescriptor]);
   const scopeMismatch = !!(
     snapshots.baseline &&
     snapshots.baseline.scopeHash &&
     snapshots.baseline.scopeHash !== scopeHash
+  );
+  useE(() => {
+    setSuiteUnion([]);
+  }, [scopeHash]);
+
+  const goToEngine = useCallback(
+    (engine: string) => {
+      if (engine === 'matrix' || engine === 'bola' || engine === 'ratelimit') setMode(engine);
+      else setMode('findings');
+    },
+    [setMode]
   );
 
   const cycleCell = (reqId: string, idId: string) => {
@@ -479,6 +687,7 @@ function SecurityPage({
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
+    setSuiteUnion([]);
     const partial = rowReqId ? { ...results } : {};
     setResults(partial);
     if (!rowReqId) baselinesRef.current = {}; // fresh baselines for a full run
@@ -579,6 +788,19 @@ function SecurityPage({
       }
     );
 
+  const bflaRunner: BflaRunner = (ep, identity) =>
+    qaRunSavedRequest(
+      { id: ep.reqId },
+      {
+        env,
+        vars,
+        cookies: cookies as QaRunCookie[],
+        sslVerify,
+        authOverride: identity.auth as any,
+        oauthToken: identity._oauthToken as any,
+      }
+    );
+
   // Run one rate-limit test into the given results setter. `tr` is the i18n t().
   const runRlTest = async (
     test: RateLimitTest,
@@ -626,6 +848,7 @@ function SecurityPage({
     setResults({});
     setBolaResults({});
     setRlResults({});
+    setSuiteUnion([]);
     // Evidence map is per-run and transient (never persisted unless the user opts in).
     // An aborted run leaves it null while snapshots.lastRun (the prior good report) survives;
     // exporting that report then falls back to persisted/none — by design.
@@ -675,6 +898,121 @@ function SecurityPage({
       });
       return out;
     };
+    const conformanceAdapter = async (
+      cfg: any,
+      {
+        signal,
+        onProgress,
+      }: { signal?: AbortSignal | null; onProgress?: (done: number, total: number) => void }
+    ) => {
+      const tests = (cfg.tests || []) as ConformanceTest[];
+      const out: ConformanceResult[] = [];
+      for (let i = 0; i < tests.length; i++) {
+        if (signal && signal.aborted) break;
+        const test = tests[i];
+        const identity = identities.find((x) => x.id === test.identityId) || identities[0] || null;
+        let response: any = null;
+        let findings: Finding[] = [];
+        let error: string | null = null;
+        try {
+          response = await qaRunSavedRequest(
+            { id: test.reqId },
+            {
+              env,
+              vars,
+              cookies: cookies as QaRunCookie[],
+              sslVerify,
+              authOverride: identity && (identity.auth as any),
+              oauthToken: identity && (identity._oauthToken as any),
+            }
+          );
+          const ok =
+            typeof response.status === 'number' && response.status >= 200 && response.status < 300;
+          findings = ok ? conformanceFindings(response.body, test.schema as any) : [];
+        } catch (e: any) {
+          error = String((e && e.message) || e);
+        }
+        out.push({
+          test,
+          identity,
+          status: response && typeof response.status === 'number' ? response.status : null,
+          response,
+          findings,
+          error,
+        });
+        if (onProgress) onProgress(i + 1, tests.length);
+      }
+      return out;
+    };
+    const bflaAdapter = async (
+      cfg: any,
+      {
+        signal,
+        onProgress,
+      }: { signal?: AbortSignal | null; onProgress?: (done: number, total: number) => void }
+    ) => {
+      const total = bflaPlan(cfg.endpoints || [], cfg.identities || []).length;
+      let done = 0;
+      const out = await runBfla(cfg.endpoints || [], cfg.identities || [], bflaRunner, {
+        signal,
+        denySet: cfg.denySet || denySet,
+        onCell: () => {
+          done++;
+          if (onProgress) onProgress(done, total);
+        },
+      });
+      return out.results as BflaResult[];
+    };
+    const fuzzAdapter = async (
+      cfg: any,
+      {
+        signal,
+        onProgress,
+      }: { signal?: AbortSignal | null; onProgress?: (done: number, total: number) => void }
+    ) => {
+      const plans = (cfg.plans || []) as FuzzSuitePlan[];
+      const total = plans.reduce(
+        (sum, plan) => sum + (plan.seeds || []).length * FUZZ_PAYLOADS.length,
+        0
+      );
+      let done = 0;
+      const out: FuzzSuiteResult[] = [];
+      for (const plan of plans) {
+        if (signal && signal.aborted) break;
+        const ep = endpoints.find((x) => x.reqId === plan.reqId);
+        const identity = ep ? preferredIdentity(ep, identities, state.expect) : identities[0];
+        const res = await runFuzz(
+          plan,
+          (seed, payload) =>
+            qaRunSavedRequest(
+              { id: plan.reqId },
+              {
+                env,
+                vars,
+                cookies: cookies as QaRunCookie[],
+                sslVerify,
+                authOverride: identity && (identity.auth as any),
+                oauthToken: identity && (identity._oauthToken as any),
+                mutate: (req) =>
+                  applyIdLocation(
+                    req as any,
+                    seed.location as any,
+                    payload.value
+                  ) as unknown as QaRequest,
+              }
+            ),
+          {
+            signal,
+            onCase: () => {
+              done++;
+              if (onProgress) onProgress(done, total);
+            },
+          }
+        );
+        out.push({ plan, ran: res.ran, findings: res.findings });
+      }
+      return out;
+    };
     const ratelimitAdapter = async (cfg: any, { signal }: { signal?: AbortSignal | null }) => {
       const out: RateLimitResultsMap = {};
       for (const test of cfg.tests) {
@@ -718,12 +1056,22 @@ function SecurityPage({
 
     const config = {
       matrix: { endpoints, identities },
+      conformance: { tests: conformanceTests },
+      bfla: { endpoints, identities, denySet },
       bola: { tests: bola.tests || [], identities },
+      fuzz: { plans: fuzzPlans },
       rateLimit: { tests: rateLimit.tests || [], identities },
     };
     const rec = await runSuite(
       config,
-      { matrix: matrixAdapter, bola: bolaAdapter, ratelimit: ratelimitAdapter },
+      {
+        matrix: matrixAdapter,
+        conformance: conformanceAdapter,
+        bfla: bflaAdapter,
+        bola: bolaAdapter,
+        fuzz: fuzzAdapter,
+        ratelimit: ratelimitAdapter,
+      },
       {
         signal: controller.signal,
         onProgress: (engine, done, total) => setSuite((s) => ({ ...s, engine, done, total })),
@@ -731,12 +1079,7 @@ function SecurityPage({
     );
 
     if (rec.status === 'complete') {
-      const scopeHash = scopeHashOf({
-        endpoints: endpoints.map((e) => e.reqId).sort(),
-        identities: identities.map((i) => i.id).sort(),
-        bola: (bola.tests || []).map((x) => x.id).sort(),
-        rl: (rateLimit.tests || []).map((x) => x.id).sort(),
-      });
+      const scopeHash = scopeHashOf(scopeDescriptor);
       const items = snapshotOf(rec.union, loadLifecycle(), {
         runId: rec.finishedAt,
         createdAt: rec.finishedAt,
@@ -744,6 +1087,7 @@ function SecurityPage({
       }).items;
       evidenceMapRef.current = buildEvidenceMap(rec.union);
       setEvidenceReady(evidenceMapRef.current.size > 0);
+      setSuiteUnion(rec.union);
       const record: Snapshot = {
         runId: rec.finishedAt,
         scopeHash,
@@ -816,7 +1160,8 @@ function SecurityPage({
         canEvidence={evidenceReady}
         onSaveEvidence={onSaveEvidence}
       />
-      <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={setMode} />
+      <TriagePanel union={triageUnion} aiReady={aiReady} onGoToEngine={goToEngine} />
+      <BatchReviewPanel responses={reviewSources} aiReady={aiReady} />
       <div className="qa-sec-tabs">
         <button
           className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`}
@@ -837,6 +1182,12 @@ function SecurityPage({
           {t('security.mode.ratelimit')}
         </button>
         <button
+          className={`qa-seg ${mode === 'coverage' ? 'qa-seg--on' : ''}`}
+          onClick={() => setMode('coverage')}
+        >
+          {t('security.mode.coverage')}
+        </button>
+        <button
           className={`qa-seg ${mode === 'findings' ? 'qa-seg--on' : ''}`}
           onClick={() => setMode('findings')}
         >
@@ -844,7 +1195,9 @@ function SecurityPage({
         </button>
       </div>
 
-      {mode === 'findings' ? (
+      {mode === 'coverage' ? (
+        <CoveragePanel model={coverageModel} />
+      ) : mode === 'findings' ? (
         <FindingsPanel
           union={triageUnion}
           snapshots={snapshots}
