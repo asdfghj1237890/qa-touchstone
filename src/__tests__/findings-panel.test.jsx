@@ -7,9 +7,18 @@ import { FindingsPanel } from '../qa/FindingsPanel';
 import { loadLifecycle, fingerprint } from '../qa/findings';
 
 const union = [
-  { engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
-    path: 'data.token', evidence: 'x', method: 'GET', endpoint: '/me',
-    identityLabel: 'admin', ref: { reqId: 'r1', idId: 'admin' } },
+  {
+    engine: 'matrix',
+    ruleId: 'jwt',
+    severity: 'high',
+    title: 'JWT in response',
+    path: 'data.token',
+    evidence: 'x',
+    method: 'GET',
+    endpoint: '/me',
+    identityLabel: 'admin',
+    ref: { reqId: 'r1', idId: 'admin' },
+  },
 ];
 
 const wrap = (ui) => render(<I18nProvider>{ui}</I18nProvider>);
@@ -40,7 +49,7 @@ describe('FindingsPanel (annotations)', () => {
 
   it('suppressing a finding persists to the lifecycle store and hides it by default', () => {
     wrap(<FindingsPanel union={union} />);
-    fireEvent.click(screen.getByText('JWT in response'));          // expand the row
+    fireEvent.click(screen.getByText('JWT in response')); // expand the row
     fireEvent.click(screen.getByLabelText('Suppress (false positive)')); // toggle suppress
     const fp = fingerprint(union[0]).fp;
     expect(loadLifecycle().records[fp].suppressed).toBe(true);
@@ -62,13 +71,24 @@ describe('FindingsPanel (baseline)', () => {
 
   it('calls onPinBaseline when the pin button is clicked', () => {
     let pinned = 0;
-    wrap(<FindingsPanel union={union} onPinBaseline={() => { pinned += 1; }} />);
+    wrap(
+      <FindingsPanel
+        union={union}
+        onPinBaseline={() => {
+          pinned += 1;
+        }}
+      />
+    );
     fireEvent.click(screen.getByText('Pin current as baseline'));
     expect(pinned).toBe(1);
   });
 
   it('shows the scope-differs badge when scopeMismatch is true', () => {
-    const snapshots = { fpVersion: 1, baseline: { items: [{ fp: 'zzz', effectiveSeverity: 'low' }], scopeHash: 'old' }, lastRun: null };
+    const snapshots = {
+      fpVersion: 1,
+      baseline: { items: [{ fp: 'zzz', effectiveSeverity: 'low' }], scopeHash: 'old' },
+      lastRun: null,
+    };
     wrap(<FindingsPanel union={union} snapshots={snapshots} scopeMismatch={true} />);
     expect(screen.getByText('Baseline scope differs')).toBeTruthy();
   });
@@ -77,13 +97,31 @@ describe('FindingsPanel (baseline)', () => {
 describe('FindingsPanel (resolved rows)', () => {
   // The preceding describe blocks don't all clean up; clear leaked DOM up front
   // so the single-row assertions below aren't tripped by a stale render.
-  beforeEach(() => { cleanup(); localStorage.clear(); });
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
   afterEach(() => cleanup());
 
   it('renders a muted resolved row for a baseline finding absent from the current union', () => {
-    const snapshots = { fpVersion: 1, lastRun: null, baseline: { scopeHash: 'sh', items: [
-      { fp: 'gone1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt', path: 'data.token', locationLabel: 'GET /old · admin', count: 1 },
-    ] } };
+    const snapshots = {
+      fpVersion: 1,
+      lastRun: null,
+      baseline: {
+        scopeHash: 'sh',
+        items: [
+          {
+            fp: 'gone1',
+            effectiveSeverity: 'high',
+            engine: 'matrix',
+            ruleId: 'jwt',
+            path: 'data.token',
+            locationLabel: 'GET /old · admin',
+            count: 1,
+          },
+        ],
+      },
+    };
     wrap(<FindingsPanel union={[]} snapshots={snapshots} />);
     expect(screen.getByText('Resolved')).toBeTruthy();
     // title falls back to locationLabel for snapshot rows, so it appears in both
@@ -93,9 +131,24 @@ describe('FindingsPanel (resolved rows)', () => {
 
   it('does not show a resolved row for a baseline finding still present in the union', () => {
     const fpNow = fingerprint(union[0]).fp;
-    const snapshots = { fpVersion: 1, lastRun: null, baseline: { scopeHash: 'sh', items: [
-      { fp: fpNow, effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt', path: 'data.token', locationLabel: 'GET /me · admin', count: 1 },
-    ] } };
+    const snapshots = {
+      fpVersion: 1,
+      lastRun: null,
+      baseline: {
+        scopeHash: 'sh',
+        items: [
+          {
+            fp: fpNow,
+            effectiveSeverity: 'high',
+            engine: 'matrix',
+            ruleId: 'jwt',
+            path: 'data.token',
+            locationLabel: 'GET /me · admin',
+            count: 1,
+          },
+        ],
+      },
+    };
     wrap(<FindingsPanel union={union} snapshots={snapshots} />);
     // present in union -> 'carried', not 'resolved'
     expect(screen.queryByText('Resolved')).toBeNull();

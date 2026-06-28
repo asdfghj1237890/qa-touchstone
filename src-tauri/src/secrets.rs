@@ -53,9 +53,12 @@ mod tests {
     // The precedence/migration LOGIC is the part worth pinning down here.
     #[test]
     fn resolve_prefers_inline_then_keychain() {
-        assert_eq!(resolve_secret("inline", Some("kc".into())), Some("inline".into())); // legacy inline wins
-        assert_eq!(resolve_secret("", Some("kc".into())), Some("kc".into()));           // else keychain
-        assert_eq!(resolve_secret("", Some("".into())), None);                          // empty keychain → absent
-        assert_eq!(resolve_secret("", None), None);                                     // nothing anywhere
+        assert_eq!(
+            resolve_secret("inline", Some("kc".into())),
+            Some("inline".into())
+        ); // legacy inline wins
+        assert_eq!(resolve_secret("", Some("kc".into())), Some("kc".into())); // else keychain
+        assert_eq!(resolve_secret("", Some("".into())), None); // empty keychain → absent
+        assert_eq!(resolve_secret("", None), None); // nothing anywhere
     }
 }

@@ -51,4 +51,6 @@ export const PSL_EXCEPTIONS: readonly string[] = ${JSON.stringify(exceptions)};
 `;
 
 fs.writeFileSync(OUT, body);
-console.log(`wrote ${OUT}: ${rules.length} rules, ${wildcards.length} wildcards, ${exceptions.length} exceptions (${today})`);
+console.log(
+  `wrote ${OUT}: ${rules.length} rules, ${wildcards.length} wildcards, ${exceptions.length} exceptions (${today})`
+);

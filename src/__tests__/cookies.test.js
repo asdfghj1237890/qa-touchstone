@@ -18,7 +18,9 @@ const ck = (overrides = {}) => ({
 
 describe('cookieMatches — domain', () => {
   it('matches an exact host', () => {
-    expect(cookieMatches(ck({ domain: 'api.example.com' }), 'https://api.example.com/v1')).toBe(true);
+    expect(cookieMatches(ck({ domain: 'api.example.com' }), 'https://api.example.com/v1')).toBe(
+      true
+    );
   });
 
   it('matches a subdomain when not host-only', () => {
@@ -30,8 +32,12 @@ describe('cookieMatches — domain', () => {
   });
 
   it('host-only cookies do NOT match subdomains', () => {
-    expect(cookieMatches(ck({ domain: 'example.com', hostOnly: true }), 'https://api.example.com/')).toBe(false);
-    expect(cookieMatches(ck({ domain: 'example.com', hostOnly: true }), 'https://example.com/')).toBe(true);
+    expect(
+      cookieMatches(ck({ domain: 'example.com', hostOnly: true }), 'https://api.example.com/')
+    ).toBe(false);
+    expect(
+      cookieMatches(ck({ domain: 'example.com', hostOnly: true }), 'https://example.com/')
+    ).toBe(true);
   });
 
   it('does not match an unrelated host', () => {
@@ -70,7 +76,9 @@ describe('cookieMatches — Secure', () => {
 describe('cookieMatches — Expires', () => {
   it('drops expired cookies', () => {
     // 2000-01-01 is firmly in the past for any session we care about.
-    expect(cookieMatches(ck({ expires: '2000-01-01T00:00:00.000Z' }), 'https://example.com/')).toBe(false);
+    expect(cookieMatches(ck({ expires: '2000-01-01T00:00:00.000Z' }), 'https://example.com/')).toBe(
+      false
+    );
   });
 
   it('keeps cookies that have not expired (full ISO datetime)', () => {

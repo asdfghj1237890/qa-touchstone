@@ -7,11 +7,17 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
 /// Resolves `{{$dynamic}}` names (timestamp/guid/...). Injected so fixtures pin time/RNG.
-pub trait Dynamics { fn resolve(&mut self, name: &str) -> Option<String>; }
+pub trait Dynamics {
+    fn resolve(&mut self, name: &str) -> Option<String>;
+}
 
 /// Dynamics resolver that knows nothing (used where dynamics are irrelevant).
 pub struct NoDynamics;
-impl Dynamics for NoDynamics { fn resolve(&mut self, _name: &str) -> Option<String> { None } }
+impl Dynamics for NoDynamics {
+    fn resolve(&mut self, _name: &str) -> Option<String> {
+        None
+    }
+}
 
 fn var_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -19,13 +25,21 @@ fn var_re() -> &'static Regex {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct VarRow { pub key: String, pub value: String, #[serde(default)] pub on: bool }
+pub struct VarRow {
+    pub key: String,
+    pub value: String,
+    #[serde(default)]
+    pub on: bool,
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ScopedVars {
-    #[serde(default)] pub globals: Vec<VarRow>,
-    #[serde(default)] pub collections: BTreeMap<String, Vec<VarRow>>,
-    #[serde(default)] pub environments: BTreeMap<String, Vec<VarRow>>,
+    #[serde(default)]
+    pub globals: Vec<VarRow>,
+    #[serde(default)]
+    pub collections: BTreeMap<String, Vec<VarRow>>,
+    #[serde(default)]
+    pub environments: BTreeMap<String, Vec<VarRow>>,
 }
 
 /// Port of qaVarMap (engine.ts:35-46). Precedence low→high:
@@ -37,61 +51,102 @@ pub fn qa_var_map(
     local: Option<&BTreeMap<String, String>>,
 ) -> BTreeMap<String, String> {
     let mut map = BTreeMap::new();
-    for v in &vars.globals { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+    for v in &vars.globals {
+        if v.on && !v.key.is_empty() {
+            map.insert(v.key.clone(), v.value.clone());
+        }
+    }
     if let Some(cid) = collection_id {
         if let Some(rows) = vars.collections.get(cid) {
-            for v in rows { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+            for v in rows {
+                if v.on && !v.key.is_empty() {
+                    map.insert(v.key.clone(), v.value.clone());
+                }
+            }
         }
     }
     if let Some(label) = env_label {
         if let Some(rows) = vars.environments.get(label) {
-            for v in rows { if v.on && !v.key.is_empty() { map.insert(v.key.clone(), v.value.clone()); } }
+            for v in rows {
+                if v.on && !v.key.is_empty() {
+                    map.insert(v.key.clone(), v.value.clone());
+                }
+            }
         }
     }
-    if let Some(local) = local { for (k, v) in local { map.insert(k.clone(), v.clone()); } }
+    if let Some(local) = local {
+        for (k, v) in local {
+            map.insert(k.clone(), v.clone());
+        }
+    }
     map
 }
 
 /// Port of qaSubstitute (engine.ts:58-64). Unknown vars are left as the ORIGINAL
 /// matched token (whitespace preserved). `{{$name}}` is resolved via `dynamics`;
 /// if it returns None, the original token is kept.
-pub fn qa_substitute(text: &str, map: &BTreeMap<String, String>, dynamics: &mut dyn Dynamics) -> String {
-    var_re().replace_all(text, |caps: &regex::Captures| {
-        let whole = caps.get(0).unwrap().as_str().to_string();
-        let name = caps.get(1).unwrap().as_str();
-        if name.starts_with('$') {
-            match dynamics.resolve(name) { Some(v) => v, None => whole }
-        } else if let Some(v) = map.get(name) {
-            v.clone()
-        } else {
-            whole
-        }
-    }).into_owned()
+pub fn qa_substitute(
+    text: &str,
+    map: &BTreeMap<String, String>,
+    dynamics: &mut dyn Dynamics,
+) -> String {
+    var_re()
+        .replace_all(text, |caps: &regex::Captures| {
+            let whole = caps.get(0).unwrap().as_str().to_string();
+            let name = caps.get(1).unwrap().as_str();
+            if name.starts_with('$') {
+                match dynamics.resolve(name) {
+                    Some(v) => v,
+                    None => whole,
+                }
+            } else if let Some(v) = map.get(name) {
+                v.clone()
+            } else {
+                whole
+            }
+        })
+        .into_owned()
 }
 
 /// Production dynamics: real clock + RNG.
 pub struct RealDynamics;
 impl Dynamics for RealDynamics {
     fn resolve(&mut self, name: &str) -> Option<String> {
-        let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             // as i64 truncates sub-millisecond; unwrap_or(0) is a "never in practice" backdate fallback.
-            .map(|d| d.as_millis() as i64).unwrap_or(0);
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
         let mut next = || rand::random::<f64>();
         dynamic_value(name, now_ms, &mut next)
     }
 }
 
 /// Deterministic dynamics for fixtures: fixed clock + a replayed float sequence.
-pub struct PinnedDynamics { now_ms: i64, floats: Vec<f64>, cursor: usize }
+pub struct PinnedDynamics {
+    now_ms: i64,
+    floats: Vec<f64>,
+    cursor: usize,
+}
 impl PinnedDynamics {
-    pub fn new(now_ms: i64, floats: Vec<f64>) -> Self { Self { now_ms, floats, cursor: 0 } }
+    pub fn new(now_ms: i64, floats: Vec<f64>) -> Self {
+        Self {
+            now_ms,
+            floats,
+            cursor: 0,
+        }
+    }
 }
 impl Dynamics for PinnedDynamics {
     fn resolve(&mut self, name: &str) -> Option<String> {
         let len = self.floats.len();
         let mut cursor = self.cursor;
         let floats = &self.floats;
-        let mut next = || { let v = floats[cursor % len]; cursor += 1; v };
+        let mut next = || {
+            let v = floats[cursor % len];
+            cursor += 1;
+            v
+        };
         let result = dynamic_value(name, self.now_ms, &mut next);
         self.cursor = cursor;
         result
@@ -116,10 +171,12 @@ fn dynamic_value(name: &str, now_ms: i64, next: &mut dyn FnMut() -> f64) -> Opti
             let mut out = String::with_capacity(tmpl.len());
             for ch in tmpl.chars() {
                 if ch == 'x' || ch == 'y' {
-                    let r = (next() * 16.0) as u32 & 0xF;       // r = Math.random()*16 | 0; mask keeps 0..=15 even if next() returns 1.0
+                    let r = (next() * 16.0) as u32 & 0xF; // r = Math.random()*16 | 0; mask keeps 0..=15 even if next() returns 1.0
                     let v = if ch == 'x' { r } else { (r & 0x3) | 0x8 };
                     out.push(char::from_digit(v, 16).unwrap());
-                } else { out.push(ch); }
+                } else {
+                    out.push(ch);
+                }
             }
             Some(out)
         }
@@ -185,27 +242,53 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
     let typ = a.get("type").and_then(|t| t.as_str()).unwrap_or("");
     let (pass, actual): (bool, String) = match typ {
         "status" => {
-            let s = resp.get("status").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
+            let s = resp
+                .get("status")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(f64::NAN);
             let val = a.get("value").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
             let op = a.get("op").and_then(|o| o.as_str()).unwrap_or("eq");
-            let pass = match op { "neq" => s != val, "lt" => s < val, "gt" => s > val, _ => s == val };
+            let pass = match op {
+                "neq" => s != val,
+                "lt" => s < val,
+                "gt" => s > val,
+                _ => s == val,
+            };
             // actual mirrors JS String(resp.status) — faithful for non-integer/missing values
-            let actual = resp.get("status").map(json_stringify).unwrap_or_else(|| "undefined".into());
+            let actual = resp
+                .get("status")
+                .map(json_stringify)
+                .unwrap_or_else(|| "undefined".into());
             (pass, actual)
         }
         "time" => {
-            let t = resp.get("time").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
+            let t = resp
+                .get("time")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(f64::NAN);
             let val = a.get("value").and_then(|v| v.as_f64()).unwrap_or(f64::NAN);
             let op = a.get("op").and_then(|o| o.as_str()).unwrap_or("");
             let pass = if op == "gt" { t > val } else { t < val };
             // actual mirrors JS resp.time + ' ms' — faithful for non-integer/missing values
-            let actual = format!("{} ms", resp.get("time").map(json_stringify).unwrap_or_else(|| "undefined".into()));
+            let actual = format!(
+                "{} ms",
+                resp.get("time")
+                    .map(json_stringify)
+                    .unwrap_or_else(|| "undefined".into())
+            );
             (pass, actual)
         }
         "bodyHas" => {
             let p = a.get("path").and_then(|p| p.as_str()).unwrap_or("");
             let v = qa_get_path(body, p);
-            (v.is_some(), if v.is_none() { "missing".into() } else { "present".into() })
+            (
+                v.is_some(),
+                if v.is_none() {
+                    "missing".into()
+                } else {
+                    "present".into()
+                },
+            )
         }
         "bodyEq" => {
             let p = a.get("path").and_then(|p| p.as_str()).unwrap_or("");
@@ -218,7 +301,8 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
             (vs == want, actual)
         }
         "bodyArray" => {
-            let arr = body.as_array()
+            let arr = body
+                .as_array()
                 .or_else(|| body.get("data").and_then(|d| d.as_array()));
             let actual = match arr {
                 Some(a) => format!("array({})", a.len()),
@@ -231,12 +315,16 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
             let empty_obj = json!({});
             let headers = resp.get("headers").unwrap_or(&empty_obj);
             // case-insensitive key lookup
-            let val = headers.as_object().and_then(|m|
-                m.iter().find(|(k, _)| k.eq_ignore_ascii_case(want_name)).map(|(_, v)| v)
-            );
+            let val = headers.as_object().and_then(|m| {
+                m.iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(want_name))
+                    .map(|(_, v)| v)
+            });
             let op = a.get("op").and_then(|o| o.as_str()).unwrap_or("");
             // actual = value as string, or "missing"
-            let actual = val.map(|v| string_coerce(Some(v))).unwrap_or_else(|| "missing".into());
+            let actual = val
+                .map(|v| string_coerce(Some(v)))
+                .unwrap_or_else(|| "missing".into());
             let pass = match op {
                 "exists" => val.is_some(),
                 "contains" => {
@@ -252,14 +340,16 @@ pub fn qa_eval(a: &Value, resp: &Value) -> Value {
                     // TS: String(val) === String(a.value)
                     // val is already String(val) for present headers; for missing,
                     // `actual` is "missing" but TS yields String(undefined) = "undefined".
-                    let lhs = val.map(|v| string_coerce(Some(v))).unwrap_or_else(|| "undefined".into());
+                    let lhs = val
+                        .map(|v| string_coerce(Some(v)))
+                        .unwrap_or_else(|| "undefined".into());
                     let rhs = string_coerce(a.get("value"));
                     lhs == rhs
                 }
             };
             (pass, actual)
         }
-        _ => (true, "\u{2014}".into()),   // unknown type passes; actual = em dash "—" (U+2014)
+        _ => (true, "\u{2014}".into()), // unknown type passes; actual = em dash "—" (U+2014)
     };
     let mut out = a.clone();
     if let Some(o) = out.as_object_mut() {

@@ -25,7 +25,7 @@ struct RustImportParsed {
 #[derive(serde::Deserialize, Debug)]
 struct RustCollection {
     name: String,
-    source: String,          // "postman" | "openapi"
+    source: String, // "postman" | "openapi"
     base_url: Option<String>,
 }
 
@@ -47,36 +47,93 @@ struct RustRequest {
 }
 
 #[derive(serde::Deserialize, Debug, PartialEq)]
-struct RustKvOn { key: String, value: String, on: bool }
+struct RustKvOn {
+    key: String,
+    value: String,
+    on: bool,
+}
 
 fn source_str(f: &Format) -> &'static str {
-    match f { Format::Postman => "postman", Format::OpenApi => "openapi" }
+    match f {
+        Format::Postman => "postman",
+        Format::OpenApi => "openapi",
+    }
 }
 
 fn compare_request(got: &ImportRequest, exp: &RustRequest, label: &str) {
     assert_eq!(got.method, exp.method, "{label}: method");
-    assert_eq!(got.name,   exp.name,   "{label}: name");
-    assert_eq!(got.path,   exp.path,   "{label}: path");
-    assert_eq!(got.body,   exp.body,   "{label}: body");
-    assert_eq!(got.auth,   exp.auth,   "{label}: auth");
+    assert_eq!(got.name, exp.name, "{label}: name");
+    assert_eq!(got.path, exp.path, "{label}: path");
+    assert_eq!(got.body, exp.body, "{label}: body");
+    assert_eq!(got.auth, exp.auth, "{label}: auth");
     // params
-    let got_params: Vec<RustKvOn> = got.params.iter().map(|k| RustKvOn { key: k.key.clone(), value: k.value.clone(), on: k.on }).collect();
-    let exp_params: Vec<RustKvOn> = exp.params.iter().map(|k| RustKvOn { key: k.key.clone(), value: k.value.clone(), on: k.on }).collect();
+    let got_params: Vec<RustKvOn> = got
+        .params
+        .iter()
+        .map(|k| RustKvOn {
+            key: k.key.clone(),
+            value: k.value.clone(),
+            on: k.on,
+        })
+        .collect();
+    let exp_params: Vec<RustKvOn> = exp
+        .params
+        .iter()
+        .map(|k| RustKvOn {
+            key: k.key.clone(),
+            value: k.value.clone(),
+            on: k.on,
+        })
+        .collect();
     assert_eq!(got_params, exp_params, "{label}: params");
     // headers
-    let got_hdrs: Vec<RustKvOn> = got.headers.iter().map(|k| RustKvOn { key: k.key.clone(), value: k.value.clone(), on: k.on }).collect();
-    let exp_hdrs: Vec<RustKvOn> = exp.headers.iter().map(|k| RustKvOn { key: k.key.clone(), value: k.value.clone(), on: k.on }).collect();
+    let got_hdrs: Vec<RustKvOn> = got
+        .headers
+        .iter()
+        .map(|k| RustKvOn {
+            key: k.key.clone(),
+            value: k.value.clone(),
+            on: k.on,
+        })
+        .collect();
+    let exp_hdrs: Vec<RustKvOn> = exp
+        .headers
+        .iter()
+        .map(|k| RustKvOn {
+            key: k.key.clone(),
+            value: k.value.clone(),
+            on: k.on,
+        })
+        .collect();
     assert_eq!(got_hdrs, exp_hdrs, "{label}: headers");
 }
 
 fn compare_parsed(got: &ImportParsed, exp: &RustImportParsed, label: &str) {
-    assert_eq!(got.collection.name,     exp.collection.name,                       "{label}: collection.name");
-    assert_eq!(source_str(&got.collection.source), exp.collection.source.as_str(), "{label}: collection.source");
-    assert_eq!(got.collection.base_url, exp.collection.base_url,                   "{label}: collection.base_url");
-    assert_eq!(got.folders.len(), exp.folders.len(), "{label}: folder count");
+    assert_eq!(
+        got.collection.name, exp.collection.name,
+        "{label}: collection.name"
+    );
+    assert_eq!(
+        source_str(&got.collection.source),
+        exp.collection.source.as_str(),
+        "{label}: collection.source"
+    );
+    assert_eq!(
+        got.collection.base_url, exp.collection.base_url,
+        "{label}: collection.base_url"
+    );
+    assert_eq!(
+        got.folders.len(),
+        exp.folders.len(),
+        "{label}: folder count"
+    );
     for (fi, (gf, ef)) in got.folders.iter().zip(exp.folders.iter()).enumerate() {
         assert_eq!(gf.name, ef.name, "{label}: folder[{fi}].name");
-        assert_eq!(gf.requests.len(), ef.requests.len(), "{label}: folder[{fi}] request count");
+        assert_eq!(
+            gf.requests.len(),
+            ef.requests.len(),
+            "{label}: folder[{fi}] request count"
+        );
         for (ri, (gr, er)) in gf.requests.iter().zip(ef.requests.iter()).enumerate() {
             compare_request(gr, er, &format!("{label}: folder[{fi}].req[{ri}]"));
         }
@@ -186,7 +243,10 @@ fn import_openapi_matches_ts() {
 fn import_error_strings_match_ts() {
     let f: Fixture = serde_json::from_str(FIXTURE).expect("fixture must parse");
     // Verify the TS error strings match what we expect (locking them against future TS changes)
-    assert_eq!(f.errors.bad_json, "Not valid JSON. (YAML specs must be converted to JSON first.)");
+    assert_eq!(
+        f.errors.bad_json,
+        "Not valid JSON. (YAML specs must be converted to JSON first.)"
+    );
     assert_eq!(f.errors.unknown, "Unrecognized format \u{2014} expected a Postman v2.1 collection or an OpenAPI/Swagger spec.");
     // Verify Rust produces the same strings
     assert_eq!(qa_parse_import("not json").unwrap_err(), f.errors.bad_json);

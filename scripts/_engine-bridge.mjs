@@ -9,18 +9,28 @@ import { tmpdir } from 'node:os';
 const __dir = dirname(fileURLToPath(import.meta.url));
 const entry = join(__dir, '..', 'src', 'qa', 'engine.ts');
 const res = await build({
-  entryPoints: [entry], bundle: true, format: 'esm', write: false,
-  platform: 'node', logLevel: 'silent',
+  entryPoints: [entry],
+  bundle: true,
+  format: 'esm',
+  write: false,
+  platform: 'node',
+  logLevel: 'silent',
 });
 const code = res.outputFiles[0].text;
 const tmpDir = mkdtempSync(join(tmpdir(), 'qa-eng-'));
 const tmp = join(tmpDir, 'engine.mjs');
-process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+process.on('exit', () => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
+});
 writeFileSync(tmp, code);
 globalThis.window = globalThis;
 await import('file://' + tmp.replace(/\\/g, '/'));
 if (typeof globalThis.qaSubstitute !== 'function') {
-  throw new Error('engine bridge failed: qaSubstitute not found on globalThis (engine.ts load/bundle issue)');
+  throw new Error(
+    'engine bridge failed: qaSubstitute not found on globalThis (engine.ts load/bundle issue)'
+  );
 }
 export const qaSubstitute = globalThis.qaSubstitute;
 export const qaVarMap = globalThis.qaVarMap;

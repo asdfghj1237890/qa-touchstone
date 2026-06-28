@@ -9,18 +9,26 @@
 import api from '../api/index';
 
 const isTauri = (): boolean =>
-  typeof window !== 'undefined' && !!((window as Window).__TAURI_INTERNALS__ || (window as Window).__TAURI__);
+  typeof window !== 'undefined' &&
+  !!((window as Window).__TAURI_INTERNALS__ || (window as Window).__TAURI__);
 
 // 由副檔名推一個對話框 filter（"report.sarif.json" → json）。
 function filtersFor(name: string): Array<{ name: string; extensions: string[] }> {
   const ext = (name.split('.').pop() || 'txt').toLowerCase();
-  return [{ name: ext.toUpperCase(), extensions: [ext] }, { name: 'All files', extensions: ['*'] }];
+  return [
+    { name: ext.toUpperCase(), extensions: [ext] },
+    { name: 'All files', extensions: ['*'] },
+  ];
 }
 
 function blobDownload(name: string, content: BlobPart, mime: string): void {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
   const a = document.createElement('a');
-  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 

@@ -52,8 +52,9 @@ import { redactUrl, redactHeaders } from '../qa/evidence';
 
 describe('redactUrl', () => {
   it('keeps path + query keys, masks query values', () => {
-    expect(redactUrl('/api/orders/123?token=abc&page=2'))
-      .toBe('/api/orders/123?token=<redacted>&page=<redacted>');
+    expect(redactUrl('/api/orders/123?token=abc&page=2')).toBe(
+      '/api/orders/123?token=<redacted>&page=<redacted>'
+    );
   });
   it('masks a secret-like (high-entropy) path segment', () => {
     const out = redactUrl('/reset/eyJhbGciOiJI.eyJzdWIiOiJ.SflKxwRJ');
@@ -67,7 +68,10 @@ describe('redactUrl', () => {
 describe('redactHeaders', () => {
   it('fully masks denylisted + name-pattern headers, passes others through', () => {
     const out = redactHeaders({
-      Authorization: 'Bearer x', Cookie: 'a=b', 'x-session-id': 's', 'content-type': 'application/json',
+      Authorization: 'Bearer x',
+      Cookie: 'a=b',
+      'x-session-id': 's',
+      'content-type': 'application/json',
     });
     expect(out.Authorization).toBe(REDACTED);
     expect(out.Cookie).toBe(REDACTED);
@@ -101,8 +105,17 @@ describe('buildEvidenceArtifact', () => {
   it('builds request + response with a masked snippet for a body finding', () => {
     const item = { engine: 'matrix', ruleId: 'jwt', path: 'data.token', identityLabel: 'admin' };
     const raw = {
-      request: { method: 'GET', url: '/me?token=abc', identity: 'admin', headers: { authorization: 'Bearer x' } },
-      response: { status: 200, headers: { 'content-type': 'application/json', 'set-cookie': 'sid=1' }, body: { data: { token: 'eyJabc.def.ghi', name: 'bob' } } },
+      request: {
+        method: 'GET',
+        url: '/me?token=abc',
+        identity: 'admin',
+        headers: { authorization: 'Bearer x' },
+      },
+      response: {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'set-cookie': 'sid=1' },
+        body: { data: { token: 'eyJabc.def.ghi', name: 'bob' } },
+      },
     };
     const a = buildEvidenceArtifact(raw, item);
     expect(a.request.url).toBe('/me?token=<redacted>');
@@ -115,7 +128,14 @@ describe('buildEvidenceArtifact', () => {
   });
   it('emits metadata only for a non-JSON body — NO raw bytes', () => {
     const item = { engine: 'matrix', ruleId: 'x', path: '' };
-    const raw = { request: { method: 'GET', url: '/x' }, response: { status: 200, headers: { 'content-type': 'text/html' }, body: '<html>secret-token-xyz</html>' } };
+    const raw = {
+      request: { method: 'GET', url: '/x' },
+      response: {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+        body: '<html>secret-token-xyz</html>',
+      },
+    };
     const a = buildEvidenceArtifact(raw, item);
     expect(a.response.snippet).toBeNull();
     expect(a.response.nonJson).toEqual({ contentType: 'text/html', length: 29 });
@@ -123,8 +143,12 @@ describe('buildEvidenceArtifact', () => {
   });
   it('yields stats and a null response for a rate-limit finding', () => {
     const a = buildEvidenceArtifact(
-      { request: { method: 'POST', url: '/login' }, stats: { sent: 100, completed: 100, throttleSeen: false } },
-      { engine: 'ratelimit' });
+      {
+        request: { method: 'POST', url: '/login' },
+        stats: { sent: 100, completed: 100, throttleSeen: false },
+      },
+      { engine: 'ratelimit' }
+    );
     expect(a.response).toBeNull();
     expect(a.stats).toEqual({ sent: 100, completed: 100, throttleSeen: false });
   });
@@ -137,8 +161,16 @@ describe('buildEvidenceArtifact', () => {
 describe('buildEvidenceMap + embedEvidence', () => {
   it('keys by the SAME fingerprint snapshotOf uses, and embeds onto items', () => {
     const it = {
-      engine: 'matrix', ruleId: 'jwt', path: 'data.token', method: 'GET', endpoint: '/me', identityLabel: 'admin',
-      raw: { request: { method: 'GET', url: '/me' }, response: { status: 200, headers: {}, body: { data: { token: 'eyJa.bc.de' } } } },
+      engine: 'matrix',
+      ruleId: 'jwt',
+      path: 'data.token',
+      method: 'GET',
+      endpoint: '/me',
+      identityLabel: 'admin',
+      raw: {
+        request: { method: 'GET', url: '/me' },
+        response: { status: 200, headers: {}, body: { data: { token: 'eyJa.bc.de' } } },
+      },
     };
     const fp = fingerprint(it).fp;
     const map = buildEvidenceMap([it]);

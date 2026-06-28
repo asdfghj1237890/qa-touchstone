@@ -46,32 +46,62 @@ pub struct AssertionRow {
 impl RunReport {
     /// Compute totals + `ok` from rows, then construct. All strings in `results`
     /// MUST already be redacted by the caller (run loop).
-    pub fn build(collection: String, identity: String, iterations: usize, results: Vec<ResultRow>) -> Self {
-        debug_assert!(results.iter().all(|r| r.iter < iterations),
-            "ResultRow.iter must be < iterations (dense 0..iterations) for JUnit suite grouping");
-        let mut totals = Totals { requests: results.len(), assertions: 0, passed: 0, failed: 0, errors: 0 };
+    pub fn build(
+        collection: String,
+        identity: String,
+        iterations: usize,
+        results: Vec<ResultRow>,
+    ) -> Self {
+        debug_assert!(
+            results.iter().all(|r| r.iter < iterations),
+            "ResultRow.iter must be < iterations (dense 0..iterations) for JUnit suite grouping"
+        );
+        let mut totals = Totals {
+            requests: results.len(),
+            assertions: 0,
+            passed: 0,
+            failed: 0,
+            errors: 0,
+        };
         for r in &results {
             if r.error.is_some() {
                 totals.errors += 1;
             }
             for a in &r.assertions {
                 totals.assertions += 1;
-                if a.pass { totals.passed += 1 } else { totals.failed += 1 }
+                if a.pass {
+                    totals.passed += 1
+                } else {
+                    totals.failed += 1
+                }
             }
         }
         let ok = totals.failed == 0 && totals.errors == 0;
-        RunReport { collection, identity, iterations, totals, results, ok }
+        RunReport {
+            collection,
+            identity,
+            iterations,
+            totals,
+            results,
+            ok,
+        }
     }
 }
 
 /// Default human-readable summary.
 pub fn print_human(r: &RunReport) {
-    println!("collection {} as {} — {} iteration(s)", r.collection, r.identity, r.iterations);
+    println!(
+        "collection {} as {} — {} iteration(s)",
+        r.collection, r.identity, r.iterations
+    );
     for row in &r.results {
         match &row.error {
             Some(e) => println!("  [iter {}] {} ERROR: {}", row.iter, row.request, e),
             None => {
-                println!("  [iter {}] {} → {} ({}ms)", row.iter, row.request, row.status, row.ms);
+                println!(
+                    "  [iter {}] {} → {} ({}ms)",
+                    row.iter, row.request, row.status, row.ms
+                );
                 for a in &row.assertions {
                     let mark = if a.pass { '\u{2713}' } else { '\u{2717}' };
                     println!("    {mark} {} (actual: {})", a.label, a.actual);
@@ -92,7 +122,9 @@ pub fn to_junit(r: &RunReport) -> String {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out.push_str(&format!(
         "<testsuites tests=\"{}\" failures=\"{}\" errors=\"{}\">\n",
-        r.totals.assertions + r.totals.errors, r.totals.failed, r.totals.errors
+        r.totals.assertions + r.totals.errors,
+        r.totals.failed,
+        r.totals.errors
     ));
     for iter in 0..r.iterations {
         let rows: Vec<&ResultRow> = r.results.iter().filter(|x| x.iter == iter).collect();
@@ -100,8 +132,13 @@ pub fn to_junit(r: &RunReport) -> String {
         let mut failures = 0usize;
         let mut errors = 0usize;
         for row in &rows {
-            if row.error.is_some() { tests += 1; errors += 1; }
-            else { tests += row.assertions.len(); failures += row.assertions.iter().filter(|a| !a.pass).count(); }
+            if row.error.is_some() {
+                tests += 1;
+                errors += 1;
+            } else {
+                tests += row.assertions.len();
+                failures += row.assertions.iter().filter(|a| !a.pass).count();
+            }
         }
         let secs = rows.iter().map(|x| x.ms).sum::<u64>() as f64 / 1000.0;
         out.push_str(&format!(
@@ -118,7 +155,11 @@ pub fn to_junit(r: &RunReport) -> String {
             } else {
                 for a in &row.assertions {
                     if a.pass {
-                        out.push_str(&format!("    <testcase classname=\"{}\" name=\"{}\" time=\"0\"/>\n", cls, xml_attr_escape(&a.label)));
+                        out.push_str(&format!(
+                            "    <testcase classname=\"{}\" name=\"{}\" time=\"0\"/>\n",
+                            cls,
+                            xml_attr_escape(&a.label)
+                        ));
                     } else {
                         out.push_str(&format!(
                             "    <testcase classname=\"{}\" name=\"{}\" time=\"0\"><failure message=\"{}\"/></testcase>\n",
@@ -145,35 +186,96 @@ mod junit_tests {
     use super::*;
 
     fn sample() -> RunReport {
-        RunReport::build("smoke".into(), "anon".into(), 1, vec![
-            ResultRow { iter: 0, request: "ok".into(), status: 200, ms: 12, final_url: Some("https://x/ok".into()), error: None,
-                assertions: vec![ AssertionRow { label: "status eq 200".into(), pass: true, actual: "200".into() } ] },
-            ResultRow { iter: 0, request: "bad".into(), status: 200, ms: 8, final_url: Some("https://x/ok".into()), error: None,
-                assertions: vec![ AssertionRow { label: "status eq 500".into(), pass: false, actual: "200".into() } ] },
-            ResultRow { iter: 0, request: "boom".into(), status: 0, ms: 0, final_url: None, error: Some("dns failure".into()), assertions: vec![] },
-        ])
+        RunReport::build(
+            "smoke".into(),
+            "anon".into(),
+            1,
+            vec![
+                ResultRow {
+                    iter: 0,
+                    request: "ok".into(),
+                    status: 200,
+                    ms: 12,
+                    final_url: Some("https://x/ok".into()),
+                    error: None,
+                    assertions: vec![AssertionRow {
+                        label: "status eq 200".into(),
+                        pass: true,
+                        actual: "200".into(),
+                    }],
+                },
+                ResultRow {
+                    iter: 0,
+                    request: "bad".into(),
+                    status: 200,
+                    ms: 8,
+                    final_url: Some("https://x/ok".into()),
+                    error: None,
+                    assertions: vec![AssertionRow {
+                        label: "status eq 500".into(),
+                        pass: false,
+                        actual: "200".into(),
+                    }],
+                },
+                ResultRow {
+                    iter: 0,
+                    request: "boom".into(),
+                    status: 0,
+                    ms: 0,
+                    final_url: None,
+                    error: Some("dns failure".into()),
+                    assertions: vec![],
+                },
+            ],
+        )
     }
 
     #[test]
     fn junit_is_well_formed_and_structured() {
         let xml = to_junit(&sample());
         let doc = roxmltree::Document::parse(&xml).expect("well-formed XML");
-        let suites: Vec<_> = doc.descendants().filter(|n| n.has_tag_name("testsuite")).collect();
+        let suites: Vec<_> = doc
+            .descendants()
+            .filter(|n| n.has_tag_name("testsuite"))
+            .collect();
         assert_eq!(suites.len(), 1);
         assert_eq!(suites[0].attribute("failures"), Some("1"));
         assert_eq!(suites[0].attribute("errors"), Some("1"));
-        let cases: Vec<_> = doc.descendants().filter(|n| n.has_tag_name("testcase")).collect();
+        let cases: Vec<_> = doc
+            .descendants()
+            .filter(|n| n.has_tag_name("testcase"))
+            .collect();
         assert_eq!(cases.len(), 3); // 2 assertions + 1 error case
-        assert_eq!(doc.descendants().filter(|n| n.has_tag_name("failure")).count(), 1);
-        assert_eq!(doc.descendants().filter(|n| n.has_tag_name("error")).count(), 1);
+        assert_eq!(
+            doc.descendants()
+                .filter(|n| n.has_tag_name("failure"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            doc.descendants()
+                .filter(|n| n.has_tag_name("error"))
+                .count(),
+            1
+        );
     }
 
     #[test]
     fn metachars_and_control_chars_are_safe() {
-        let r = RunReport::build("c".into(), "i".into(), 1, vec![
-            ResultRow { iter: 0, request: "r".into(), status: 200, ms: 1, final_url: None,
-                error: Some("a<b>&\"'\u{0}\u{7}z".into()), assertions: vec![] },
-        ]);
+        let r = RunReport::build(
+            "c".into(),
+            "i".into(),
+            1,
+            vec![ResultRow {
+                iter: 0,
+                request: "r".into(),
+                status: 200,
+                ms: 1,
+                final_url: None,
+                error: Some("a<b>&\"'\u{0}\u{7}z".into()),
+                assertions: vec![],
+            }],
+        );
         let xml = to_junit(&r);
         roxmltree::Document::parse(&xml).expect("well-formed even with metachars/control chars");
         assert!(!xml.contains('\u{0}'), "NUL must be sanitized out");

@@ -8,9 +8,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
-    setItem: (k, v) => { store[k] = String(v); },
-    removeItem: (k) => { delete store[k]; },
-    clear: () => { store = {}; },
+    setItem: (k, v) => {
+      store[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete store[k];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -19,7 +25,12 @@ function installLocalStorage(seed = {}) {
 function renderHome(history, setRoute = () => {}) {
   return render(
     <I18nProvider>
-      <HomePage setRoute={setRoute} history={history} onOpenRequest={() => {}} env={{ label: 'None', baseUrl: '' }} />
+      <HomePage
+        setRoute={setRoute}
+        history={history}
+        onOpenRequest={() => {}}
+        env={{ label: 'None', baseUrl: '' }}
+      />
     </I18nProvider>
   );
 }

@@ -16,12 +16,19 @@ const userSchema = {
 
 describe('validateAgainstSchema — type checking', () => {
   it('accepts a conforming object', () => {
-    expect(validateAgainstSchema({ id: 1, email: 'a@b.com', role: 'admin' }, userSchema)).toEqual([]);
+    expect(validateAgainstSchema({ id: 1, email: 'a@b.com', role: 'admin' }, userSchema)).toEqual(
+      []
+    );
   });
   it('flags a wrong scalar type', () => {
     const v = validateAgainstSchema({ id: 'oops', email: 'a@b.com' }, userSchema);
     expect(v).toHaveLength(1);
-    expect(v[0]).toMatchObject({ kind: 'type', path: '$.id', expected: 'integer', actual: 'string' });
+    expect(v[0]).toMatchObject({
+      kind: 'type',
+      path: '$.id',
+      expected: 'integer',
+      actual: 'string',
+    });
   });
   it('treats an integer-valued number as integer but rejects a fractional one', () => {
     expect(validateAgainstSchema({ id: 2, email: 'a@b.com' }, userSchema)).toEqual([]);
@@ -33,12 +40,33 @@ describe('validateAgainstSchema — type checking', () => {
 describe('validateAgainstSchema — required / nullable', () => {
   it('flags a missing required property', () => {
     const v = validateAgainstSchema({ id: 1 }, userSchema);
-    expect(v).toEqual([{ kind: 'required', path: '$.email', expected: 'present', actual: 'absent', message: expect.any(String) }]);
+    expect(v).toEqual([
+      {
+        kind: 'required',
+        path: '$.email',
+        expected: 'present',
+        actual: 'absent',
+        message: expect.any(String),
+      },
+    ]);
   });
   it('allows null only when nullable or type includes null', () => {
-    expect(validateAgainstSchema({ v: null }, { type: 'object', properties: { v: { type: 'string', nullable: true } } })).toEqual([]);
-    expect(validateAgainstSchema({ v: null }, { type: 'object', properties: { v: { type: ['string', 'null'] } } })).toEqual([]);
-    const v = validateAgainstSchema({ v: null }, { type: 'object', properties: { v: { type: 'string' } } });
+    expect(
+      validateAgainstSchema(
+        { v: null },
+        { type: 'object', properties: { v: { type: 'string', nullable: true } } }
+      )
+    ).toEqual([]);
+    expect(
+      validateAgainstSchema(
+        { v: null },
+        { type: 'object', properties: { v: { type: ['string', 'null'] } } }
+      )
+    ).toEqual([]);
+    const v = validateAgainstSchema(
+      { v: null },
+      { type: 'object', properties: { v: { type: 'string' } } }
+    );
     expect(v[0]).toMatchObject({ kind: 'type', path: '$.v', actual: 'null' });
   });
 });
@@ -54,7 +82,10 @@ describe('validateAgainstSchema — enum / arrays / nesting', () => {
     expect(v[0]).toMatchObject({ kind: 'type', path: '$.tags[1]', actual: 'integer' });
   });
   it('recurses into nested objects', () => {
-    const v = validateAgainstSchema({ id: 1, email: 'a@b.com', profile: { age: 'old' } }, userSchema);
+    const v = validateAgainstSchema(
+      { id: 1, email: 'a@b.com', profile: { age: 'old' } },
+      userSchema
+    );
     expect(v[0]).toMatchObject({ kind: 'type', path: '$.profile.age', actual: 'string' });
   });
 });
@@ -69,8 +100,8 @@ describe('validateAgainstSchema — format (advisory)', () => {
 describe('conformanceFindings', () => {
   it('maps violations to schema-conformance findings with sensible severities', () => {
     const fs = conformanceFindings({ id: 'x', email: 'bad', role: 'root' }, userSchema);
-    const byKind = Object.fromEntries(fs.map(f => [f.ruleId, f]));
-    expect(fs.every(f => f.oracle === 'schema-conformance')).toBe(true);
+    const byKind = Object.fromEntries(fs.map((f) => [f.ruleId, f]));
+    expect(fs.every((f) => f.oracle === 'schema-conformance')).toBe(true);
     expect(byKind['schema-conformance:type'].severity).toBe('medium');
     expect(byKind['schema-conformance:format'].severity).toBe('low');
     expect(byKind['schema-conformance:enum'].severity).toBe('medium');
@@ -84,6 +115,6 @@ describe('conformanceFindings', () => {
     const body = Array.from({ length: 500 }, () => 1); // 500 type violations
     const fs = conformanceFindings(body, arrSchema);
     expect(fs.length).toBeLessThanOrEqual(51); // capped (+1 summary)
-    expect(fs.some(f => /more/i.test(f.title))).toBe(true);
+    expect(fs.some((f) => /more/i.test(f.title))).toBe(true);
   });
 });

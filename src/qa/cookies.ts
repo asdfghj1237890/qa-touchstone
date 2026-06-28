@@ -16,7 +16,11 @@ export interface StoredCookie {
 export function cookieMatches(ck: StoredCookie | null | undefined, requestUrl: string): boolean {
   if (!ck || !ck.on || !requestUrl || !ck.domain) return false;
   let parsed: URL;
-  try { parsed = new URL(requestUrl); } catch { return false; }
+  try {
+    parsed = new URL(requestUrl);
+  } catch {
+    return false;
+  }
   const host = parsed.hostname;
   // Domain match: host-only cookies (Set-Cookie with no Domain attribute)
   // must match the exact request host. Otherwise the cookie's scope domain
@@ -30,10 +34,9 @@ export function cookieMatches(ck: StoredCookie | null | undefined, requestUrl: s
   // path AND the boundary char in the request path is a `/`.
   const path = parsed.pathname || '/';
   const ckPath = ck.path || '/';
-  const pathMatch = (
+  const pathMatch =
     path === ckPath ||
-    (path.startsWith(ckPath) && (ckPath.endsWith('/') || path[ckPath.length] === '/'))
-  );
+    (path.startsWith(ckPath) && (ckPath.endsWith('/') || path[ckPath.length] === '/'));
   if (!pathMatch) return false;
   // Secure: only send over https.
   if (ck.secure && parsed.protocol !== 'https:') return false;

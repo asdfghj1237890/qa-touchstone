@@ -27,11 +27,11 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
 
 ![QA Touchstone](docs/screenshots/01-home.png)
 
-| 安全矩陣（RBAC） | AI 測試產生 | API client |
-| --- | --- | --- |
+| 安全矩陣（RBAC）                                     | AI 測試產生                                             | API client                                        |
+| ---------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------- |
 | ![安全矩陣](docs/screenshots/02-security-matrix.png) | ![AI 測試產生](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
-| **產生的 API 文件** | **效能 / 負載測試** | **Realtime（WebSocket / SSE）** |
-| ![API 文件](docs/screenshots/05-api-docs.png) | ![效能測試](docs/screenshots/06-performance.png) | ![Realtime](docs/screenshots/07-realtime.png) |
+| **產生的 API 文件**                                  | **效能 / 負載測試**                                     | **Realtime（WebSocket / SSE）**                   |
+| ![API 文件](docs/screenshots/05-api-docs.png)        | ![效能測試](docs/screenshots/06-performance.png)        | ![Realtime](docs/screenshots/07-realtime.png)     |
 
 <sub>重生指令：開著 dev server 時執行 `node scripts/capture-screenshots.mjs`（用系統 Chrome 透過 DevTools Protocol 驅動；介面截圖預設英文，要中文介面設 `LOCALE=zh-TW`）。</sub>
 
@@ -244,6 +244,238 @@ npm run build
 ```bash
 npm run tauri:build
 ```
+
+</details>
+
+## Headless CI Runner
+
+<details open>
+<summary>不開桌面 UI，在 CI 裡執行 QA Touchstone</summary>
+
+`qa-touchstone-ci` 是獨立的 headless runner，專門給 CI 使用。它不連結 Tauri
+或 OS keychain layer，所以可以跑在一般 GitHub Actions、GitLab CI、Jenkins
+或 container job。tag release 會在桌面版安裝檔旁邊附上這些 CLI 產物：
+
+- `qa-touchstone-ci-linux-x64.tar.gz`
+- `qa-touchstone-ci-macos-<arch>.tar.gz`
+- `qa-touchstone-ci-windows-x64.zip`
+- 對應的 `.sha256` checksum 檔
+
+CI 可用的功能就是下面這組 `qa-touchstone-ci` 指令。它刻意比桌面 app 小：
+CI job 會從檔案與環境變數執行可重現的 API、安全與效能檢查，不啟動 Tauri UI，
+也不使用 OS keychain。
+
+| CI 可跑的功能                 | 指令           | 需要連網 | 需要 runner 有 k6 | 常見 CI 輸出                                   |
+| ----------------------------- | -------------- | -------- | ----------------- | ---------------------------------------------- |
+| 原始 smoke probe              | `ping`         | 是       | 否                | human status line                              |
+| Postman/OpenAPI 轉換          | `import`       | 否       | 否                | `qa.json` scaffold                             |
+| 單一 API request + assertions | `send`         | 是       | 否                | JSON result                                    |
+| Collection/API smoke suite    | `run`          | 是       | 否                | JSON + optional JUnit XML                      |
+| k6-backed performance check   | `perf`         | 是       | **是**            | JSON + optional k6 summary export              |
+| Security scan/report gate     | `scan`         | 是       | 否                | JSON、HTML、JUnit XML、SARIF、baseline updates |
+| BOLA config candidate helper  | `bola-suggest` | 否       | 否                | human 或 JSON candidate list                   |
+
+Headless CLI **不會** bundle k6。API checks、collection runs、BOLA
+suggestions、imports 與 security scans 只需要 `qa-touchstone-ci` binary；
+`perf` 指令要求 CI runner 上已安裝 `k6`，或用 `--k6-bin` 明確指定 k6 路徑。
+
+桌面專用功能不包含在 headless artifact：沒有互動式 UI、沒有背景 monitor
+scheduler、沒有 OS keychain storage、沒有桌面版 bundle 的 k6 resource，也沒有
+AI-assisted generation flow。CI 裡請把 secrets 放在 runner 的 secrets manager，
+並在 config 用 `{ "env": "API_TOKEN" }` 這類 environment-backed value 引用。
+
+從本 repo 本機建置：
+
+```bash
+cargo build --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci --release
+./src-tauri/target/release/qa-touchstone-ci --version
+```
+
+最小 CI config 範例：
+
+```json
+{
+  "version": 1,
+  "environments": [{ "name": "staging", "variables": { "baseUrl": "https://api.example.com" } }],
+  "identities": [
+    { "id": "anon", "auth": { "type": "none" } },
+    { "id": "api", "auth": { "type": "bearer", "token": { "env": "API_TOKEN" } } }
+  ],
+  "requests": [
+    {
+      "id": "health",
+      "method": "GET",
+      "url": "{{baseUrl}}/health",
+      "assertions": [{ "type": "status", "op": "eq", "value": 200 }]
+    },
+    {
+      "id": "admin-users",
+      "method": "GET",
+      "url": "{{baseUrl}}/admin/users",
+      "privileged": true
+    }
+  ],
+  "collections": [{ "id": "smoke", "requests": ["health"] }],
+  "security": {
+    "matrix": {
+      "endpoints": ["admin-users"],
+      "expect": { "admin-users": { "anon": "deny", "api": "allow" } }
+    }
+  }
+}
+```
+
+逐步呼叫：
+
+```bash
+# 需要時，把 Postman / OpenAPI JSON 轉成 qa.json。
+qa-touchstone-ci import --input postman.json --base-url https://api.example.com --out qa.generated.json
+
+# 送出單一 request，輸出 machine-readable JSON。
+API_TOKEN="$API_TOKEN" qa-touchstone-ci send \
+  --config qa.json \
+  --request health \
+  --identity api \
+  --env staging \
+  --json
+
+# 跑 collection，並寫出 JUnit 給 CI test results 使用。
+API_TOKEN="$API_TOKEN" qa-touchstone-ci run \
+  --config qa.json \
+  --collection smoke \
+  --identity api \
+  --env staging \
+  --junit reports/qa-run.xml \
+  --json > reports/qa-run.json
+
+# 跑 k6 performance check。需要 PATH 上有 k6，或傳 --k6-bin /path/to/k6。
+k6 version
+API_TOKEN="$API_TOKEN" qa-touchstone-ci perf \
+  --config qa.json \
+  --request health \
+  --identity api \
+  --env staging \
+  --stage 30s:5 \
+  --stage 1m:10 \
+  --summary-out reports/k6-summary.json \
+  --json > reports/k6-run.json
+
+# 跑 security suite，並輸出 CI artifacts。
+API_TOKEN="$API_TOKEN" qa-touchstone-ci scan \
+  --config qa.json \
+  --env staging \
+  --json \
+  --out reports/security.json \
+  --html reports/security.html \
+  --junit reports/security-junit.xml \
+  --sarif reports/security.sarif \
+  --fail-on high
+```
+
+Exit codes 固定：`0` 通過、`1` runtime/network error、`2` 輸入或 config
+錯誤、`3` 有高於或等於 `--fail-on` 的 security findings、`4` assertions
+失敗或 `perf` 收到 k6 非 0 結果。若要把目前掃描結果採納成 baseline，可執行
+`scan --baseline .qa/security-baseline.json --update-baseline`；後續掃描會與該
+檔案比對，只針對新增 findings gate。
+
+`perf --script-out` 會把產生的 k6 script 留下來方便 review/debug。該 script
+可能包含 auth headers 或 tokens；除非你的 secrets policy 允許，否則不要把它
+上傳成 CI artifact。一般未指定 `--script-out` 時，臨時 script 會在 k6 結束後刪除。
+
+在另一個 repo 的 GitHub Actions 使用 release artifact：
+
+```yaml
+name: qa-touchstone
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  api-security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      QA_TOUCHSTONE_VERSION: v0.22.0
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QA Touchstone CLI
+        run: |
+          set -euo pipefail
+          asset="qa-touchstone-ci-linux-x64.tar.gz"
+          base="https://github.com/asdfghj1237890/qa-touchstone/releases/download/${QA_TOUCHSTONE_VERSION}"
+          curl -fsSLO "${base}/${asset}"
+          curl -fsSLO "${base}/${asset}.sha256"
+          sha256sum -c "${asset}.sha256"
+          tar -xzf "${asset}"
+          sudo mv qa-touchstone-ci-linux-x64/qa-touchstone-ci /usr/local/bin/qa-touchstone-ci
+
+      - name: Run API smoke collection
+        run: |
+          mkdir -p reports
+          qa-touchstone-ci run \
+            --config qa-touchstone.json \
+            --collection smoke \
+            --identity api \
+            --env staging \
+            --junit reports/qa-run.xml \
+            --json > reports/qa-run.json
+
+      - name: Verify k6 is available
+        run: k6 version
+
+      - name: Run k6 performance check
+        run: |
+          qa-touchstone-ci perf \
+            --config qa-touchstone.json \
+            --request health \
+            --identity api \
+            --env staging \
+            --stage 30s:5 \
+            --summary-out reports/k6-summary.json \
+            --json > reports/k6-run.json
+
+      - name: Run security scan
+        id: scan
+        run: |
+          set +e
+          qa-touchstone-ci scan \
+            --config qa-touchstone.json \
+            --env staging \
+            --json \
+            --out reports/security.json \
+            --html reports/security.html \
+            --junit reports/security-junit.xml \
+            --sarif reports/security.sarif \
+            --fail-on high
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/security.sarif
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-touchstone-reports
+          path: reports/
+
+      - name: Fail on QA Touchstone gate
+        if: steps.scan.outputs.exit_code != '0'
+        run: exit ${{ steps.scan.outputs.exit_code }}
+```
+
+正式環境若有嚴格 supply-chain 要求，建議把範例中的 Actions 版本改成固定 commit SHA。
 
 </details>
 

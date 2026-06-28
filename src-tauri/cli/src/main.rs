@@ -11,6 +11,7 @@ use serde_json::json;
 
 mod bola_suggest;
 mod import;
+mod perf;
 mod report;
 mod run;
 mod scan;
@@ -50,37 +51,96 @@ enum Command {
     },
     /// Run a collection (optionally over a data file) and report per-assertion results.
     Run {
-        #[arg(long)] config: String,
-        #[arg(long)] collection: String,
-        #[arg(long)] identity: String,
-        #[arg(long)] env: Option<String>,
-        #[arg(long)] data: Option<String>,
-        #[arg(long, conflicts_with = "data")] iterations: Option<u32>,
-        #[arg(long)] junit: Option<String>,
-        #[arg(long)] json: bool,
+        #[arg(long)]
+        config: String,
+        #[arg(long)]
+        collection: String,
+        #[arg(long)]
+        identity: String,
+        #[arg(long)]
+        env: Option<String>,
+        #[arg(long)]
+        data: Option<String>,
+        #[arg(long, conflicts_with = "data")]
+        iterations: Option<u32>,
+        #[arg(long)]
+        junit: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Generate a k6 script from one configured request and run system k6.
+    Perf {
+        /// Path to the QA Touchstone config JSON file.
+        #[arg(long)]
+        config: String,
+        /// ID of the request to run as a k6 target.
+        #[arg(long)]
+        request: String,
+        /// ID of the identity whose auth should be applied.
+        #[arg(long)]
+        identity: String,
+        /// Name of the environment to activate.
+        #[arg(long)]
+        env: Option<String>,
+        /// Optional collection id whose variables should be active.
+        #[arg(long)]
+        collection: Option<String>,
+        /// k6 stage as DURATION:VUS, e.g. --stage 30s:5 --stage 1m:20.
+        #[arg(long)]
+        stage: Vec<String>,
+        /// k6 executable path. Defaults to `k6` on PATH.
+        #[arg(long)]
+        k6_bin: Option<String>,
+        /// Keep the generated k6 script at this path. May contain auth secrets.
+        #[arg(long)]
+        script_out: Option<String>,
+        /// Pass --summary-export to k6 and write the summary JSON here.
+        #[arg(long)]
+        summary_out: Option<String>,
+        /// Disable HTTP keep-alive in k6.
+        #[arg(long)]
+        no_keepalive: bool,
+        /// Per-request timeout in milliseconds.
+        #[arg(long, default_value_t = 30_000)]
+        timeout_ms: u64,
+        /// Output machine-readable JSON instead of human lines.
+        #[arg(long)]
+        json: bool,
     },
     /// Run the security suite (matrix + BOLA + rate-limit), gate on new findings, and emit
     /// reports (SARIF / HTML / JUnit) with baseline-aware scope-drift detection.
     Scan {
-        #[arg(long)] config: String,
-        #[arg(long)] engine: Option<String>,
-        #[arg(long)] env: Option<String>,
-        #[arg(long)] json: bool,
-        #[arg(long)] out: Option<String>,
+        #[arg(long)]
+        config: String,
+        #[arg(long)]
+        engine: Option<String>,
+        #[arg(long)]
+        env: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        out: Option<String>,
         /// Path to a baseline snapshot JSON file (absent or empty => bootstrap / all-new).
-        #[arg(long)] baseline: Option<String>,
+        #[arg(long)]
+        baseline: Option<String>,
         /// Overwrite the baseline file with this run's snapshot (requires --baseline; ignored on engine errors). With --annotations, the overridden effective severities are frozen into the baseline.
-        #[arg(long, requires = "baseline")] update_baseline: bool,
+        #[arg(long, requires = "baseline")]
+        update_baseline: bool,
         /// Gate threshold: critical|high|medium|low (default: high).
-        #[arg(long)] fail_on: Option<String>,
+        #[arg(long)]
+        fail_on: Option<String>,
         /// Write a SARIF 2.1.0 report to this file path.
-        #[arg(long)] sarif: Option<String>,
+        #[arg(long)]
+        sarif: Option<String>,
         /// Write an HTML security report to this file path.
-        #[arg(long)] html: Option<String>,
+        #[arg(long)]
+        html: Option<String>,
         /// Write a JUnit XML report to this file path.
-        #[arg(long)] junit: Option<String>,
+        #[arg(long)]
+        junit: Option<String>,
         /// Read a findings annotations file (suppress / severityOverride / status / owner / note), keyed by fingerprint.
-        #[arg(long)] annotations: Option<String>,
+        #[arg(long)]
+        annotations: Option<String>,
     },
     /// Detect id locations in configured requests and print ranked candidates
     /// + a paste-ready security.bola.tests config stub. Read-only, no network.
@@ -116,37 +176,125 @@ async fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Ping { url } => {
-            let request_details = json!({ "request": { "method": "GET", "url": url, "header": [] } });
+            let request_details =
+                json!({ "request": { "method": "GET", "url": url, "header": [] } });
             let out = qa_touchstone_core::executor::execute_request(
-                &request_details, &json!({}), None, None, ExecOptions::default(),
+                &request_details,
+                &json!({}),
+                None,
+                None,
+                ExecOptions::default(),
             )
             .await;
             if out["success"].as_bool() == Some(true) {
-                println!("{} {}", out["status"], out["finalUrl"].as_str().unwrap_or("?"));
+                println!(
+                    "{} {}",
+                    out["status"],
+                    out["finalUrl"].as_str().unwrap_or("?")
+                );
                 std::process::ExitCode::SUCCESS
             } else {
-                eprintln!("error: {}", out["error"].as_str().unwrap_or("request failed"));
+                eprintln!(
+                    "error: {}",
+                    out["error"].as_str().unwrap_or("request failed")
+                );
                 std::process::ExitCode::from(1)
             }
         }
-        Command::Send { config, request, identity, env, json: use_json } => {
-            run_send(config, request, identity, env, use_json).await
+        Command::Send {
+            config,
+            request,
+            identity,
+            env,
+            json: use_json,
+        } => run_send(config, request, identity, env, use_json).await,
+        Command::Run {
+            config,
+            collection,
+            identity,
+            env,
+            data,
+            iterations,
+            junit,
+            json: use_json,
+        } => {
+            run::run_collection(
+                config, collection, identity, env, data, iterations, junit, use_json,
+            )
+            .await
         }
-        Command::Run { config, collection, identity, env, data, iterations, junit, json: use_json } => {
-            run::run_collection(config, collection, identity, env, data, iterations, junit, use_json).await
+        Command::Perf {
+            config,
+            request,
+            identity,
+            env,
+            collection,
+            stage,
+            k6_bin,
+            script_out,
+            summary_out,
+            no_keepalive,
+            timeout_ms,
+            json: use_json,
+        } => {
+            perf::run_perf(
+                config,
+                request,
+                identity,
+                env,
+                collection,
+                stage,
+                k6_bin,
+                script_out,
+                summary_out,
+                use_json,
+                no_keepalive,
+                timeout_ms,
+            )
+            .await
         }
-        Command::Scan { config, engine, env, json: use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations } => {
-            scan::run_scan(config, engine, env, use_json, out, baseline, update_baseline, fail_on, sarif, html, junit, annotations).await
+        Command::Scan {
+            config,
+            engine,
+            env,
+            json: use_json,
+            out,
+            baseline,
+            update_baseline,
+            fail_on,
+            sarif,
+            html,
+            junit,
+            annotations,
+        } => {
+            scan::run_scan(
+                config,
+                engine,
+                env,
+                use_json,
+                out,
+                baseline,
+                update_baseline,
+                fail_on,
+                sarif,
+                html,
+                junit,
+                annotations,
+            )
+            .await
         }
-        Command::BolaSuggest { config, env, json: use_json } => {
-            bola_suggest::run(config, env, use_json).await
-        }
-        Command::Import { input, base_url, out } => {
-            import::run(input, base_url, out).await
-        }
+        Command::BolaSuggest {
+            config,
+            env,
+            json: use_json,
+        } => bola_suggest::run(config, env, use_json).await,
+        Command::Import {
+            input,
+            base_url,
+            out,
+        } => import::run(input, base_url, out).await,
     }
 }
-
 
 async fn run_send(
     config_path: String,
@@ -155,7 +303,11 @@ async fn run_send(
     env_name: Option<String>,
     use_json: bool,
 ) -> std::process::ExitCode {
-    use qa_touchstone_core::{buildreq, config::load_config, engine::{qa_var_map, RealDynamics}};
+    use qa_touchstone_core::{
+        buildreq,
+        config::load_config,
+        engine::{qa_var_map, RealDynamics},
+    };
 
     // Step 1: read the config file (IO error → exit 2)
     let text = match std::fs::read_to_string(&config_path) {
@@ -272,13 +424,17 @@ async fn run_send(
         for r in &step.results {
             let pass = r.get("pass") == Some(&json!(true));
             let mark = if pass { '\u{2713}' } else { '\u{2717}' }; // ✓ / ✗
-            let label_raw = r.get("label")
+            let label_raw = r
+                .get("label")
                 .and_then(|v| v.as_str())
                 .or_else(|| r.get("type").and_then(|v| v.as_str()))
                 .unwrap_or("?");
             let label = red.redact_str(label_raw);
             let actual = match r.get("actual") {
-                Some(v) => v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string()),
+                Some(v) => v
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| v.to_string()),
                 None => "?".to_owned(),
             };
             let redacted_actual = red.redact_str(&actual);

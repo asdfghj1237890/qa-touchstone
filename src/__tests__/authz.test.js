@@ -50,7 +50,12 @@ const idAnon = anonIdentity();
 const idAdmin = { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } };
 const ep1 = { reqId: 'r1', method: 'GET', path: '/a' };
 const ep2 = { reqId: 'r2', method: 'GET', path: '/b' };
-const baseState = { identities: [idAnon, idAdmin], endpoints: [ep1, ep2], expect: {}, denySet: [401, 403] };
+const baseState = {
+  identities: [idAnon, idAdmin],
+  endpoints: [ep1, ep2],
+  expect: {},
+  denySet: [401, 403],
+};
 
 describe('anonIdentity', () => {
   it('is a non-empty identity with auth type none', () => {
@@ -69,8 +74,8 @@ describe('defaultExpectation', () => {
 describe('withDefaults', () => {
   it('fills every (endpoint,identity) cell using smart defaults, preserving overrides', () => {
     const state = withDefaults({ ...baseState, expect: { r1: { admin: 'deny' } } });
-    expect(state.expect.r1.anon).toBe('deny');   // smart default
-    expect(state.expect.r1.admin).toBe('deny');  // preserved override
+    expect(state.expect.r1.anon).toBe('deny'); // smart default
+    expect(state.expect.r1.admin).toBe('deny'); // preserved override
     expect(state.expect.r2.admin).toBe('allow'); // smart default
     expect(state.expect.r2.anon).toBe('deny');
   });
@@ -81,7 +86,7 @@ describe('setColumn / setRow', () => {
     const state = setColumn(withDefaults(baseState), 'admin', 'deny');
     expect(state.expect.r1.admin).toBe('deny');
     expect(state.expect.r2.admin).toBe('deny');
-    expect(state.expect.r1.anon).toBe('deny');   // untouched
+    expect(state.expect.r1.anon).toBe('deny'); // untouched
   });
   it('setRow sets one endpoint across all identities', () => {
     const state = setRow(withDefaults(baseState), 'r1', 'skip');
@@ -93,7 +98,10 @@ describe('setColumn / setRow', () => {
 
 describe('runMatrix', () => {
   const state = withDefaults({
-    identities: [anonIdentity(), { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } }],
+    identities: [
+      anonIdentity(),
+      { id: 'admin', name: 'admin', auth: { type: 'bearer', bearer: 'x' } },
+    ],
     endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
     expect: { r1: { anon: 'deny', admin: 'allow' } },
     denySet: [401, 403],
@@ -103,10 +111,12 @@ describe('runMatrix', () => {
     // anon → 401 (denied, expected deny → pass); admin → 200 (allowed, expected allow → pass)
     const runner = (ep, id) => Promise.resolve({ status: id.id === 'anon' ? 401 : 200, time: 5 });
     const seen = [];
-    const results = await runMatrix(state, runner, { onCell: (rid, iid, cell) => seen.push([rid, iid, cell.verdict]) });
+    const results = await runMatrix(state, runner, {
+      onCell: (rid, iid, cell) => seen.push([rid, iid, cell.verdict]),
+    });
     expect(results.r1.anon.verdict).toBe('pass');
     expect(results.r1.admin.verdict).toBe('pass');
-    expect(seen.length).toBe(2);  // onCell streamed both
+    expect(seen.length).toBe(2); // onCell streamed both
   });
 
   it('flags deny-expected-but-allowed as vuln', async () => {
@@ -118,7 +128,14 @@ describe('runMatrix', () => {
   it('skips cells whose expectation is skip', async () => {
     const skipState = setRow(state, 'r1', 'skip');
     let calls = 0;
-    await runMatrix(skipState, () => { calls++; return Promise.resolve({ status: 200 }); }, {});
+    await runMatrix(
+      skipState,
+      () => {
+        calls++;
+        return Promise.resolve({ status: 200 });
+      },
+      {}
+    );
     expect(calls).toBe(0);
   });
 
@@ -133,7 +150,14 @@ describe('runMatrix', () => {
     const controller = new AbortController();
     controller.abort();
     let calls = 0;
-    await runMatrix(state, () => { calls++; return Promise.resolve({ status: 200 }); }, { signal: controller.signal });
+    await runMatrix(
+      state,
+      () => {
+        calls++;
+        return Promise.resolve({ status: 200 });
+      },
+      { signal: controller.signal }
+    );
     expect(calls).toBe(0);
   });
 });
@@ -152,9 +176,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
-    setItem: (k, v) => { store[k] = String(v); },
-    removeItem: (k) => { delete store[k]; },
-    clear: () => { store = {}; },
+    setItem: (k, v) => {
+      store[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete store[k];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -164,9 +194,11 @@ describe('persistence', () => {
   it('round-trips config only (no results)', () => {
     installLocalStorage();
     const state = {
-      identities: [anonIdentity()], endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
-      expect: { r1: { anon: 'deny' } }, denySet: [401, 403],
-      results: { r1: { anon: { verdict: 'pass' } } },  // must NOT be persisted
+      identities: [anonIdentity()],
+      endpoints: [{ reqId: 'r1', method: 'GET', path: '/a' }],
+      expect: { r1: { anon: 'deny' } },
+      denySet: [401, 403],
+      results: { r1: { anon: { verdict: 'pass' } } }, // must NOT be persisted
     };
     saveMatrixConfig(state);
     const raw = JSON.parse(localStorage.getItem(SECURITY_STORAGE_KEY));
@@ -187,10 +219,23 @@ describe('persistence — oracleConfig', () => {
   it('round-trips oracleConfig when present and omits it when absent', () => {
     installLocalStorage();
     saveMatrixConfig({
-      identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401],
-      oracleConfig: { sensitive: true, schema: false, llm: false, severityOverrides: { pii: 'low' } },
+      identities: [anonIdentity()],
+      endpoints: [],
+      expect: {},
+      denySet: [401],
+      oracleConfig: {
+        sensitive: true,
+        schema: false,
+        llm: false,
+        severityOverrides: { pii: 'low' },
+      },
     });
-    expect(loadMatrixConfig().oracleConfig).toEqual({ sensitive: true, schema: false, llm: false, severityOverrides: { pii: 'low' } });
+    expect(loadMatrixConfig().oracleConfig).toEqual({
+      sensitive: true,
+      schema: false,
+      llm: false,
+      severityOverrides: { pii: 'low' },
+    });
 
     installLocalStorage();
     saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401] });
@@ -206,7 +251,11 @@ describe('runMatrix — request capture', () => {
     denySet: [401, 403],
   });
   it('captures cell.request from a { request, response } runner', async () => {
-    const runner = () => Promise.resolve({ request: { method: 'GET', path: '/a', identity: 'admin' }, response: { status: 200, time: 2 } });
+    const runner = () =>
+      Promise.resolve({
+        request: { method: 'GET', path: '/a', identity: 'admin' },
+        response: { status: 200, time: 2 },
+      });
     const results = await runMatrix(reqState, runner, {});
     expect(results.r1.admin.request).toEqual({ method: 'GET', path: '/a', identity: 'admin' });
     expect(results.r1.admin.status).toBe(200);
@@ -222,8 +271,25 @@ describe('runMatrix — request capture', () => {
 describe('persistence — bola', () => {
   it('round-trips a bola blob when present and omits it when absent', () => {
     installLocalStorage();
-    const bola = { tests: [{ id: 't1', reqId: 'r1', method: 'GET', path: '/u/{id}', idLocation: { kind: 'path', index: 1 }, idValues: { anon: '5' } }] };
-    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401], bola });
+    const bola = {
+      tests: [
+        {
+          id: 't1',
+          reqId: 'r1',
+          method: 'GET',
+          path: '/u/{id}',
+          idLocation: { kind: 'path', index: 1 },
+          idValues: { anon: '5' },
+        },
+      ],
+    };
+    saveMatrixConfig({
+      identities: [anonIdentity()],
+      endpoints: [],
+      expect: {},
+      denySet: [401],
+      bola,
+    });
     expect(loadMatrixConfig().bola).toEqual(bola);
 
     installLocalStorage();
@@ -235,8 +301,27 @@ describe('persistence — bola', () => {
 describe('persistence — rateLimit', () => {
   it('round-trips a rateLimit blob when present and omits it when absent', () => {
     installLocalStorage();
-    const rateLimit = { tests: [{ id: 'rl1', reqId: 'r1', method: 'POST', path: '/login', identityId: 'anon', n: 30, concurrency: 5, sensitivity: 'sensitive' }] };
-    saveMatrixConfig({ identities: [anonIdentity()], endpoints: [], expect: {}, denySet: [401], rateLimit });
+    const rateLimit = {
+      tests: [
+        {
+          id: 'rl1',
+          reqId: 'r1',
+          method: 'POST',
+          path: '/login',
+          identityId: 'anon',
+          n: 30,
+          concurrency: 5,
+          sensitivity: 'sensitive',
+        },
+      ],
+    };
+    saveMatrixConfig({
+      identities: [anonIdentity()],
+      endpoints: [],
+      expect: {},
+      denySet: [401],
+      rateLimit,
+    });
     expect(loadMatrixConfig().rateLimit).toEqual(rateLimit);
 
     installLocalStorage();
@@ -259,7 +344,10 @@ describe('classifyEndpoint', () => {
     expect(classifyEndpoint('GET', '/badminton/list').privileged).toBe(false); // not a substring match
   });
   it('can flag both reasons', () => {
-    expect(classifyEndpoint('DELETE', '/admin/users/1')).toEqual({ privileged: true, reasons: ['write', 'admin-path'] });
+    expect(classifyEndpoint('DELETE', '/admin/users/1')).toEqual({
+      privileged: true,
+      reasons: ['write', 'admin-path'],
+    });
   });
   it('tolerates null/empty input', () => {
     expect(classifyEndpoint(null, null)).toEqual({ privileged: false, reasons: [] });
@@ -275,18 +363,34 @@ import { endpointPrivileged } from '../qa/authz';
 
 describe('endpointPrivileged', () => {
   it('uses the heuristic when there is no manual override', () => {
-    expect(endpointPrivileged({ method: 'POST', path: '/orders' })).toEqual({ privileged: true, reasons: ['write'], source: 'auto' });
-    expect(endpointPrivileged({ method: 'GET', path: '/orders' })).toEqual({ privileged: false, reasons: [], source: 'auto' });
+    expect(endpointPrivileged({ method: 'POST', path: '/orders' })).toEqual({
+      privileged: true,
+      reasons: ['write'],
+      source: 'auto',
+    });
+    expect(endpointPrivileged({ method: 'GET', path: '/orders' })).toEqual({
+      privileged: false,
+      reasons: [],
+      source: 'auto',
+    });
   });
   it('honors a manual override either way', () => {
-    expect(endpointPrivileged({ method: 'GET', path: '/orders', privileged: true })).toEqual({ privileged: true, reasons: ['manual'], source: 'manual' });
-    expect(endpointPrivileged({ method: 'POST', path: '/orders', privileged: false })).toEqual({ privileged: false, reasons: ['manual'], source: 'manual' });
+    expect(endpointPrivileged({ method: 'GET', path: '/orders', privileged: true })).toEqual({
+      privileged: true,
+      reasons: ['manual'],
+      source: 'manual',
+    });
+    expect(endpointPrivileged({ method: 'POST', path: '/orders', privileged: false })).toEqual({
+      privileged: false,
+      reasons: ['manual'],
+      source: 'manual',
+    });
   });
 });
 
 const privEp = { reqId: 'p1', method: 'DELETE', path: '/admin/users/1' };
 const normEp = { reqId: 'n1', method: 'GET', path: '/profile' };
-const userId = { id: 'u', name: 'user', auth: { type: 'bearer' } };          // non-privileged
+const userId = { id: 'u', name: 'user', auth: { type: 'bearer' } }; // non-privileged
 const adminPriv = { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true };
 
 describe('defaultExpectation — endpoint-aware', () => {
@@ -311,25 +415,43 @@ describe('defaultExpectation — endpoint-aware', () => {
 
 describe('withDefaults — privileged endpoints', () => {
   it('defaults a non-privileged identity to deny on a privileged endpoint (new cell), preserving overrides', () => {
-    const state = withDefaults({ identities: [anonIdentity(), userId, adminPriv], endpoints: [privEp], expect: { p1: { u: 'allow' } }, denySet: [401, 403] });
-    expect(state.expect.p1.anon).toBe('deny');   // anon
-    expect(state.expect.p1.u).toBe('allow');     // preserved override
-    expect(state.expect.p1.a).toBe('allow');     // privileged identity
-    const fresh = withDefaults({ identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] });
-    expect(fresh.expect.p1.u).toBe('deny');      // smart default for a new cell
+    const state = withDefaults({
+      identities: [anonIdentity(), userId, adminPriv],
+      endpoints: [privEp],
+      expect: { p1: { u: 'allow' } },
+      denySet: [401, 403],
+    });
+    expect(state.expect.p1.anon).toBe('deny'); // anon
+    expect(state.expect.p1.u).toBe('allow'); // preserved override
+    expect(state.expect.p1.a).toBe('allow'); // privileged identity
+    const fresh = withDefaults({
+      identities: [userId],
+      endpoints: [privEp],
+      expect: {},
+      denySet: [401, 403],
+    });
+    expect(fresh.expect.p1.u).toBe('deny'); // smart default for a new cell
   });
 
   it('runMatrix uses the endpoint-aware fallback: a non-priv identity on a privileged endpoint with no explicit expect, returning 200, is a vuln (BFLA caught end-to-end)', async () => {
     const state = { identities: [userId], endpoints: [privEp], expect: {}, denySet: [401, 403] };
     const results = await runMatrix(state, () => Promise.resolve({ status: 200, time: 1 }), {});
-    expect(results.p1.u.verdict).toBe('vuln');   // defaulted deny → allowed → BFLA hole
+    expect(results.p1.u.verdict).toBe('vuln'); // defaulted deny → allowed → BFLA hole
   });
 });
 
 describe('persistence — identity.privileged', () => {
   it('round-trips a privileged identity flag and omits it when absent', () => {
     installLocalStorage();
-    saveMatrixConfig({ identities: [anonIdentity(), { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true }], endpoints: [], expect: {}, denySet: [401] });
+    saveMatrixConfig({
+      identities: [
+        anonIdentity(),
+        { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true },
+      ],
+      endpoints: [],
+      expect: {},
+      denySet: [401],
+    });
     const loaded = loadMatrixConfig();
     expect(loaded.identities.find((i) => i.id === 'a').privileged).toBe(true);
     expect(loaded.identities.find((i) => i.id === 'anon').privileged).toBeUndefined();

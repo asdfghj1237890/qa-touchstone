@@ -64,10 +64,11 @@ pub fn cleanup_temp_file(path: String) -> AppResult<()> {
         return Err(AppError::Other("Temp dir is unavailable".into()));
     };
     if !canon_p.starts_with(&canon_t) {
-        return Err(AppError::Other("Refusing to delete outside the temp dir".into()));
+        return Err(AppError::Other(
+            "Refusing to delete outside the temp dir".into(),
+        ));
     }
-    std::fs::remove_file(&p)
-        .map_err(|e| AppError::Other(format!("Remove failed: {e}")))?;
+    std::fs::remove_file(&p).map_err(|e| AppError::Other(format!("Remove failed: {e}")))?;
     Ok(())
 }
 
@@ -158,5 +159,4 @@ mod tests {
         let r = cleanup_temp_file(cwd.join("Cargo.toml").to_string_lossy().to_string());
         assert!(r.is_err());
     }
-
 }

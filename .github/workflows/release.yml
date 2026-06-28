@@ -105,6 +105,9 @@ jobs:
             - **Installer** (`-x64-setup.exe`): standard install. If you see "Windows protected your PC" → **More info** → **Run anyway**.
             - **Portable** (`-x64-portable.zip`): no install, no admin rights. Unzip and run `QA Touchstone.exe`. Keep the sibling `resources/` folder — it holds the bundled k6 used for performance testing.
 
+            ### Headless CI
+            Download `qa-touchstone-ci-<os>-<arch>` plus its `.sha256` file to run deterministic checks in another repository's CI without the desktop UI. Supported CI commands are `ping`, `import`, `send`, `run`, `scan`, `bola-suggest`, and k6-backed `perf`. The headless CLI does not bundle k6; install k6 on the runner before using `qa-touchstone-ci perf`.
+
             ### macOS (DMG · Apple Silicon / arm64)
             Gatekeeper blocks unsigned, un-notarized apps. Pick one:
             - **Right-click open**: in Applications, right-click (Control-click) QA Touchstone → **Open** → confirm **Open**.
@@ -124,6 +127,9 @@ jobs:
             兩種任選：
             - **安裝版**（`-x64-setup.exe`）：一般安裝。若出現「Windows 已保護您的電腦」→「其他資訊」→「仍要執行」。
             - **免安裝版**（`-x64-portable.zip`）：免安裝、免系統管理員權限。解壓後執行 `QA Touchstone.exe`，並保留旁邊的 `resources/` 資料夾（內含效能測試用的 k6）。
+
+            ### Headless CI
+            下載 `qa-touchstone-ci-<os>-<arch>` 與對應 `.sha256` 檔，即可在其他 repo 的 CI 裡執行可重現檢查，不需要桌面 UI。支援的 CI 指令為 `ping`、`import`、`send`、`run`、`scan`、`bola-suggest`，以及 k6-backed `perf`。Headless CLI 不會 bundle k6；使用 `qa-touchstone-ci perf` 前請先在 runner 安裝 k6。
 
             ### macOS（DMG · Apple Silicon / arm64）
             因未簽章、未公證，Gatekeeper 會擋。任選一種：
@@ -154,3 +160,77 @@ jobs:
           $zip = "QA.Touchstone_${ver}_x64-portable.zip"
           Compress-Archive -Path "$stage" -DestinationPath $zip -Force
           gh release upload "${{ github.ref_name }}" "$zip" --clobber
+
+  headless-cli:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            osName: linux
+          - platform: macos-latest
+            osName: macos
+          - platform: windows-latest
+            osName: windows
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build headless CLI
+        run: cargo build --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci --release
+
+      - name: Package headless CLI (Unix)
+        if: matrix.osName != 'windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          case "$arch" in
+            x86_64) arch=x64 ;;
+            arm64|aarch64) arch=arm64 ;;
+          esac
+          name="qa-touchstone-ci-${{ matrix.osName }}-${arch}"
+          mkdir -p "dist/${name}"
+          cp src-tauri/target/release/qa-touchstone-ci "dist/${name}/qa-touchstone-ci"
+          chmod +x "dist/${name}/qa-touchstone-ci"
+          tar -C dist -czf "${name}.tar.gz" "${name}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+          else
+            shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256"
+          fi
+          echo "ASSET=${name}.tar.gz" >> "$GITHUB_ENV"
+          echo "SHA_ASSET=${name}.tar.gz.sha256" >> "$GITHUB_ENV"
+
+      - name: Package headless CLI (Windows)
+        if: matrix.osName == 'windows'
+        shell: pwsh
+        run: |
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+          $name = "qa-touchstone-ci-windows-$arch"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item "src-tauri/target/release/qa-touchstone-ci.exe" "dist/$name/qa-touchstone-ci.exe"
+          Compress-Archive -Path "dist/$name" -DestinationPath "$name.zip" -Force
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+          "ASSET=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "SHA_ASSET=$name.zip.sha256" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload headless CLI release asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release upload "${{ github.ref_name }}" "$ASSET" "$SHA_ASSET" --clobber

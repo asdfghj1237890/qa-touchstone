@@ -12,11 +12,25 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
   });
 
   beforeEach(() => {
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
-    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 12, size: 5, body: { ok: true }, headers: {} } };
+    window.QA.RESPONSES = {
+      r1: { status: 200, statusText: 'OK', time: 12, size: 5, body: { ok: true }, headers: {} },
+    };
   });
 
   it('returns the live (canned) response for a saved request', async () => {
@@ -30,12 +44,33 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
 
   it('matches cookies against the request URL without crashing', async () => {
     const cookies = [
-      { on: true, name: 'good', value: '1', domain: 'api.test', path: '/', secure: false, hostOnly: false },
-      { on: true, name: 'other', value: '2', domain: 'elsewhere.test', path: '/', secure: false, hostOnly: false },
+      {
+        on: true,
+        name: 'good',
+        value: '1',
+        domain: 'api.test',
+        path: '/',
+        secure: false,
+        hostOnly: false,
+      },
+      {
+        on: true,
+        name: 'other',
+        value: '2',
+        domain: 'elsewhere.test',
+        path: '/',
+        secure: false,
+        hostOnly: false,
+      },
     ];
     const resp = await qaRunSavedRequest(
       { id: 'r1', method: 'GET', path: 'https://api.test/thing' },
-      { env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, collectionId: 'c1', cookies }
+      {
+        env: { label: 'None', baseUrl: '' },
+        vars: window.QA.VARIABLES,
+        collectionId: 'c1',
+        cookies,
+      }
     );
     expect(resp.status).toBe(200);
   });
@@ -50,9 +85,26 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
 
   it('uses data/local variables in the actual Tauri request payload', async () => {
     window.__TAURI__ = true;
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Get user', path: 'https://api.test/users/{{userId}}' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              {
+                id: 'r1',
+                method: 'GET',
+                name: 'Get user',
+                path: 'https://api.test/users/{{userId}}',
+              },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
     const execute = vi.spyOn(api, 'executePostmanRequest').mockResolvedValue({
       success: true,
@@ -78,17 +130,33 @@ describe('qaRunSavedRequest (canned fallback, no Tauri)', () => {
 
 describe('qaRunSavedRequest — authOverride', () => {
   beforeEach(() => {
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/thing' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [{ id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/thing' }],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'bearer' } };
-    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} } };
+    window.QA.RESPONSES = {
+      r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} },
+    };
   });
 
   it('accepts authOverride without throwing (canned path)', async () => {
     const resp = await qaRunSavedRequest(
       { id: 'r1' },
-      { env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, authOverride: { type: 'none' } },
+      {
+        env: { label: 'None', baseUrl: '' },
+        vars: window.QA.VARIABLES,
+        authOverride: { type: 'none' },
+      }
     );
     expect(resp.status).toBe(200);
   });
@@ -101,17 +169,37 @@ describe('qaRunSavedRequest — authOverride', () => {
 
 describe('qaRunSavedRequest — mutate hook', () => {
   beforeEach(() => {
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/users/42' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'thing', path: 'https://api.test/users/42' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
-    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} } };
+    window.QA.RESPONSES = {
+      r1: { status: 200, statusText: 'OK', time: 1, size: 2, body: { ok: true }, headers: {} },
+    };
   });
   it('applies mutate(req) before execution so the sent URL reflects the change', async () => {
     let sentUrl = null;
-    const mutate = (req) => { sentUrl = req.url; return { ...req, url: req.url.replace('/42', '/99') }; };
-    const resp = await qaRunSavedRequest({ id: 'r1' }, { env: { label: 'None', baseUrl: '' }, mutate });
-    expect(sentUrl).toBe('https://api.test/users/42');   // mutate saw the original built url
-    expect(resp.status).toBe(200);                        // canned path still returns
+    const mutate = (req) => {
+      sentUrl = req.url;
+      return { ...req, url: req.url.replace('/42', '/99') };
+    };
+    const resp = await qaRunSavedRequest(
+      { id: 'r1' },
+      { env: { label: 'None', baseUrl: '' }, mutate }
+    );
+    expect(sentUrl).toBe('https://api.test/users/42'); // mutate saw the original built url
+    expect(resp.status).toBe(200); // canned path still returns
   });
 });

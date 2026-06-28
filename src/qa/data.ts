@@ -6,18 +6,16 @@
 export {};
 
 const METHOD_META: Record<string, { hue: number; label: string }> = {
-  GET:    { hue: 150, label: 'GET' },
-  POST:   { hue: 45,  label: 'POST' },
-  PUT:    { hue: 215, label: 'PUT' },
-  PATCH:  { hue: 285, label: 'PATCH' },
-  DELETE: { hue: 12,  label: 'DELETE' },
+  GET: { hue: 150, label: 'GET' },
+  POST: { hue: 45, label: 'POST' },
+  PUT: { hue: 215, label: 'PUT' },
+  PATCH: { hue: 285, label: 'PATCH' },
+  DELETE: { hue: 12, label: 'DELETE' },
 };
 
 // `None` is kept so the env dropdown always has a valid selection; add real
 // environments from Settings → Environment.
-const ENVIRONMENTS: Array<{ label: string; baseUrl: string }> = [
-  { label: 'None', baseUrl: '' },
-];
+const ENVIRONMENTS: Array<{ label: string; baseUrl: string }> = [{ label: 'None', baseUrl: '' }];
 
 const RESPONSES: Record<string, any> = {};
 const COLLECTIONS: any[] = [];
@@ -25,7 +23,11 @@ const REQUEST_DETAILS: Record<string, any> = {};
 const SEED_HISTORY: any[] = [];
 const CRED_PROFILES: any[] = [];
 
-const VARIABLES: { globals: any[]; collections: Record<string, any>; environments: Record<string, any[]> } = {
+const VARIABLES: {
+  globals: any[];
+  collections: Record<string, any>;
+  environments: Record<string, any[]>;
+} = {
   globals: [],
   collections: {},
   environments: { None: [] },
@@ -39,4 +41,16 @@ const GRAPHQL_SCHEMA: { endpoint: string; types: any[] } = { endpoint: '/graphql
 
 const MONITORS: any[] = [];
 
-window.QA = { METHOD_META, ENVIRONMENTS, RESPONSES, COLLECTIONS, REQUEST_DETAILS, SEED_HISTORY, CRED_PROFILES, VARIABLES, COOKIES, GRAPHQL_SCHEMA, MONITORS };
+window.QA = {
+  METHOD_META,
+  ENVIRONMENTS,
+  RESPONSES,
+  COLLECTIONS,
+  REQUEST_DETAILS,
+  SEED_HISTORY,
+  CRED_PROFILES,
+  VARIABLES,
+  COOKIES,
+  GRAPHQL_SCHEMA,
+  MONITORS,
+};

@@ -12,28 +12,60 @@ import { vi, beforeEach, afterEach } from 'vitest';
   function makeStorage() {
     let store = Object.create(null);
     return {
-      get length() { return Object.keys(store).length; },
-      key(n) { return Object.keys(store)[n] ?? null; },
-      getItem(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
-      setItem(k, v) { store[String(k)] = String(v); },
-      removeItem(k) { delete store[String(k)]; },
-      clear() { store = Object.create(null); },
+      get length() {
+        return Object.keys(store).length;
+      },
+      key(n) {
+        return Object.keys(store)[n] ?? null;
+      },
+      getItem(k) {
+        return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null;
+      },
+      setItem(k, v) {
+        store[String(k)] = String(v);
+      },
+      removeItem(k) {
+        delete store[String(k)];
+      },
+      clear() {
+        store = Object.create(null);
+      },
     };
   }
   const ls = makeStorage();
   const ss = makeStorage();
   // Overwrite both the global and window references so any access path works.
   try {
-    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true });
-    Object.defineProperty(globalThis, 'sessionStorage', { value: ss, configurable: true, writable: true });
-  } catch (_) { /* already defined non-configurable — leave it */ }
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: ls,
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      value: ss,
+      configurable: true,
+      writable: true,
+    });
+  } catch (_) {
+    /* already defined non-configurable — leave it */
+  }
   if (typeof window !== 'undefined') {
     try {
-      Object.defineProperty(window, 'localStorage', { value: ls, configurable: true, writable: true });
-      Object.defineProperty(window, 'sessionStorage', { value: ss, configurable: true, writable: true });
-    } catch (_) { /* already non-configurable */ }
+      Object.defineProperty(window, 'localStorage', {
+        value: ls,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(window, 'sessionStorage', {
+        value: ss,
+        configurable: true,
+        writable: true,
+      });
+    } catch (_) {
+      /* already non-configurable */
+    }
   }
-}());
+})();
 
 // Mock IntersectionObserver for components that use it
 global.IntersectionObserver = class IntersectionObserver {
@@ -62,13 +94,13 @@ if (typeof global.window === 'undefined') {
       origin: 'http://localhost:3000',
       pathname: '/',
       search: '',
-      hash: ''
+      hash: '',
     },
     history: {
       pushState: vi.fn(),
       replaceState: vi.fn(),
       back: vi.fn(),
-      forward: vi.fn()
+      forward: vi.fn(),
     },
     document: global.document,
     getComputedStyle: vi.fn(() => ({
@@ -88,19 +120,23 @@ if (typeof global.window === 'undefined') {
       getEntriesByType: vi.fn(() => []),
       getEntriesByName: vi.fn(() => []),
       clearMarks: vi.fn(),
-      clearMeasures: vi.fn()
-    }
+      clearMeasures: vi.fn(),
+    },
   };
 } else {
   // Ensure existing window has all necessary properties
   global.window.addEventListener = global.window.addEventListener || vi.fn();
   global.window.removeEventListener = global.window.removeEventListener || vi.fn();
   global.window.dispatchEvent = global.window.dispatchEvent || vi.fn();
-  global.window.requestAnimationFrame = global.window.requestAnimationFrame || vi.fn((cb) => setTimeout(cb, 0));
-  global.window.cancelAnimationFrame = global.window.cancelAnimationFrame || vi.fn((id) => clearTimeout(id));
-  global.window.getComputedStyle = global.window.getComputedStyle || vi.fn(() => ({
-    getPropertyValue: vi.fn(() => ''),
-  }));
+  global.window.requestAnimationFrame =
+    global.window.requestAnimationFrame || vi.fn((cb) => setTimeout(cb, 0));
+  global.window.cancelAnimationFrame =
+    global.window.cancelAnimationFrame || vi.fn((id) => clearTimeout(id));
+  global.window.getComputedStyle =
+    global.window.getComputedStyle ||
+    vi.fn(() => ({
+      getPropertyValue: vi.fn(() => ''),
+    }));
   global.window.performance = global.window.performance || {
     now: vi.fn(() => Date.now()),
     mark: vi.fn(),
@@ -108,7 +144,7 @@ if (typeof global.window === 'undefined') {
     getEntriesByType: vi.fn(() => []),
     getEntriesByName: vi.fn(() => []),
     clearMarks: vi.fn(),
-    clearMeasures: vi.fn()
+    clearMeasures: vi.fn(),
   };
 }
 
@@ -128,50 +164,56 @@ if (typeof global.document === 'undefined') {
       removeChild: vi.fn(),
       click: vi.fn(),
       href: '',
-      download: ''
+      download: '',
     })),
     body: {
       appendChild: vi.fn(),
-      removeChild: vi.fn()
-    }
+      removeChild: vi.fn(),
+    },
   };
-  
+
   // Create document.hidden as a configurable property
   Object.defineProperty(global.document, 'hidden', {
     value: false,
     writable: true,
-    configurable: true
+    configurable: true,
   });
-  
+
   Object.defineProperty(global.document, 'visibilityState', {
     value: 'visible',
     writable: true,
-    configurable: true
+    configurable: true,
   });
 } else {
   global.document.addEventListener = global.document.addEventListener || vi.fn();
   global.document.removeEventListener = global.document.removeEventListener || vi.fn();
   global.document.dispatchEvent = global.document.dispatchEvent || vi.fn();
-  
+
   // If document exists but doesn't have configurable hidden property, try to add it
-  if (!Object.prototype.hasOwnProperty.call(global.document, 'hidden') || !Object.getOwnPropertyDescriptor(global.document, 'hidden')?.configurable) {
+  if (
+    !Object.prototype.hasOwnProperty.call(global.document, 'hidden') ||
+    !Object.getOwnPropertyDescriptor(global.document, 'hidden')?.configurable
+  ) {
     try {
       Object.defineProperty(global.document, 'hidden', {
         value: false,
         writable: true,
-        configurable: true
+        configurable: true,
       });
     } catch (e) {
       console.log('Could not override document.hidden property');
     }
   }
-  
-  if (!Object.prototype.hasOwnProperty.call(global.document, 'visibilityState') || !Object.getOwnPropertyDescriptor(global.document, 'visibilityState')?.configurable) {
+
+  if (
+    !Object.prototype.hasOwnProperty.call(global.document, 'visibilityState') ||
+    !Object.getOwnPropertyDescriptor(global.document, 'visibilityState')?.configurable
+  ) {
     try {
       Object.defineProperty(global.document, 'visibilityState', {
         value: 'visible',
         writable: true,
-        configurable: true
+        configurable: true,
       });
     } catch (e) {
       console.log('Could not override document.visibilityState property');
@@ -184,8 +226,8 @@ if (typeof global.process === 'undefined') {
   global.process = {
     platform: 'test',
     env: {
-      NODE_ENV: 'test'
-    }
+      NODE_ENV: 'test',
+    },
   };
 }
 
@@ -246,13 +288,17 @@ beforeEach(() => {
   // Reset the shared in-memory localStorage so no state bleeds between tests
   // (the shim above is a single instance for the worker). No-op for files that
   // reinstall their own storage in beforeEach.
-  try { localStorage.clear(); } catch (e) { /* storage unavailable — ignore */ }
+  try {
+    localStorage.clear();
+  } catch (e) {
+    /* storage unavailable — ignore */
+  }
 
   // Clear all timers and event listeners
   timeouts.clear();
   intervals.clear();
   eventListeners.clear();
-  
+
   // Reset document state safely
   try {
     if (Object.getOwnPropertyDescriptor(global.document, 'hidden')?.writable) {
@@ -264,26 +310,26 @@ beforeEach(() => {
   } catch (e) {
     // If we can't set the properties, that's fine for tests
   }
-  
+
   // Reset all mocks
   vi.clearAllMocks();
 });
 
 afterEach(() => {
   // Clean up all pending timers
-  timeouts.forEach(id => originalClearTimeout(id));
-  intervals.forEach(id => originalClearInterval(id));
+  timeouts.forEach((id) => originalClearTimeout(id));
+  intervals.forEach((id) => originalClearInterval(id));
   timeouts.clear();
   intervals.clear();
-  
+
   // Clean up event listeners
   eventListeners.forEach((handlers, event) => {
-    handlers.forEach(handler => {
+    handlers.forEach((handler) => {
       global.window.removeEventListener(event, handler);
     });
   });
   eventListeners.clear();
-  
+
   // Reset mocks
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -291,5 +337,5 @@ afterEach(() => {
 
 // Mock CSS imports for tests
 vi.mock('*.css', () => ({
-  default: {}
+  default: {},
 }));

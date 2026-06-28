@@ -51,7 +51,11 @@ fn method_allows_body(method: &str) -> bool {
 /// link-local 雲端 metadata 端點（AWS/GCP/Azure IMDS、ECS task metadata、阿里雲）。
 /// 命中這些位址＝可能拿到 instance role。
 fn is_cloud_metadata_host(host: &str) -> bool {
-    let h = host.trim().trim_start_matches('[').trim_end_matches(']').to_ascii_lowercase();
+    let h = host
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_ascii_lowercase();
     matches!(
         h.as_str(),
         "169.254.169.254"            // AWS / GCP / Azure IMDS
@@ -59,7 +63,7 @@ fn is_cloud_metadata_host(host: &str) -> bool {
             | "100.100.100.200"      // Alibaba Cloud
             | "metadata.google.internal"
             | "metadata.goog"
-    ) || h.starts_with("fd00:ec2:")  // AWS IPv6 IMDS
+    ) || h.starts_with("fd00:ec2:") // AWS IPv6 IMDS
 }
 
 /// 帶 AWS 憑證對 metadata endpoint 發「已簽名」請求，會把使用者/instance 的憑證
@@ -71,7 +75,10 @@ fn metadata_request_blocked(host: &str, has_aws_creds: bool) -> bool {
 
 /// 解析 TLS 驗證策略：停用憑證驗證＝接受 MITM 風險，必須由前端帶明確的確認旗標
 /// （sslVerifyConfirmed）才放行，否則拒絕請求，逼出一個確認對話框。
-fn resolve_tls_verification(ssl_verify: Option<bool>, confirmed: Option<bool>) -> Result<bool, String> {
+fn resolve_tls_verification(
+    ssl_verify: Option<bool>,
+    confirmed: Option<bool>,
+) -> Result<bool, String> {
     match ssl_verify {
         Some(false) if confirmed != Some(true) => Err(
             "TLS verification can only be disabled with explicit confirmation (sslVerifyConfirmed).".into(),
@@ -166,7 +173,12 @@ pub async fn execute_request(
         }
     }
 
-    let mut service = if options.is_file_transfer_collection == Some(true) { "iotwireless" } else { "execute-api" }.to_string();
+    let mut service = if options.is_file_transfer_collection == Some(true) {
+        "iotwireless"
+    } else {
+        "execute-api"
+    }
+    .to_string();
     let mut region = "us-east-1".to_string();
     if let Some(auth) = req.get("auth") {
         if str_field(auth, "type") == Some("awsv4") {
@@ -267,11 +279,19 @@ pub async fn execute_request(
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(60))
         .redirect(reqwest::redirect::Policy::none());
-    let client_builder = if verify { client_builder } else { client_builder.danger_accept_invalid_certs(true) };
-    let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
+    let client_builder = if verify {
+        client_builder
+    } else {
+        client_builder.danger_accept_invalid_certs(true)
+    };
+    let client = client_builder
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
 
-    let sent_headers: Map<String, Value> =
-        out_headers.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
+    let sent_headers: Map<String, Value> = out_headers
+        .iter()
+        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+        .collect();
 
     // Headers we MUST NOT forward across an origin boundary on redirect.
     // Authorization tokens, cookies, SigV4 signature artefacts must never
@@ -279,9 +299,9 @@ pub async fn execute_request(
     // reqwest's built-in Policy does and what browsers do.
     fn is_sensitive_header(name: &str) -> bool {
         let lower = name.to_ascii_lowercase();
-        matches!(lower.as_str(),
-            "authorization" | "cookie" | "cookie2" |
-            "proxy-authorization" | "www-authenticate"
+        matches!(
+            lower.as_str(),
+            "authorization" | "cookie" | "cookie2" | "proxy-authorization" | "www-authenticate"
         ) || lower.starts_with("x-amz-")
     }
 
@@ -299,9 +319,11 @@ pub async fn execute_request(
     // `https://api.x` → `http://api.x` or `:8080` → `:9090` and lose the
     // safety reqwest's built-in policy provided.
     fn origin_triple(u: &reqwest::Url) -> (String, Option<String>, Option<u16>) {
-        (u.scheme().to_ascii_lowercase(),
-         u.host_str().map(|h| h.to_ascii_lowercase()),
-         u.port_or_known_default())
+        (
+            u.scheme().to_ascii_lowercase(),
+            u.host_str().map(|h| h.to_ascii_lowercase()),
+            u.port_or_known_default(),
+        )
     }
     let original_origin = origin_triple(&current_url);
     // Sticky: once we cross to another origin, sensitive headers stay
@@ -312,8 +334,12 @@ pub async fn execute_request(
     for hop in 0..=MAX_HOPS {
         let mut rb = client.request(current_method.clone(), current_url.clone());
         for (k, v) in &out_headers {
-            if cross_origin && (is_sensitive_header(k.as_str())
-                || options.sensitive_header_names.iter().any(|s| s.eq_ignore_ascii_case(k.as_str())))
+            if cross_origin
+                && (is_sensitive_header(k.as_str())
+                    || options
+                        .sensitive_header_names
+                        .iter()
+                        .any(|s| s.eq_ignore_ascii_case(k.as_str())))
             {
                 continue;
             }
@@ -343,16 +369,24 @@ pub async fn execute_request(
             break;
         }
         // Resolve the Location header against the current URL.
-        let loc_str = resp.headers().get(reqwest::header::LOCATION)
+        let loc_str = resp
+            .headers()
+            .get(reqwest::header::LOCATION)
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
         let loc_str = match loc_str {
             Some(s) if !s.is_empty() => s,
-            _ => { final_resp = Some(resp); break; }
+            _ => {
+                final_resp = Some(resp);
+                break;
+            }
         };
         let next_url = match current_url.join(&loc_str) {
             Ok(u) => u,
-            Err(_) => { final_resp = Some(resp); break; }
+            Err(_) => {
+                final_resp = Some(resp);
+                break;
+            }
         };
         // Method rewriting on redirect — match reqwest's default Policy:
         //   301/302 + POST       → GET, drop body
@@ -360,10 +394,9 @@ pub async fn execute_request(
         //   303 + HEAD           → preserve HEAD (browser convention)
         //   303 + other          → GET, drop body (RFC)
         //   307/308              → always preserve
-        if (status == 301 || status == 302) && current_method == reqwest::Method::POST {
-            current_method = reqwest::Method::GET;
-            current_body = None;
-        } else if status == 303 && current_method != reqwest::Method::HEAD {
+        if ((status == 301 || status == 302) && current_method == reqwest::Method::POST)
+            || (status == 303 && current_method != reqwest::Method::HEAD)
+        {
             current_method = reqwest::Method::GET;
             current_body = None;
         }
@@ -376,7 +409,10 @@ pub async fn execute_request(
         current_url = next_url;
     }
 
-    let resp = match final_resp { Some(r) => r, None => return err("Redirect loop produced no response".to_string()) };
+    let resp = match final_resp {
+        Some(r) => r,
+        None => return err("Redirect loop produced no response".to_string()),
+    };
     let status = resp.status().as_u16();
     let final_url = resp.url().to_string();
     let mut resp_headers = Map::new();
@@ -384,20 +420,29 @@ pub async fn execute_request(
         // Set-Cookie was already collected per-hop into all_set_cookies; skip
         // the final-hop duplicate here so the renderer sees each Set-Cookie
         // exactly once.
-        if k.as_str().eq_ignore_ascii_case("set-cookie") { continue; }
-        resp_headers.insert(k.as_str().to_string(), Value::String(v.to_str().unwrap_or("").to_string()));
+        if k.as_str().eq_ignore_ascii_case("set-cookie") {
+            continue;
+        }
+        resp_headers.insert(
+            k.as_str().to_string(),
+            Value::String(v.to_str().unwrap_or("").to_string()),
+        );
     }
     // The renderer needs each Set-Cookie alongside the URL of the response
     // that emitted it so RFC 6265 domain/path checks run against the right
     // host (cross-host redirects would otherwise scope cookies wrong).
-    let set_cookies_arr: Vec<Value> = all_set_cookies.iter()
+    let set_cookies_arr: Vec<Value> = all_set_cookies
+        .iter()
         .map(|(u, line)| json!({"url": u, "line": line}))
         .collect();
     if !all_set_cookies.is_empty() {
         // Also surface as headers["set-cookie"] (newline-joined) so existing
         // display code paths show the raw values, but cookie capture goes
         // through `setCookies` above.
-        let joined: Vec<String> = all_set_cookies.iter().map(|(_, line)| line.clone()).collect();
+        let joined: Vec<String> = all_set_cookies
+            .iter()
+            .map(|(_, line)| line.clone())
+            .collect();
         resp_headers.insert("set-cookie".to_string(), Value::String(joined.join("\n")));
     }
     let body_text = resp.text().await.unwrap_or_default();
@@ -429,10 +474,7 @@ mod tests {
             "knownBasePaths": []
         });
 
-        let rebased = rebase_url_for_environment(
-            "https://old.example.com/v1/devices?id=1",
-            &env,
-        );
+        let rebased = rebase_url_for_environment("https://old.example.com/v1/devices?id=1", &env);
 
         assert_eq!(rebased, "https://new.example.com/v1/devices?id=1");
     }
@@ -445,10 +487,7 @@ mod tests {
             "knownBasePaths": ["/old-base"]
         });
 
-        let rebased = rebase_url_for_environment(
-            "https://old.example.com/old-base/devices",
-            &env,
-        );
+        let rebased = rebase_url_for_environment("https://old.example.com/old-base/devices", &env);
 
         assert_eq!(rebased, "https://new.example.com/prod/devices");
     }
@@ -464,29 +503,47 @@ mod tests {
 
     #[test]
     fn detects_cloud_metadata_hosts() {
-        for h in ["169.254.169.254", "169.254.170.2", "100.100.100.200", "metadata.google.internal", "fd00:ec2::254"] {
-            assert!(is_cloud_metadata_host(h), "expected {h} to be a metadata host");
+        for h in [
+            "169.254.169.254",
+            "169.254.170.2",
+            "100.100.100.200",
+            "metadata.google.internal",
+            "fd00:ec2::254",
+        ] {
+            assert!(
+                is_cloud_metadata_host(h),
+                "expected {h} to be a metadata host"
+            );
         }
         assert!(is_cloud_metadata_host("[fd00:ec2::254]")); // bracketed IPv6
-        for h in ["example.com", "127.0.0.1", "localhost", "169.254.1.1", "10.0.0.5"] {
-            assert!(!is_cloud_metadata_host(h), "expected {h} NOT to be a metadata host");
+        for h in [
+            "example.com",
+            "127.0.0.1",
+            "localhost",
+            "169.254.1.1",
+            "10.0.0.5",
+        ] {
+            assert!(
+                !is_cloud_metadata_host(h),
+                "expected {h} NOT to be a metadata host"
+            );
         }
     }
 
     #[test]
     fn metadata_blocked_only_with_aws_creds() {
-        assert!(metadata_request_blocked("169.254.169.254", true));     // creds + metadata → block
-        assert!(!metadata_request_blocked("169.254.169.254", false));   // no creds → IMDS allowed (no signing exfil)
-        assert!(!metadata_request_blocked("127.0.0.1", true));          // localhost testing stays a feature
+        assert!(metadata_request_blocked("169.254.169.254", true)); // creds + metadata → block
+        assert!(!metadata_request_blocked("169.254.169.254", false)); // no creds → IMDS allowed (no signing exfil)
+        assert!(!metadata_request_blocked("127.0.0.1", true)); // localhost testing stays a feature
         assert!(!metadata_request_blocked("api.example.com", true));
     }
 
     #[test]
     fn tls_disable_requires_explicit_confirmation() {
-        assert_eq!(resolve_tls_verification(None, None), Ok(true));            // default: verify
-        assert_eq!(resolve_tls_verification(Some(true), None), Ok(true));      // verify on
+        assert_eq!(resolve_tls_verification(None, None), Ok(true)); // default: verify
+        assert_eq!(resolve_tls_verification(Some(true), None), Ok(true)); // verify on
         assert_eq!(resolve_tls_verification(Some(false), Some(true)), Ok(false)); // confirmed off
-        assert!(resolve_tls_verification(Some(false), None).is_err());         // off without confirm → rejected
+        assert!(resolve_tls_verification(Some(false), None).is_err()); // off without confirm → rejected
         assert!(resolve_tls_verification(Some(false), Some(false)).is_err());
     }
 }

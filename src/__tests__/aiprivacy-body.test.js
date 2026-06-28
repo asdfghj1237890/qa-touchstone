@@ -20,12 +20,12 @@ describe('redactBody', () => {
 describe('looksSecret', () => {
   it('flags secret/PII-shaped strings', () => {
     expect(looksSecret('bob@acme.com')).toBe(true);
-    expect(looksSecret('4111111111111111')).toBe(true);            // Luhn-valid Visa test card
-    expect(looksSecret('4111-1111-1111-1111')).toBe(true);         // dashed card
+    expect(looksSecret('4111111111111111')).toBe(true); // Luhn-valid Visa test card
+    expect(looksSecret('4111-1111-1111-1111')).toBe(true); // dashed card
     expect(looksSecret('eyJhbGciOi.eyJzdWIiOi.SflKxwRJ')).toBe(true); // JWT
-    expect(looksSecret('AKIAIOSFODNN7EXAMPLE')).toBe(true);        // AWS access key id
-    expect(looksSecret('123-45-6789')).toBe(true);                 // SSN
-    expect(looksSecret('A'.repeat(40))).toBe(true);                // long opaque token
+    expect(looksSecret('AKIAIOSFODNN7EXAMPLE')).toBe(true); // AWS access key id
+    expect(looksSecret('123-45-6789')).toBe(true); // SSN
+    expect(looksSecret('A'.repeat(40))).toBe(true); // long opaque token
   });
   it('does NOT flag ordinary field names or short values', () => {
     expect(looksSecret('customerId')).toBe(false);
@@ -44,20 +44,23 @@ describe('redactBody — secret/PII object KEYS (AI egress leak)', () => {
     const s = JSON.stringify(r.tree);
     expect(s).not.toContain('bob@acme.com');
     expect(s).toContain('<redacted-key>');
-    expect(s).toContain('customerId');   // ordinary key preserved
+    expect(s).toContain('customerId'); // ordinary key preserved
   });
   it('masks a credit-card (Luhn) object key', () => {
-    const r = redactBody({ '4111111111111111': { last4: '1111' } }, {});
+    const r = redactBody({ 4111111111111111: { last4: '1111' } }, {});
     expect(JSON.stringify(r.tree)).not.toContain('4111111111111111');
     expect(JSON.stringify(r.tree)).toContain('<redacted-key>');
   });
   it('masks JWT / AKIA / SSN / long-opaque keys', () => {
-    const r = redactBody({
-      'eyJhbGciOi.eyJzdWIiOi.SflKxwRJ': 1,
-      'AKIAIOSFODNN7EXAMPLE': 2,
-      '123-45-6789': 3,
-      ['B'.repeat(40)]: 4,
-    }, {});
+    const r = redactBody(
+      {
+        'eyJhbGciOi.eyJzdWIiOi.SflKxwRJ': 1,
+        AKIAIOSFODNN7EXAMPLE: 2,
+        '123-45-6789': 3,
+        ['B'.repeat(40)]: 4,
+      },
+      {}
+    );
     const s = JSON.stringify(r.tree);
     expect(s).not.toContain('eyJhbGciOi');
     expect(s).not.toContain('AKIAIOSFODNN7EXAMPLE');
@@ -77,7 +80,7 @@ describe('redactBody — secret/PII object KEYS (AI egress leak)', () => {
   });
   it('preserves child count when sibling secret keys collide', () => {
     const r = redactBody({ 'a@x.com': 1, 'b@y.com': 2 }, {});
-    expect(Object.keys(r.tree).length).toBe(2);   // both retained, no overwrite
+    expect(Object.keys(r.tree).length).toBe(2); // both retained, no overwrite
     const s = JSON.stringify(r.tree);
     expect(s).not.toContain('a@x.com');
     expect(s).not.toContain('b@y.com');

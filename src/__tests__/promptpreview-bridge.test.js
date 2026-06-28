@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { requestPromptApproval, __registerHost, __addSessionSkip, __resetPreviewState } from '../qa/PromptPreview';
+import {
+  requestPromptApproval,
+  __registerHost,
+  __addSessionSkip,
+  __resetPreviewState,
+} from '../qa/PromptPreview';
 
 const meta = { site: 'testgen', mode: 'redacted', destination: { provider: 'openai' } };
 
@@ -18,7 +23,9 @@ describe('preview bridge', () => {
   });
   it('a mounted host receives the request and can resolve it', async () => {
     let captured;
-    const unsub = __registerHost((reqObj) => { captured = reqObj; });
+    const unsub = __registerHost((reqObj) => {
+      captured = reqObj;
+    });
     const p = requestPromptApproval('hello', meta);
     captured.resolve(true);
     await expect(p).resolves.toBe(true);

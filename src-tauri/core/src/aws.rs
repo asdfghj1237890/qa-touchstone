@@ -57,13 +57,17 @@ fn canonical_query(query: &str) -> String {
         })
         .collect();
     pairs.sort();
-    pairs.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("&")
+    pairs
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&")
 }
 
 pub struct SignInput<'a> {
     pub method: &'a str,
     pub host: &'a str,
-    pub path: &'a str, // canonical URI（會 uri-encode、保留 '/'）
+    pub path: &'a str,  // canonical URI（會 uri-encode、保留 '/'）
     pub query: &'a str, // 不含 '?'
     pub headers: BTreeMap<String, String>, // 任意大小寫；會 lowercase
     pub payload: &'a [u8],
@@ -105,7 +109,10 @@ fn sign_core(
         payload_hash
     );
 
-    let scope = format!("{}/{}/{}/aws4_request", datestamp, input.region, input.service);
+    let scope = format!(
+        "{}/{}/{}/aws4_request",
+        datestamp, input.region, input.service
+    );
     let string_to_sign = format!(
         "AWS4-HMAC-SHA256\n{}\n{}\n{}",
         amzdate,
@@ -113,7 +120,10 @@ fn sign_core(
         sha256_hex(canonical_request.as_bytes())
     );
 
-    let k_date = hmac_sha256(format!("AWS4{}", creds.secret_access_key).as_bytes(), datestamp.as_bytes());
+    let k_date = hmac_sha256(
+        format!("AWS4{}", creds.secret_access_key).as_bytes(),
+        datestamp.as_bytes(),
+    );
     let k_region = hmac_sha256(&k_date, input.region.as_bytes());
     let k_service = hmac_sha256(&k_region, input.service.as_bytes());
     let k_signing = hmac_sha256(&k_service, b"aws4_request");
@@ -165,7 +175,11 @@ pub fn parse_sts_xml(xml: &str) -> Option<Credentials> {
 
 /// STS AssumeRole（async）。對齊 Electron assumeRole：POST sts.amazonaws.com 表單、SigV4 簽、解析 XML。
 /// 僅在傳入的 creds 無 session_token 時被呼叫（呼叫端負責判斷）。
-pub async fn assume_role(creds: &Credentials, role_arn: &str, session_name: &str) -> Result<Credentials, String> {
+pub async fn assume_role(
+    creds: &Credentials,
+    role_arn: &str,
+    session_name: &str,
+) -> Result<Credentials, String> {
     let body = format!(
         "Action=AssumeRole&Version=2011-06-15&RoleArn={}&RoleSessionName={}&DurationSeconds=3600",
         uri_encode(role_arn, true),
@@ -191,7 +205,10 @@ pub async fn assume_role(creds: &Credentials, role_arn: &str, session_name: &str
     let client = reqwest::Client::new();
     let mut rb = client
         .post("https://sts.amazonaws.com/")
-        .header("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
+        .header(
+            "Content-Type",
+            "application/x-www-form-urlencoded; charset=utf-8",
+        )
         .body(body);
     for (k, v) in &signed {
         rb = rb.header(k.as_str(), v.as_str());
@@ -200,7 +217,11 @@ pub async fn assume_role(creds: &Credentials, role_arn: &str, session_name: &str
     let status = resp.status();
     let text = resp.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!("STS AssumeRole failed with status {}: {}", status.as_u16(), text));
+        return Err(format!(
+            "STS AssumeRole failed with status {}: {}",
+            status.as_u16(),
+            text
+        ));
     }
     parse_sts_xml(&text).ok_or_else(|| "Failed to parse credentials from STS response".to_string())
 }
@@ -230,8 +251,12 @@ mod tests {
             service: "service",
             region: "us-east-1",
         };
-        let (authz, sig, signed) = sign_core(&input, &example_creds(), "20150830T123600Z", "20150830");
-        assert_eq!(sig, "5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31");
+        let (authz, sig, signed) =
+            sign_core(&input, &example_creds(), "20150830T123600Z", "20150830");
+        assert_eq!(
+            sig,
+            "5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31"
+        );
         assert!(signed.contains_key("host"));
         assert!(signed.contains_key("x-amz-date"));
         assert_eq!(
@@ -276,8 +301,14 @@ SignedHeaders=host;x-amz-date, Signature=5fa00fa31553b73ebf1942676e86291e8372ff2
     #[test]
     fn sign_wrapper_emits_expected_headers() {
         let input = SignInput {
-            method: "GET", host: "h", path: "/", query: "",
-            headers: BTreeMap::new(), payload: b"", service: "execute-api", region: "us-east-1",
+            method: "GET",
+            host: "h",
+            path: "/",
+            query: "",
+            headers: BTreeMap::new(),
+            payload: b"",
+            service: "execute-api",
+            region: "us-east-1",
         };
         let out = sign(&input, &example_creds());
         assert!(out.contains_key("Authorization"));

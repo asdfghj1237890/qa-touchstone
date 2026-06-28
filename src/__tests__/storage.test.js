@@ -1,13 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
-  loadJSON, saveJSON, loadString, saveString,
-  initStorageMirror, flushMirror, MIRRORED_KEYS,
-  STORAGE_ERROR_EVENT, _resetStorageMirrorForTests,
-  migrateRecord, loadVersioned, saveVersioned, SCHEMA_VERSION_FIELD,
+  loadJSON,
+  saveJSON,
+  loadString,
+  saveString,
+  initStorageMirror,
+  flushMirror,
+  MIRRORED_KEYS,
+  STORAGE_ERROR_EVENT,
+  _resetStorageMirrorForTests,
+  migrateRecord,
+  loadVersioned,
+  saveVersioned,
+  SCHEMA_VERSION_FIELD,
 } from '../qa/storage';
 
 describe('qaStorage — JSON 存取', () => {
-  beforeEach(() => { localStorage.clear(); _resetStorageMirrorForTests(); });
+  beforeEach(() => {
+    localStorage.clear();
+    _resetStorageMirrorForTests();
+  });
 
   it('saveJSON / loadJSON roundtrip', () => {
     expect(saveJSON('k1', { a: 1 })).toBe(true);
@@ -33,7 +45,9 @@ describe('qaStorage — JSON 存取', () => {
     const onErr = (e) => events.push(e.detail);
     window.addEventListener(STORAGE_ERROR_EVENT, onErr);
     const orig = localStorage.setItem;
-    localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
+    localStorage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
     try {
       expect(saveJSON('full', { x: 1 })).toBe(false);
       expect(saveString('full2', 'v')).toBe(false);
@@ -55,10 +69,16 @@ describe('qaStorage — JSON 存取', () => {
 });
 
 describe('qaStorage — schema 版本 / migration', () => {
-  beforeEach(() => { localStorage.clear(); _resetStorageMirrorForTests(); });
+  beforeEach(() => {
+    localStorage.clear();
+    _resetStorageMirrorForTests();
+  });
 
   const bump1 = (d) => ({ ...d, a: (d.a || 0) + 1 });
-  const renameB = (d) => { const { b, ...rest } = d; return { ...rest, c: b }; };
+  const renameB = (d) => {
+    const { b, ...rest } = d;
+    return { ...rest, c: b };
+  };
 
   it('treats unversioned legacy data as v0 and runs every step', () => {
     const out = migrateRecord({ a: 0, b: 'x' }, 2, [bump1, renameB]);
@@ -70,8 +90,8 @@ describe('qaStorage — schema 版本 / migration', () => {
 
   it('starts from the recorded version and only runs the remaining steps', () => {
     const out = migrateRecord({ a: 5, b: 'y', [SCHEMA_VERSION_FIELD]: 1 }, 2, [bump1, renameB]);
-    expect(out.a).toBe(5);          // bump1 (step 0) skipped — already at v1
-    expect(out.c).toBe('y');        // renameB (step 1) ran
+    expect(out.a).toBe(5); // bump1 (step 0) skipped — already at v1
+    expect(out.c).toBe('y'); // renameB (step 1) ran
     expect(out[SCHEMA_VERSION_FIELD]).toBe(2);
   });
 
@@ -82,7 +102,7 @@ describe('qaStorage — schema 版本 / migration', () => {
   });
 
   it('loadVersioned migrates persisted legacy data on read and saveVersioned stamps the version', () => {
-    localStorage.setItem('cfg', JSON.stringify({ a: 0, b: 'z' }));    // legacy, no version
+    localStorage.setItem('cfg', JSON.stringify({ a: 0, b: 'z' })); // legacy, no version
     const loaded = loadVersioned('cfg', 2, [bump1, renameB], {});
     expect(loaded).toMatchObject({ a: 1, c: 'z' });
     expect(loaded[SCHEMA_VERSION_FIELD]).toBe(2);
@@ -98,7 +118,9 @@ describe('qaStorage — schema 版本 / migration', () => {
   it('loadVersioned returns the fallback (not a throw) when a migration step throws', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     localStorage.setItem('cfg', JSON.stringify({ a: 0 }));
-    const boom = () => { throw new Error('bad migration'); };
+    const boom = () => {
+      throw new Error('bad migration');
+    };
     expect(loadVersioned('cfg', 1, [boom], { safe: true })).toEqual({ safe: true });
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
@@ -106,11 +128,19 @@ describe('qaStorage — schema 版本 / migration', () => {
 });
 
 describe('qaStorage — 磁碟鏡像', () => {
-  beforeEach(() => { localStorage.clear(); _resetStorageMirrorForTests(); });
-  afterEach(() => { _resetStorageMirrorForTests(); });
+  beforeEach(() => {
+    localStorage.clear();
+    _resetStorageMirrorForTests();
+  });
+  afterEach(() => {
+    _resetStorageMirrorForTests();
+  });
 
   it('非 Tauri（loadUserData reject）時安靜停用', async () => {
-    const api = { loadUserData: vi.fn().mockRejectedValue(new Error('no tauri')), saveUserData: vi.fn() };
+    const api = {
+      loadUserData: vi.fn().mockRejectedValue(new Error('no tauri')),
+      saveUserData: vi.fn(),
+    };
     expect(await initStorageMirror(api)).toBe(false);
     saveJSON(MIRRORED_KEYS[0], { a: 1 });
     await flushMirror();
@@ -119,7 +149,10 @@ describe('qaStorage — 磁碟鏡像', () => {
 
   it('開機還原：localStorage 缺少的鏡像 key 從磁碟 blob 還原', async () => {
     const blob = { __qaMirror: 1, qa_perf_runs: '[{"ts":"t1"}]', qa_accent: 'violet' };
-    const api = { loadUserData: vi.fn().mockResolvedValue(blob), saveUserData: vi.fn().mockResolvedValue({ success: true }) };
+    const api = {
+      loadUserData: vi.fn().mockResolvedValue(blob),
+      saveUserData: vi.fn().mockResolvedValue({ success: true }),
+    };
     expect(await initStorageMirror(api)).toBe(true);
     expect(localStorage.getItem('qa_perf_runs')).toBe('[{"ts":"t1"}]');
     expect(localStorage.getItem('qa_accent')).toBe('violet');
@@ -134,7 +167,10 @@ describe('qaStorage — 磁碟鏡像', () => {
   });
 
   it('首次啟動（後端回 []，無鏡像 blob）仍啟用鏡像，flush 會寫入磁碟', async () => {
-    const api = { loadUserData: vi.fn().mockResolvedValue([]), saveUserData: vi.fn().mockResolvedValue({ success: true }) };
+    const api = {
+      loadUserData: vi.fn().mockResolvedValue([]),
+      saveUserData: vi.fn().mockResolvedValue({ success: true }),
+    };
     expect(await initStorageMirror(api)).toBe(true);
     localStorage.setItem('qa_perf_runs', '[1]');
     localStorage.setItem('qa_llm_cfg', '{"key":"sk-secret"}'); // 機密：不得進鏡像
@@ -149,7 +185,10 @@ describe('qaStorage — 磁碟鏡像', () => {
   it('鏡像 key 的 saveJSON 會排程 debounce flush', async () => {
     vi.useFakeTimers();
     try {
-      const api = { loadUserData: vi.fn().mockResolvedValue([]), saveUserData: vi.fn().mockResolvedValue({ success: true }) };
+      const api = {
+        loadUserData: vi.fn().mockResolvedValue([]),
+        saveUserData: vi.fn().mockResolvedValue({ success: true }),
+      };
       await initStorageMirror(api);
       saveJSON('qa_perf_runs', [1]);
       saveJSON('qa_perf_runs', [1, 2]); // debounce：只 flush 一次
@@ -164,7 +203,10 @@ describe('qaStorage — 磁碟鏡像', () => {
   it('非鏡像 key 不觸發 flush', async () => {
     vi.useFakeTimers();
     try {
-      const api = { loadUserData: vi.fn().mockResolvedValue([]), saveUserData: vi.fn().mockResolvedValue({ success: true }) };
+      const api = {
+        loadUserData: vi.fn().mockResolvedValue([]),
+        saveUserData: vi.fn().mockResolvedValue({ success: true }),
+      };
       await initStorageMirror(api);
       saveJSON('qa_llm_cfg', { key: 'sk-x' });
       await vi.advanceTimersByTimeAsync(5000);

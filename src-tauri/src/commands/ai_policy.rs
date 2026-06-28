@@ -18,5 +18,9 @@ pub fn get_ai_policy() -> AiPolicy {
         .unwrap_or(false);
     let forced = std::env::var("QA_AI_PRIVACY").ok().filter(|v| v == "local");
     let locked = forced.is_some() || !allow;
-    AiPolicy { external_allowed: allow, forced_mode: forced, locked }
+    AiPolicy {
+        external_allowed: allow,
+        forced_mode: forced,
+        locked,
+    }
 }

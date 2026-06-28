@@ -11,8 +11,14 @@ import { STORAGE_ERROR_EVENT } from '../storage';
 
 export const COOKIE_TOAST_EVENT = 'qa-cookie-toast';
 
-interface CookieToast { name: string; domain: string }
-interface StorageToast { key?: string; message?: string }
+interface CookieToast {
+  name: string;
+  domain: string;
+}
+interface StorageToast {
+  key?: string;
+  message?: string;
+}
 
 export function ToastHost({ onOpenCookieJar }: { onOpenCookieJar?: () => void }) {
   const { t } = useI18n();
@@ -44,11 +50,19 @@ export function ToastHost({ onOpenCookieJar }: { onOpenCookieJar?: () => void })
     <>
       {/* Set-Cookie capture toast */}
       {cookieToast && (
-        <div className="qa-toast" onClick={() => { setCookieToast(null); if (onOpenCookieJar) onOpenCookieJar(); }}>
+        <div
+          className="qa-toast"
+          onClick={() => {
+            setCookieToast(null);
+            if (onOpenCookieJar) onOpenCookieJar();
+          }}
+        >
           <Icon name="globe" size={15} />
           <div className="qa-toast-text">
             <strong>{t('toast.cookieStored')}</strong>
-            <span>{t('toast.cookieSaved', { name: cookieToast.name, domain: cookieToast.domain })}</span>
+            <span>
+              {t('toast.cookieSaved', { name: cookieToast.name, domain: cookieToast.domain })}
+            </span>
           </div>
           <span className="qa-toast-cta">{t('toast.viewJar')}</span>
         </div>

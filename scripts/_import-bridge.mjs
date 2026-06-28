@@ -10,8 +10,12 @@ import { tmpdir } from 'node:os';
 // Stub: ./setup (side-effect import in import-parser.ts's sibling modules), ?raw imports,
 // and any api/index import.
 const stub = {
-  name: 'stub', setup(b) {
-    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, a => ({ path: a.path, namespace: 'stub' }));
+  name: 'stub',
+  setup(b) {
+    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, (a) => ({
+      path: a.path,
+      namespace: 'stub',
+    }));
     b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
       contents: `
 const guard = new Proxy(function(){}, {
@@ -27,16 +31,26 @@ export default guard;
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const tmpDir = mkdtempSync(join(tmpdir(), 'qa-import-'));
-process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+process.on('exit', () => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
+});
 
 const res = await build({
   entryPoints: [join(__dir, '..', 'src', 'qa', 'import-parser.ts')],
-  bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent', plugins: [stub],
+  bundle: true,
+  format: 'esm',
+  write: false,
+  platform: 'node',
+  logLevel: 'silent',
+  plugins: [stub],
 });
 const tmp = join(tmpDir, 'import-parser.mjs');
 writeFileSync(tmp, res.outputFiles[0].text);
 const mod = await import('file://' + tmp.replace(/\\/g, '/'));
-if (typeof mod.qaParseImport !== 'function') throw new Error('qaParseImport not exported from import-parser.ts bundle');
+if (typeof mod.qaParseImport !== 'function')
+  throw new Error('qaParseImport not exported from import-parser.ts bundle');
 
 // Map the TS result ({collection, details, responses, format} or {error}) into the
 // Rust ImportParsed shape: {collection:{name,source,base_url}, folders:[{name, requests:[{method,name,path,params,headers,body,auth}]}]}
@@ -44,9 +58,9 @@ function tsToRustShape(tsResult) {
   if (tsResult.error) throw new Error('qaParseImport returned error: ' + tsResult.error);
   const { collection, details } = tsResult;
   // Rebuild folders with detail inlined and ids dropped
-  const folders = collection.folders.map(folder => ({
+  const folders = collection.folders.map((folder) => ({
     name: folder.name,
-    requests: folder.requests.map(meta => {
+    requests: folder.requests.map((meta) => {
       // Throw (don't default) so the golden fixture proves every TS request detail was
       // actually inlined — a shape regression can't vacuously pass.
       const d = details[meta.id];
@@ -65,7 +79,7 @@ function tsToRustShape(tsResult) {
   return {
     collection: {
       name: collection.name,
-      source: collection.source,         // 'postman' | 'openapi'
+      source: collection.source, // 'postman' | 'openapi'
       base_url: collection.baseUrl ?? null,
     },
     folders,

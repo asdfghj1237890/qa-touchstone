@@ -136,6 +136,8 @@ fn coerce_like(original: &Value, raw: &str) -> Value {
 
 fn replace_in_json(value: &mut Value, params: &Map<String, Value>, modified: &mut bool) {
     if let Value::Object(map) = value {
+        let num_re = Regex::new(r"^example_\d+$").unwrap();
+        let bool_re = Regex::new(r"^example_(true|false)$").unwrap();
         let keys: Vec<String> = map.keys().cloned().collect();
         for k in keys {
             if let Some(raw) = param_str(params, &k) {
@@ -152,8 +154,6 @@ fn replace_in_json(value: &mut Value, params: &Map<String, Value>, modified: &mu
                 _ => None,
             };
             if let Some((example_value, raw)) = example_param {
-                let num_re = Regex::new(r"^example_\d+$").unwrap();
-                let bool_re = Regex::new(r"^example_(true|false)$").unwrap();
                 let new_val = if num_re.is_match(&example_value) {
                     raw.parse::<i64>()
                         .map(Value::from)
@@ -184,7 +184,12 @@ fn replace_in_json(value: &mut Value, params: &Map<String, Value>, modified: &mu
 }
 
 /// 環境覆寫 URL 重組（修 bug #8：只剝除「已知」base path）。
-pub fn rebase_url(raw_url: &str, env_base_url: &str, env_base_path: &str, known_base_paths: &[&str]) -> String {
+pub fn rebase_url(
+    raw_url: &str,
+    env_base_url: &str,
+    env_base_path: &str,
+    known_base_paths: &[&str],
+) -> String {
     let re = Regex::new(r"^(https?://[^/]+)(/.*)?$").unwrap();
     let caps = match re.captures(raw_url) {
         Some(c) => c,
@@ -195,7 +200,10 @@ pub fn rebase_url(raw_url: &str, env_base_url: &str, env_base_path: &str, known_
         Some((p, q)) => (p.to_string(), Some(q.to_string())),
         None => (path_and_query.to_string(), None),
     };
-    let mut endpoint = Regex::new(r"/+").unwrap().replace_all(&pathname, "/").to_string();
+    let mut endpoint = Regex::new(r"/+")
+        .unwrap()
+        .replace_all(&pathname, "/")
+        .to_string();
     for bp in known_base_paths {
         if endpoint == *bp || endpoint.starts_with(&format!("{bp}/")) {
             endpoint = endpoint[bp.len()..].to_string();
@@ -217,7 +225,10 @@ mod tests {
     use serde_json::json;
 
     fn params(pairs: &[(&str, Value)]) -> Map<String, Value> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect()
     }
 
     #[test]
@@ -265,7 +276,10 @@ mod tests {
             "/legacy-prod",
             KNOWN_ENV_BASE_PATHS,
         );
-        assert_eq!(r, "https://new.execute-api.us-east-1.amazonaws.com/legacy-prod/devices/{id}");
+        assert_eq!(
+            r,
+            "https://new.execute-api.us-east-1.amazonaws.com/legacy-prod/devices/{id}"
+        );
     }
 
     #[test]
@@ -281,9 +295,22 @@ mod tests {
 
     #[test]
     fn rebase_preserves_query_and_ignores_relative() {
-        let r = rebase_url("https://h.com/api-alpha/x?a=1", "https://n.com", "/api-prod", KNOWN_ENV_BASE_PATHS);
+        let r = rebase_url(
+            "https://h.com/api-alpha/x?a=1",
+            "https://n.com",
+            "/api-prod",
+            KNOWN_ENV_BASE_PATHS,
+        );
         assert_eq!(r, "https://n.com/api-prod/x?a=1");
-        assert_eq!(rebase_url("/relative/path", "https://n.com", "/p", KNOWN_ENV_BASE_PATHS), "/relative/path");
+        assert_eq!(
+            rebase_url(
+                "/relative/path",
+                "https://n.com",
+                "/p",
+                KNOWN_ENV_BASE_PATHS
+            ),
+            "/relative/path"
+        );
     }
 
     #[test]

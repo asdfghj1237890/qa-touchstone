@@ -16,10 +16,38 @@ export interface HomePageProps {
 function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
   const { t } = useI18n();
   const tiles = [
-    { key: 'testgen', icon: 'sparkle', title: t('home.tile.testgen.title'), desc: t('home.tile.testgen.desc'), cta: t('home.tile.testgen.cta'), onClick: () => setRoute('testgen') },
-    { key: 'api', icon: 'send', title: t('home.tile.api.title'), desc: t('home.tile.api.desc'), cta: t('home.tile.api.cta'), onClick: () => setRoute('api') },
-    { key: 'perf', icon: 'gauge', title: t('home.tile.perf.title'), desc: t('home.tile.perf.desc'), cta: t('home.tile.perf.cta'), onClick: () => setRoute('perf') },
-    { key: 'settings', icon: 'key', title: t('home.tile.settings.title'), desc: t('home.tile.settings.desc'), cta: t('home.tile.settings.cta'), onClick: () => setRoute('settings') },
+    {
+      key: 'testgen',
+      icon: 'sparkle',
+      title: t('home.tile.testgen.title'),
+      desc: t('home.tile.testgen.desc'),
+      cta: t('home.tile.testgen.cta'),
+      onClick: () => setRoute('testgen'),
+    },
+    {
+      key: 'api',
+      icon: 'send',
+      title: t('home.tile.api.title'),
+      desc: t('home.tile.api.desc'),
+      cta: t('home.tile.api.cta'),
+      onClick: () => setRoute('api'),
+    },
+    {
+      key: 'perf',
+      icon: 'gauge',
+      title: t('home.tile.perf.title'),
+      desc: t('home.tile.perf.desc'),
+      cta: t('home.tile.perf.cta'),
+      onClick: () => setRoute('perf'),
+    },
+    {
+      key: 'settings',
+      icon: 'key',
+      title: t('home.tile.settings.title'),
+      desc: t('home.tile.settings.desc'),
+      cta: t('home.tile.settings.cta'),
+      onClick: () => setRoute('settings'),
+    },
   ];
   const caps = [
     { icon: 'shield', label: t('home.cap.auth') },
@@ -33,7 +61,9 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
     <div className="qa-home">
       <div className="qa-home-inner">
         <header className="qa-home-head">
-          <div className="qa-home-badge"><PulseLogo size={42} /></div>
+          <div className="qa-home-badge">
+            <PulseLogo size={42} />
+          </div>
           <div>
             <h1>QA Touchstone</h1>
             <p>{t('home.subtitle')}</p>
@@ -42,12 +72,16 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
         </header>
 
         <div className="qa-home-grid">
-          {tiles.map(t => (
+          {tiles.map((t) => (
             <button key={t.key} className="qa-tile" onClick={t.onClick}>
-              <div className="qa-tile-icon"><Icon name={t.icon} size={20} /></div>
+              <div className="qa-tile-icon">
+                <Icon name={t.icon} size={20} />
+              </div>
               <div className="qa-tile-title">{t.title}</div>
               <div className="qa-tile-desc">{t.desc}</div>
-              <div className="qa-tile-cta">{t.cta} <Icon name="chevron" size={14} /></div>
+              <div className="qa-tile-cta">
+                {t.cta} <Icon name="chevron" size={14} />
+              </div>
             </button>
           ))}
         </div>
@@ -55,8 +89,12 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
         <div className="qa-home-cols">
           <section className="qa-panel">
             <div className="qa-panel-head">
-              <span><Icon name="history" size={14} /> {t('home.recent')}</span>
-              <button className="qa-link" onClick={() => setRoute('api')}>{t('home.viewClient')}</button>
+              <span>
+                <Icon name="history" size={14} /> {t('home.recent')}
+              </span>
+              <button className="qa-link" onClick={() => setRoute('api')}>
+                {t('home.viewClient')}
+              </button>
             </div>
             <div className="qa-recent">
               {history.length === 0 ? (
@@ -64,7 +102,10 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
                   <Icon name="send" size={22} />
                   <div className="qa-recent-empty-title">{t('home.recent.empty')}</div>
                   <div className="qa-recent-empty-hint">{t('home.recent.emptyHint')}</div>
-                  <button className="qa-btn qa-btn-primary qa-recent-empty-cta" onClick={() => setRoute('api')}>
+                  <button
+                    className="qa-btn qa-btn-primary qa-recent-empty-cta"
+                    onClick={() => setRoute('api')}
+                  >
                     {t('home.recent.emptyCta')} <Icon name="chevron" size={13} />
                   </button>
                 </div>
@@ -73,7 +114,12 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
                   <button key={i} className="qa-recent-row" onClick={() => onOpenRequest(h)}>
                     <MethodBadge method={h.method} size="sm" />
                     <span className="qa-recent-path">{h.path}</span>
-                    <span className="qa-recent-status" style={{ color: window.QATheme.statusColor(h.status) }}>{h.status}</span>
+                    <span
+                      className="qa-recent-status"
+                      style={{ color: window.QATheme.statusColor(h.status) }}
+                    >
+                      {h.status}
+                    </span>
                     <span className="qa-recent-time">{h.time}ms</span>
                   </button>
                 ))
@@ -82,16 +128,34 @@ function HomePage({ setRoute, history, onOpenRequest, env }: HomePageProps) {
           </section>
 
           <section className="qa-panel">
-            <div className="qa-panel-head"><span><Icon name="globe" size={14} /> {t('home.workspace')}</span></div>
+            <div className="qa-panel-head">
+              <span>
+                <Icon name="globe" size={14} /> {t('home.workspace')}
+              </span>
+            </div>
             <div className="qa-ws">
-              <div className="qa-ws-row"><span>{t('home.activeEnv')}</span><strong>{env.label}</strong></div>
-              <div className="qa-ws-row"><span>{t('home.collections')}</span><strong>{window.QA.COLLECTIONS.length}</strong></div>
-              <div className="qa-ws-row"><span>{t('home.savedRequests')}</span><strong>{collTotal}</strong></div>
-              <div className="qa-ws-row"><span>{t('home.credentialProfiles')}</span><strong>{window.QA.CRED_PROFILES.length}</strong></div>
+              <div className="qa-ws-row">
+                <span>{t('home.activeEnv')}</span>
+                <strong>{env.label}</strong>
+              </div>
+              <div className="qa-ws-row">
+                <span>{t('home.collections')}</span>
+                <strong>{window.QA.COLLECTIONS.length}</strong>
+              </div>
+              <div className="qa-ws-row">
+                <span>{t('home.savedRequests')}</span>
+                <strong>{collTotal}</strong>
+              </div>
+              <div className="qa-ws-row">
+                <span>{t('home.credentialProfiles')}</span>
+                <strong>{window.QA.CRED_PROFILES.length}</strong>
+              </div>
             </div>
             <div className="qa-caps">
-              {caps.map(c => (
-                <span className="qa-cap" key={c.label}><Icon name={c.icon} size={13} /> {c.label}</span>
+              {caps.map((c) => (
+                <span className="qa-cap" key={c.label}>
+                  <Icon name={c.icon} size={13} /> {c.label}
+                </span>
               ))}
             </div>
           </section>

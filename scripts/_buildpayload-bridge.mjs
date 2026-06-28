@@ -10,8 +10,12 @@ import { tmpdir } from 'node:os';
 
 // esbuild plugin: stub setup/api (side-effect-only for buildPayload) and any *?raw import.
 const stub = {
-  name: 'stub', setup(b) {
-    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, a => ({ path: a.path, namespace: 'stub' }));
+  name: 'stub',
+  setup(b) {
+    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, (a) => ({
+      path: a.path,
+      namespace: 'stub',
+    }));
     b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
       contents: `
   const guard = new Proxy(function(){}, {
@@ -27,12 +31,22 @@ const stub = {
 const __dir = dirname(fileURLToPath(import.meta.url));
 const res = await build({
   entryPoints: [join(__dir, '..', 'src', 'qa', 'executor.ts')],
-  bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent', plugins: [stub],
+  bundle: true,
+  format: 'esm',
+  write: false,
+  platform: 'node',
+  logLevel: 'silent',
+  plugins: [stub],
 });
 const tmpDir = mkdtempSync(join(tmpdir(), 'qa-bp-'));
 const tmp = join(tmpDir, 'executor.mjs');
 writeFileSync(tmp, res.outputFiles[0].text);
-process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+process.on('exit', () => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
+});
 const mod = await import('file://' + tmp.replace(/\\/g, '/'));
-if (typeof mod.buildPayload !== 'function') throw new Error('buildPayload not exported from executor.ts bundle');
+if (typeof mod.buildPayload !== 'function')
+  throw new Error('buildPayload not exported from executor.ts bundle');
 export const buildPayload = mod.buildPayload;

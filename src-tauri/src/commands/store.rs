@@ -16,7 +16,10 @@ fn save_blob(app: &AppHandle, file: &str, value: &Value) -> CommandResult {
 }
 
 fn load_blob_or_null(app: &AppHandle, file: &str) -> Value {
-    match data_file(app, file).ok().and_then(|p| read_value(&p).ok().flatten()) {
+    match data_file(app, file)
+        .ok()
+        .and_then(|p| read_value(&p).ok().flatten())
+    {
         Some(v) => v,
         None => Value::Null,
     }
@@ -35,4 +38,3 @@ pub fn load_user_data(app: AppHandle) -> Value {
         v => v,
     }
 }
-

@@ -34,19 +34,44 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (!this.state.error) return this.props.children;
     const msg = String((this.state.error && this.state.error.message) || this.state.error);
     return (
-      <div role="alert" style={{
-        height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center',
-        justifyContent: 'center', gap: 12, background: '#15181c', color: '#e8edf2',
-        fontFamily: 'ui-monospace, monospace', padding: 24, textAlign: 'center',
-      }}>
+      <div
+        role="alert"
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 12,
+          background: '#15181c',
+          color: '#e8edf2',
+          fontFamily: 'ui-monospace, monospace',
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
         <div style={{ fontSize: 18, fontWeight: 700 }}>Something went wrong / 程式發生錯誤</div>
-        <div style={{ fontSize: 13, color: '#9aa7b2', maxWidth: 560, wordBreak: 'break-word' }}>{msg}</div>
+        <div style={{ fontSize: 13, color: '#9aa7b2', maxWidth: 560, wordBreak: 'break-word' }}>
+          {msg}
+        </div>
         <button
           type="button"
-          onClick={() => { try { window.location.reload(); } catch { /* 非瀏覽器環境 */ } }}
+          onClick={() => {
+            try {
+              window.location.reload();
+            } catch {
+              /* 非瀏覽器環境 */
+            }
+          }}
           style={{
-            marginTop: 8, padding: '8px 18px', borderRadius: 8, border: '1px solid #3a424d',
-            background: '#21262d', color: '#e8edf2', cursor: 'pointer', fontSize: 13,
+            marginTop: 8,
+            padding: '8px 18px',
+            borderRadius: 8,
+            border: '1px solid #3a424d',
+            background: '#21262d',
+            color: '#e8edf2',
+            cursor: 'pointer',
+            fontSize: 13,
           }}
         >
           Reload / 重新載入

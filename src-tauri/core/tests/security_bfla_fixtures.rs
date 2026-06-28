@@ -1,5 +1,7 @@
-use qa_touchstone_core::security::bfla::{bfla_plan, classify_bfla, bfla_severity, BflaEndpoint, BflaIdentity};
 use qa_touchstone_core::security::authz::Verdict;
+use qa_touchstone_core::security::bfla::{
+    bfla_plan, bfla_severity, classify_bfla, BflaEndpoint, BflaIdentity,
+};
 use qa_touchstone_core::security::finding::Severity;
 use serde_json::Value;
 
@@ -15,7 +17,8 @@ struct ClassifyCase {
     name: String,
     status: Option<i64>,
     body: Value,
-    #[serde(rename = "denySet")] deny_set: Vec<i64>,
+    #[serde(rename = "denySet")]
+    deny_set: Vec<i64>,
     expected: String,
 }
 
@@ -62,25 +65,60 @@ fn bfla_matches_ts() {
 
     // ── plan: ordered Vec compare (endpoint-major / identity-minor) ──
     let endpoints = vec![
-        BflaEndpoint { method: "DELETE".into(), path: "/admin/x".into(), privileged: None },
-        BflaEndpoint { method: "GET".into(),    path: "/admin/y".into(), privileged: None },
-        BflaEndpoint { method: "GET".into(),    path: "/u".into(),       privileged: Some(true) },
-        BflaEndpoint { method: "DELETE".into(), path: "/v".into(),       privileged: Some(false) },
-        BflaEndpoint { method: "GET".into(),    path: "/w".into(),       privileged: None },
+        BflaEndpoint {
+            method: "DELETE".into(),
+            path: "/admin/x".into(),
+            privileged: None,
+        },
+        BflaEndpoint {
+            method: "GET".into(),
+            path: "/admin/y".into(),
+            privileged: None,
+        },
+        BflaEndpoint {
+            method: "GET".into(),
+            path: "/u".into(),
+            privileged: Some(true),
+        },
+        BflaEndpoint {
+            method: "DELETE".into(),
+            path: "/v".into(),
+            privileged: Some(false),
+        },
+        BflaEndpoint {
+            method: "GET".into(),
+            path: "/w".into(),
+            privileged: None,
+        },
     ];
     let identities = vec![
-        BflaIdentity { id: "admin".into(), privileged: true },
-        BflaIdentity { id: "anon".into(),  privileged: false },
-        BflaIdentity { id: "user".into(),  privileged: false },
+        BflaIdentity {
+            id: "admin".into(),
+            privileged: true,
+        },
+        BflaIdentity {
+            id: "anon".into(),
+            privileged: false,
+        },
+        BflaIdentity {
+            id: "user".into(),
+            privileged: false,
+        },
     ];
     let plan = bfla_plan(&endpoints, &identities);
     // Map index pairs to ["{method} {path}", "{identityId}"] tuples for comparison.
-    let got_tuples: Vec<[String; 2]> = plan.iter().map(|p| {
-        let ep = &endpoints[p.endpoint_index];
-        let id = &identities[p.identity_index];
-        [format!("{} {}", ep.method, ep.path), id.id.clone()]
-    }).collect();
-    assert_eq!(got_tuples, f.plan, "bfla_plan order must match TS bflaPlan order");
+    let got_tuples: Vec<[String; 2]> = plan
+        .iter()
+        .map(|p| {
+            let ep = &endpoints[p.endpoint_index];
+            let id = &identities[p.identity_index];
+            [format!("{} {}", ep.method, ep.path), id.id.clone()]
+        })
+        .collect();
+    assert_eq!(
+        got_tuples, f.plan,
+        "bfla_plan order must match TS bflaPlan order"
+    );
 
     // ── classify ──
     for c in &f.classify {
@@ -92,6 +130,6 @@ fn bfla_matches_ts() {
     for c in &f.severity {
         let verdict = parse_verdict(&c.verdict);
         let got = bfla_severity(&c.method, verdict).map(severity_str);
-        assert_eq!(got.as_deref(), c.expected.as_deref(), "severity case `{}`", c.name);
+        assert_eq!(got, c.expected.as_deref(), "severity case `{}`", c.name);
     }
 }

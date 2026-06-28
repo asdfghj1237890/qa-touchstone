@@ -21,11 +21,11 @@ pub fn run() {
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
-        .on_window_event(|window, event| match window.label() {
+        .on_window_event(|window, event| {
             // 關閉主視窗即結束整個程序。
             // 先樹狀殺掉任何進行中的子程序（例如 PerfTest 跑的 k6），
             // 否則 Windows 下父程序退出不會自動清理子程序。
-            "main" => {
+            if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { .. } = event {
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
@@ -37,7 +37,6 @@ pub fn run() {
                     app.exit(0);
                 }
             }
-            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::get_platform,

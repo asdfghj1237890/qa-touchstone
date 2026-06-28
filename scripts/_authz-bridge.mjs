@@ -9,8 +9,12 @@ import { tmpdir } from 'node:os';
 
 // esbuild plugin: stub ./setup (side-effect-only for the classifiers) and any ?raw import.
 const stub = {
-  name: 'stub', setup(b) {
-    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, a => ({ path: a.path, namespace: 'stub' }));
+  name: 'stub',
+  setup(b) {
+    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, (a) => ({
+      path: a.path,
+      namespace: 'stub',
+    }));
     b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
       contents: `
 const guard = new Proxy(function(){}, {
@@ -26,14 +30,24 @@ export default guard;
 const __dir = dirname(fileURLToPath(import.meta.url));
 const res = await build({
   entryPoints: [join(__dir, '..', 'src', 'qa', 'authz.ts')],
-  bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent', plugins: [stub],
+  bundle: true,
+  format: 'esm',
+  write: false,
+  platform: 'node',
+  logLevel: 'silent',
+  plugins: [stub],
 });
 const tmpDir = mkdtempSync(join(tmpdir(), 'qa-az-'));
 const tmp = join(tmpDir, 'authz.mjs');
 writeFileSync(tmp, res.outputFiles[0].text);
-process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+process.on('exit', () => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
+});
 const mod = await import('file://' + tmp.replace(/\\/g, '/'));
-if (typeof mod.classifyEndpoint !== 'function') throw new Error('classifyEndpoint not exported from authz.ts bundle');
+if (typeof mod.classifyEndpoint !== 'function')
+  throw new Error('classifyEndpoint not exported from authz.ts bundle');
 export const classifyEndpoint = mod.classifyEndpoint;
 export const classifyOutcome = mod.classifyOutcome;
 export const detectSoftDeny = mod.detectSoftDeny;

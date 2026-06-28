@@ -29,14 +29,23 @@ async fn follows_redirect_and_captures_set_cookie() {
     let request_details = json!({
         "request": { "method": "GET", "url": format!("{}/start", server.uri()), "header": [] }
     });
-    let out = execute_request(&request_details, &json!({}), None, None, ExecOptions::default()).await;
+    let out = execute_request(
+        &request_details,
+        &json!({}),
+        None,
+        None,
+        ExecOptions::default(),
+    )
+    .await;
 
     assert_eq!(out["success"], json!(true));
     assert_eq!(out["status"], json!(200));
     assert_eq!(out["body"], json!("{\"ok\":true}"));
     let cookies = out["setCookies"].as_array().expect("setCookies array");
     assert!(
-        cookies.iter().any(|c| c["line"].as_str().unwrap_or("").contains("sid=abc")),
+        cookies
+            .iter()
+            .any(|c| c["line"].as_str().unwrap_or("").contains("sid=abc")),
         "expected captured Set-Cookie, got {cookies:?}"
     );
 }
@@ -44,10 +53,22 @@ async fn follows_redirect_and_captures_set_cookie() {
 // An invalid URL must return the structured failure Value, not panic.
 #[tokio::test]
 async fn invalid_url_returns_error_value() {
-    let request_details = json!({ "request": { "method": "GET", "url": "not a url", "header": [] } });
-    let out = execute_request(&request_details, &json!({}), None, None, ExecOptions::default()).await;
+    let request_details =
+        json!({ "request": { "method": "GET", "url": "not a url", "header": [] } });
+    let out = execute_request(
+        &request_details,
+        &json!({}),
+        None,
+        None,
+        ExecOptions::default(),
+    )
+    .await;
     assert_eq!(out["success"], json!(false));
-    assert!(out["error"].as_str().unwrap_or("").to_lowercase().contains("url"));
+    assert!(out["error"]
+        .as_str()
+        .unwrap_or("")
+        .to_lowercase()
+        .contains("url"));
 }
 
 // Matcher that only accepts requests that do NOT carry an X-API-Key header.
@@ -77,9 +98,7 @@ async fn cross_origin_strips_caller_marked_header() {
 
     Mock::given(method("GET"))
         .and(path("/start"))
-        .respond_with(
-            ResponseTemplate::new(302).insert_header("location", dest.as_str()),
-        )
+        .respond_with(ResponseTemplate::new(302).insert_header("location", dest.as_str()))
         .mount(&server_a)
         .await;
 
@@ -104,11 +123,15 @@ async fn cross_origin_strips_caller_marked_header() {
         &json!({}),
         None,
         None,
-        ExecOptions { sensitive_header_names: vec!["X-API-Key".into()], ..Default::default() },
+        ExecOptions {
+            sensitive_header_names: vec!["X-API-Key".into()],
+            ..Default::default()
+        },
     )
     .await;
     assert_eq!(
-        out["status"], json!(200),
+        out["status"],
+        json!(200),
         "expected 200 (header stripped cross-origin), got: {out:?}"
     );
 
@@ -122,7 +145,8 @@ async fn cross_origin_strips_caller_marked_header() {
     )
     .await;
     assert_eq!(
-        out2["status"], json!(404),
+        out2["status"],
+        json!(404),
         "expected 404 (header forwarded → no mock match), got: {out2:?}"
     );
 }

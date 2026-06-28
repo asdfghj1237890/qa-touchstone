@@ -25,18 +25,27 @@ fn build_detectable(
     // like `{{idParam}}` must resolve so detection + the merge use the same resolved key the
     // built request would have).
     let resolved_url = qa_substitute(&req.url, var_map, &mut RealDynamics);
-    let resolved_query: Vec<(String, String)> = req.query.iter()
-        .map(|kv| (qa_substitute(&kv.key, var_map, &mut RealDynamics), qa_substitute(&kv.value, var_map, &mut RealDynamics)))
+    let resolved_query: Vec<(String, String)> = req
+        .query
+        .iter()
+        .map(|kv| {
+            (
+                qa_substitute(&kv.key, var_map, &mut RealDynamics),
+                qa_substitute(&kv.value, var_map, &mut RealDynamics),
+            )
+        })
         .collect();
-    let resolved_body: Option<String> = req.body.as_ref().map(|b| {
-        qa_substitute(&b.content, var_map, &mut RealDynamics)
-    });
+    let resolved_body: Option<String> = req
+        .body
+        .as_ref()
+        .map(|b| qa_substitute(&b.content, var_map, &mut RealDynamics));
 
     // Extract pathname from the absolute url (reqwest::Url::parse for authority urls;
     // fall back to treating the whole string as a path for templated/relative urls).
     let (pathname, inline_query_pairs) = if let Ok(url) = reqwest::Url::parse(&resolved_url) {
         let path = url.path().to_string();
-        let pairs: Vec<(String, String)> = url.query_pairs()
+        let pairs: Vec<(String, String)> = url
+            .query_pairs()
             .map(|(k, v)| (k.into_owned(), v.into_owned()))
             .collect();
         (path, pairs)
@@ -45,7 +54,11 @@ fn build_detectable(
         // strip ?query manually; inline ?query params are skipped (documented limitation:
         // an unresolved templated url can't be parsed, so its inline query isn't extracted).
         // No `url` crate needed for this branch.
-        let before_q = resolved_url.split('?').next().unwrap_or(&resolved_url).to_string();
+        let before_q = resolved_url
+            .split('?')
+            .next()
+            .unwrap_or(&resolved_url)
+            .to_string();
         (before_q, Vec::new())
     };
 
@@ -72,7 +85,8 @@ fn build_detectable(
 
 #[derive(Serialize)]
 struct CandidateOut {
-    #[serde(rename = "idLocation")] id_location: Value,
+    #[serde(rename = "idLocation")]
+    id_location: Value,
     value: String,
     confidence: String,
     why: String,
@@ -89,16 +103,16 @@ struct RequestOut {
 fn id_location_to_json(loc: &IdLocation) -> Value {
     match loc {
         IdLocation::Path { index } => json!({ "kind": "path", "index": index }),
-        IdLocation::Query { key }  => json!({ "kind": "query", "key": key }),
-        IdLocation::Body { path }  => json!({ "kind": "body", "path": path }),
+        IdLocation::Query { key } => json!({ "kind": "query", "key": key }),
+        IdLocation::Body { path } => json!({ "kind": "body", "path": path }),
     }
 }
 
 fn id_location_human(loc: &IdLocation) -> String {
     match loc {
         IdLocation::Path { index } => format!("path[{}]", index),
-        IdLocation::Query { key }  => format!("query[{}]", key),
-        IdLocation::Body { path }  => format!("body.{}", path),
+        IdLocation::Query { key } => format!("query[{}]", key),
+        IdLocation::Body { path } => format!("body.{}", path),
     }
 }
 
@@ -139,16 +153,21 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
         let detectable = build_detectable(req, &var_map);
         let candidates = detect_id_location(&detectable);
 
-        let candidates_out: Vec<CandidateOut> = candidates.iter().map(|c| CandidateOut {
-            id_location: id_location_to_json(&c.id_location),
-            value: red.redact_str(&c.value),
-            confidence: c.confidence.clone(),
-            why: red.redact_str(&c.why),
-        }).collect();
+        let candidates_out: Vec<CandidateOut> = candidates
+            .iter()
+            .map(|c| CandidateOut {
+                id_location: id_location_to_json(&c.id_location),
+                value: red.redact_str(&c.value),
+                confidence: c.confidence.clone(),
+                why: red.redact_str(&c.why),
+            })
+            .collect();
 
         // Paste-ready stub for the top candidate (if any).
         let stub: Option<Value> = candidates.first().map(|top| {
-            let id_values: serde_json::Map<String, Value> = cfg.identities.iter()
+            let id_values: serde_json::Map<String, Value> = cfg
+                .identities
+                .iter()
                 .map(|i| (i.id.clone(), json!("")))
                 .collect();
             json!({
@@ -176,7 +195,10 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
 
     // Output: JSON or human-readable.
     if use_json {
-        println!("{}", red.redact_str(&serde_json::to_string(&results).unwrap()));
+        println!(
+            "{}",
+            red.redact_str(&serde_json::to_string(&results).unwrap())
+        );
     } else {
         for r in &results {
             println!("request: {}", red.redact_str(&r.request));
@@ -184,8 +206,10 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
                 println!("  note: {}", note);
             } else {
                 for (i, c) in r.candidates.iter().enumerate() {
-                    let loc_json: IdLocation = serde_json::from_value(c.id_location.clone()).unwrap();
-                    println!("  [{}] {} = {:?}  confidence:{} ({})",
+                    let loc_json: IdLocation =
+                        serde_json::from_value(c.id_location.clone()).unwrap();
+                    println!(
+                        "  [{}] {} = {:?}  confidence:{} ({})",
                         i + 1,
                         red.redact_str(&id_location_human(&loc_json)),
                         c.value,
@@ -194,7 +218,10 @@ pub async fn run(config_path: String, env: Option<String>, use_json: bool) -> Ex
                     );
                 }
                 if let Some(stub) = &r.stub {
-                    println!("  stub: {}", red.redact_str(&serde_json::to_string_pretty(stub).unwrap()));
+                    println!(
+                        "  stub: {}",
+                        red.redact_str(&serde_json::to_string_pretty(stub).unwrap())
+                    );
                 }
             }
             println!();
@@ -213,10 +240,17 @@ mod tests {
 
     fn mk_req(id: &str, url: &str, query: Vec<Kv>, body: Option<&str>) -> Request {
         Request {
-            id: id.into(), method: "GET".into(), url: url.into(),
-            headers: vec![], query,
-            body: body.map(|c| Body { mode: BodyMode::Json, content: c.into() }),
-            assertions: vec![], privileged: None,
+            id: id.into(),
+            method: "GET".into(),
+            url: url.into(),
+            headers: vec![],
+            query,
+            body: body.map(|c| Body {
+                mode: BodyMode::Json,
+                content: c.into(),
+            }),
+            assertions: vec![],
+            privileged: None,
         }
     }
 
@@ -235,17 +269,27 @@ mod tests {
         assert!(!cands.is_empty(), "must detect a candidate");
         let top = &cands[0];
         match &top.id_location {
-            qa_touchstone_core::config::IdLocation::Path { index } =>
-                assert_eq!(*index, 1, "path index must be 1 (second segment of /orders/123)"),
+            qa_touchstone_core::config::IdLocation::Path { index } => assert_eq!(
+                *index, 1,
+                "path index must be 1 (second segment of /orders/123)"
+            ),
             other => panic!("expected path candidate, got {:?}", other),
         }
 
         // Confirm apply_id_location accepts this index (the round-trip correctness check).
         let applied = qa_touchstone_core::security::bola::apply_id_location(
-            &req, &top.id_location, &serde_json::json!("999")
+            &req,
+            &top.id_location,
+            &serde_json::json!("999"),
         );
-        assert!(applied.is_ok(), "apply_id_location must succeed for the detected path index");
-        assert!(applied.unwrap().url.contains("/orders/999"), "id must be substituted at index 1");
+        assert!(
+            applied.is_ok(),
+            "apply_id_location must succeed for the detected path index"
+        );
+        assert!(
+            applied.unwrap().url.contains("/orders/999"),
+            "id must be substituted at index 1"
+        );
     }
 
     #[test]
@@ -255,31 +299,37 @@ mod tests {
         let map: BTreeMap<String, String> = BTreeMap::new();
         let det = build_detectable(&req, &map);
         assert_eq!(det.url, "/search");
-        assert!(det.params.iter().any(|(k, v)| k == "user_id" && v == "7"),
-            "inline ?user_id=7 must appear in params");
+        assert!(
+            det.params.iter().any(|(k, v)| k == "user_id" && v == "7"),
+            "inline ?user_id=7 must appear in params"
+        );
         let cands = detect_id_location(&det);
         assert!(!cands.is_empty());
         match &cands[0].id_location {
-            qa_touchstone_core::config::IdLocation::Query { key } =>
-                assert_eq!(key, "user_id"),
+            qa_touchstone_core::config::IdLocation::Query { key } => assert_eq!(key, "user_id"),
             other => panic!("expected query candidate, got {:?}", other),
         }
     }
 
     #[test]
     fn adapter_body_id_field() {
-        let req = mk_req("create", "https://api.test/items", vec![],
-            Some(r#"{"userId":"550e8400-e29b-41d4-a716-446655440000"}"#));
+        let req = mk_req(
+            "create",
+            "https://api.test/items",
+            vec![],
+            Some(r#"{"userId":"550e8400-e29b-41d4-a716-446655440000"}"#),
+        );
         let map: BTreeMap<String, String> = BTreeMap::new();
         let det = build_detectable(&req, &map);
         let cands = detect_id_location(&det);
         assert!(!cands.is_empty());
         // body uuid → score 72 → "medium" (72 < 75 threshold)
-        assert_eq!(cands[0].confidence, "medium",
-            "body uuid → score 72 → medium (< 75 threshold)");
+        assert_eq!(
+            cands[0].confidence, "medium",
+            "body uuid → score 72 → medium (< 75 threshold)"
+        );
         match &cands[0].id_location {
-            qa_touchstone_core::config::IdLocation::Body { path } =>
-                assert_eq!(path, "userId"),
+            qa_touchstone_core::config::IdLocation::Body { path } => assert_eq!(path, "userId"),
             other => panic!("expected body candidate, got {:?}", other),
         }
     }

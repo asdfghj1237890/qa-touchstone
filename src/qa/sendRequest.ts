@@ -33,7 +33,17 @@ export async function qaRunSavedRequest(reqMeta: { id: string }, ctx: QaRunConte
   // `localVars` is the request-scoped override layer the API client applies via
   // its Options tab. Batch callers (Runner/Monitors) typically have none, so it
   // defaults to {} — but the interface exposes it rather than silently fixing it.
-  const { env = { label: 'None', baseUrl: '' }, vars, cookies = [], sslVerify = true, oauthToken, collectionId, localVars = {}, authOverride, mutate } = ctx;
+  const {
+    env = { label: 'None', baseUrl: '' },
+    vars,
+    cookies = [],
+    sslVerify = true,
+    oauthToken,
+    collectionId,
+    localVars = {},
+    authOverride,
+    mutate,
+  } = ctx;
   let req = buildReq(reqMeta.id);
   if (authOverride) req.auth = authOverride;
   // Optional last-mile rewrite (e.g. BOLA id substitution) before var-substitution.
@@ -42,7 +52,7 @@ export async function qaRunSavedRequest(reqMeta: { id: string }, ctx: QaRunConte
   // Resolve the URL the same way the live executor does, for cookie matching.
   const urlSub = window.qaSubstitute!(req.url || '', map);
   const isAbsolute = /^https?:\/\//i.test(urlSub);
-  const fullUrl = isAbsolute ? urlSub : (window.qaSubstitute!(env.baseUrl || '', map) + urlSub);
+  const fullUrl = isAbsolute ? urlSub : window.qaSubstitute!(env.baseUrl || '', map) + urlSub;
   const reqCookies = (cookies || [])
     .filter((c) => cookieMatches(c, fullUrl))
     .sort((a, b) => (b.path || '/').length - (a.path || '/').length);

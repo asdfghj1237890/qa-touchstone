@@ -6,7 +6,15 @@ import './setup';
 import { qaAiSend } from './llm';
 import { SEVERITY_ORDER } from './oracles';
 import { TRIAGE_CATEGORIES } from './triageConstants';
-import type { AiSendFn, Finding, TriageFinding, TriageInputItem, TriageItem, TriagePriority, TriageResult } from './types';
+import type {
+  AiSendFn,
+  Finding,
+  TriageFinding,
+  TriageInputItem,
+  TriageItem,
+  TriagePriority,
+  TriageResult,
+} from './types';
 
 export const TRIAGE_CAP = 150;
 export { TRIAGE_CATEGORIES };
@@ -14,25 +22,43 @@ const PRIORITIES: TriagePriority[] = ['p1', 'p2', 'p3'];
 
 // Normalize one engine's findings into the flat triage shape with a back-ref.
 // refOf(finding, index) -> ref object the panel uses to navigate back.
-export function normalizeFindings(engine: string, findings: Finding[] | null | undefined, refOf?: (f: Finding, i: number) => unknown): TriageFinding[] {
+export function normalizeFindings(
+  engine: string,
+  findings: Finding[] | null | undefined,
+  refOf?: (f: Finding, i: number) => unknown
+): TriageFinding[] {
   return (findings || []).map((f, i) => ({
-    engine, severity: f.severity, oracle: f.oracle, title: f.title,
-    path: f.path, evidence: f.evidence || '', ref: refOf ? refOf(f, i) : null,
+    engine,
+    severity: f.severity,
+    oracle: f.oracle,
+    title: f.title,
+    path: f.path,
+    evidence: f.evidence || '',
+    ref: refOf ? refOf(f, i) : null,
   }));
 }
 
 // Cap the union by severity (highest first) and tag each kept finding with a
 // stable index `i`. Returns { input (sent to LLM), kept (for back-refs), dropped }.
-export function buildTriageInput(union: TriageFinding[] | null | undefined, cap = TRIAGE_CAP): { input: TriageInputItem[]; kept: TriageFinding[]; dropped: number } {
-  const sorted = (union || []).slice().sort(
-    (a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
+export function buildTriageInput(
+  union: TriageFinding[] | null | undefined,
+  cap = TRIAGE_CAP
+): { input: TriageInputItem[]; kept: TriageFinding[]; dropped: number } {
+  const sorted = (union || [])
+    .slice()
+    .sort((a, b) => SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity));
   const kept = sorted.slice(0, cap);
   const input = kept.map((f, i) => ({
-    i, engine: f.engine, severity: f.severity, oracle: f.oracle, title: f.title, path: f.path, evidence: f.evidence,
+    i,
+    engine: f.engine,
+    severity: f.severity,
+    oracle: f.oracle,
+    title: f.title,
+    path: f.path,
+    evidence: f.evidence,
   }));
   return { input, kept, dropped: Math.max(0, sorted.length - kept.length) };
 }
-
 
 // Defensive parse: strip code fences, extract the first balanced JSON object,
 // validate items, resolve findingIndexes back to `kept`, drop invalid refs and
@@ -40,13 +66,18 @@ export function buildTriageInput(union: TriageFinding[] | null | undefined, cap 
 export function parseTriage(raw: unknown, kept: TriageFinding[]): TriageResult {
   let obj;
   try {
-    const text = String(raw).replace(/```json/gi, '').replace(/```/g, '');
+    const text = String(raw)
+      .replace(/```json/gi, '')
+      .replace(/```/g, '');
     // Greedy first-{ to last-} match: after fence stripping this recovers the
     // JSON object from any surrounding prose. Malformed output safely throws -> empty.
     const m = text.match(/\{[\s\S]*\}/);
     obj = JSON.parse(m ? m[0] : text);
-  } catch { return { headline: '', items: [] }; }
-  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.items)) return { headline: '', items: [] };
+  } catch {
+    return { headline: '', items: [] };
+  }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.items))
+    return { headline: '', items: [] };
   const items: TriageItem[] = [];
   for (const it of obj.items) {
     if (!it || typeof it !== 'object') continue;
@@ -60,7 +91,7 @@ export function parseTriage(raw: unknown, kept: TriageFinding[]): TriageResult {
       seen.add(n);
       findings.push(kept[n]);
     }
-    if (!findings.length) continue;   // drop invented / zero-ref items
+    if (!findings.length) continue; // drop invented / zero-ref items
     items.push({
       title: String(it.title || findings[0].title || 'Finding cluster'),
       category: TRIAGE_CATEGORIES.includes(it.category) ? it.category : 'other',
@@ -78,7 +109,7 @@ export function parseTriage(raw: unknown, kept: TriageFinding[]): TriageResult {
 export async function runTriage(
   union: TriageFinding[] | null | undefined,
   send: AiSendFn = qaAiSend,
-  opts: { cap?: number } = {},
+  opts: { cap?: number } = {}
 ): Promise<TriageResult & { dropped: number; total: number }> {
   const cap = opts.cap || TRIAGE_CAP;
   const { input, kept, dropped } = buildTriageInput(union, cap);

@@ -60,22 +60,36 @@ const WorkspaceContext = React.createContext<WorkspaceState | null>(null);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [env, setEnv] = React.useState<QaEnv>(window.QA.ENVIRONMENTS[0]);
-  const [vars, setVars] = React.useState<any>(() => JSON.parse(JSON.stringify(window.QA.VARIABLES)));
+  const [vars, setVars] = React.useState<any>(() =>
+    JSON.parse(JSON.stringify(window.QA.VARIABLES))
+  );
   const [localVars, setLocalVars] = React.useState<Record<string, QaLocalVar[]>>({});
-  const [cookies, setCookies] = React.useState<QaCookie[]>(() => window.QA.COOKIES.map((c: QaCookie) => ({ ...c })));
+  const [cookies, setCookies] = React.useState<QaCookie[]>(() =>
+    window.QA.COOKIES.map((c: QaCookie) => ({ ...c }))
+  );
   const [sslVerify, setSslVerify] = React.useState(true);
   const [tests, setTests] = React.useState<Record<string, QaAssertion[]>>({});
   const [oauthTokens, setOauthTokens] = React.useState<Record<string, OAuthToken>>({});
 
-  const value = React.useMemo<WorkspaceState>(() => ({
-    env, setEnv,
-    vars, setVars,
-    localVars, setLocalVars,
-    cookies, setCookies,
-    sslVerify, setSslVerify,
-    tests, setTests,
-    oauthTokens, setOauthTokens,
-  }), [env, vars, localVars, cookies, sslVerify, tests, oauthTokens]);
+  const value = React.useMemo<WorkspaceState>(
+    () => ({
+      env,
+      setEnv,
+      vars,
+      setVars,
+      localVars,
+      setLocalVars,
+      cookies,
+      setCookies,
+      sslVerify,
+      setSslVerify,
+      tests,
+      setTests,
+      oauthTokens,
+      setOauthTokens,
+    }),
+    [env, vars, localVars, cookies, sslVerify, tests, oauthTokens]
+  );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

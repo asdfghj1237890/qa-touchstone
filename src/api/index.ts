@@ -47,29 +47,43 @@ export const api = {
 
   // --- 設定 / 憑證設定檔 ---
   loadConfig: (): Promise<Record<string, unknown>> => invoke('load_config'),
-  saveConfig: (config: Record<string, unknown>): Promise<unknown> => invoke('save_config', { config }),
+  saveConfig: (config: Record<string, unknown>): Promise<unknown> =>
+    invoke('save_config', { config }),
   getApiCredentialConfigs: (): Promise<unknown> => invoke('get_api_credential_configs'),
-  setApiCredentialConfigs: (configs: unknown[]): Promise<unknown> => invoke('set_api_credential_configs', { apiConfigs: configs }),
+  setApiCredentialConfigs: (configs: unknown[]): Promise<unknown> =>
+    invoke('set_api_credential_configs', { apiConfigs: configs }),
   // --- AWS 秘密金鑰：存進 OS keychain（非 config.json 明文）---
-  setAwsSecret: (id: string, secret: string): Promise<unknown> => invoke('set_aws_secret', { id, secret }),
+  setAwsSecret: (id: string, secret: string): Promise<unknown> =>
+    invoke('set_aws_secret', { id, secret }),
   hasAwsSecret: (id: string): Promise<boolean> => invoke('has_aws_secret', { id }),
   deleteAwsSecret: (id: string): Promise<unknown> => invoke('delete_aws_secret', { id }),
-  selectDirectory: (): Promise<string | string[] | null> => openDialog({ directory: true, multiple: false }),
-  selectFile: (): Promise<string | string[] | null> => openDialog({ directory: false, multiple: false }),
+  selectDirectory: (): Promise<string | string[] | null> =>
+    openDialog({ directory: true, multiple: false }),
+  selectFile: (): Promise<string | string[] | null> =>
+    openDialog({ directory: false, multiple: false }),
 
   // --- 匯出：原生存檔對話框 + 後端寫檔（取代在 WebView 失效的 blob 下載）---
-  saveFileDialog: (opts: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null> => saveDialog(opts),
-  saveTextFile: (path: string, contents: string): Promise<void> => invoke('save_text_file', { path, contents }),
+  saveFileDialog: (opts: {
+    defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+  }): Promise<string | null> => saveDialog(opts),
+  saveTextFile: (path: string, contents: string): Promise<void> =>
+    invoke('save_text_file', { path, contents }),
 
   // --- 本機資料（qaStorage 磁碟鏡像）---
   loadUserData: (): Promise<unknown> => invoke('load_user_data'),
   saveUserData: (userData: unknown): Promise<unknown> => invoke('save_user_data', { userData }),
 
   // --- k6 效能測試 ---
-  writeTempText: (content: string, suffix?: string): Promise<string> => invoke('write_temp_text', { content, suffix }),
+  writeTempText: (content: string, suffix?: string): Promise<string> =>
+    invoke('write_temp_text', { content, suffix }),
   cleanupTempFile: (path: string): Promise<void> => invoke('cleanup_temp_file', { path }),
   getK6Path: (): Promise<string> => invoke('get_k6_path'),
-  runK6WithRealTimeOutput: async (args: string[], workingDirectory: string | null | undefined, callback: (line: string) => void): Promise<number> => {
+  runK6WithRealTimeOutput: async (
+    args: string[],
+    workingDirectory: string | null | undefined,
+    callback: (line: string) => void
+  ): Promise<number> => {
     const unlisten = await listen('command-output', (e) => callback(e.payload as string));
     try {
       return await invoke('run_k6', { args, workingDirectory });
@@ -81,11 +95,13 @@ export const api = {
 
   // --- Postman collections / 請求執行 ---
   getPostmanCollectionPath: (): Promise<string> => invoke('get_postman_collection_path'),
-  scanPostmanCollections: (folderPath: string): Promise<unknown[]> => invoke('scan_postman_collections', { folderPath }),
+  scanPostmanCollections: (folderPath: string): Promise<unknown[]> =>
+    invoke('scan_postman_collections', { folderPath }),
   loadCachedPostmanCollections: (): Promise<unknown[]> => invoke('load_cached_postman_collections'),
   // details 為 executor 的 QaPostmanPayload（具名介面無 index signature，從寬收 any）
   executePostmanRequest: (details: any): Promise<any> => invoke('execute_postman_request', details),
-  savePostmanCollection: (filePath: string, collectionData: unknown): Promise<unknown> => invoke('save_postman_collection', { filePath, collectionData }),
+  savePostmanCollection: (filePath: string, collectionData: unknown): Promise<unknown> =>
+    invoke('save_postman_collection', { filePath, collectionData }),
 };
 
 export default api;

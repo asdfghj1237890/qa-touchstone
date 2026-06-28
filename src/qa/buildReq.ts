@@ -48,27 +48,49 @@ export interface QaRequest {
 
 export const DEFAULT_HEADERS: QaKVRow[] = [{ key: 'Accept', value: 'application/json', on: true }];
 
-function buildHeaders(detailHeaders: Array<{ key?: string; value?: string; on?: boolean }> | null | undefined): QaKVRow[] {
-  const imported = (detailHeaders || []).map(h => ({
+function buildHeaders(
+  detailHeaders: Array<{ key?: string; value?: string; on?: boolean }> | null | undefined
+): QaKVRow[] {
+  const imported = (detailHeaders || []).map((h) => ({
     key: h.key || '',
     value: h.value || '',
     on: h.on !== false,
   }));
-  const hasAccept = imported.some(h => h.key.toLowerCase() === 'accept');
-  return hasAccept ? imported : [...DEFAULT_HEADERS.map(h => ({ ...h })), ...imported];
+  const hasAccept = imported.some((h) => h.key.toLowerCase() === 'accept');
+  return hasAccept ? imported : [...DEFAULT_HEADERS.map((h) => ({ ...h })), ...imported];
 }
 
 // Placeholder request used when no collections are loaded yet. Components guard
 // on req.id, but React's initial render still needs a valid shape.
 export const EMPTY_REQ: QaRequest = {
-  id: '', method: 'GET', url: '', params: [], headers: DEFAULT_HEADERS.map(h => ({ ...h })),
-  bodyMode: 'none', body: '', gqlQuery: '', gqlVars: '', form: [],
+  id: '',
+  method: 'GET',
+  url: '',
+  params: [],
+  headers: DEFAULT_HEADERS.map((h) => ({ ...h })),
+  bodyMode: 'none',
+  body: '',
+  gqlQuery: '',
+  gqlVars: '',
+  form: [],
   auth: {
-    type: 'none', bearer: '',
+    type: 'none',
+    bearer: '',
     apiKey: { key: '', value: '', placement: 'header' },
     basic: { user: '', pass: '' },
     aws: { profile: '', service: '', region: '' },
-    oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '', code: '', redirectUri: '', username: '', password: '' },
+    oauth2: {
+      grant: 'client_credentials',
+      authUrl: '',
+      tokenUrl: '',
+      clientId: '',
+      clientSecret: '',
+      scope: '',
+      code: '',
+      redirectUri: '',
+      username: '',
+      password: '',
+    },
   },
 };
 
@@ -77,7 +99,7 @@ export function buildReq(id: string | null): QaRequest {
   const { COLLECTIONS, REQUEST_DETAILS } = window.QA;
   const all = COLLECTIONS.flatMap((c: any) => c.folders.flatMap((f: any) => f.requests));
   const meta = all.find((r: any) => r.id === id) || all[0];
-  if (!meta) return { ...EMPTY_REQ, headers: DEFAULT_HEADERS.map(h => ({ ...h })) };
+  if (!meta) return { ...EMPTY_REQ, headers: DEFAULT_HEADERS.map((h) => ({ ...h })) };
   const det = REQUEST_DETAILS[meta.id] || {};
   const isGql = !!det.graphql;
   return {
@@ -86,17 +108,29 @@ export function buildReq(id: string | null): QaRequest {
     url: meta.path.split('?')[0],
     params: (det.params || []).map((p: any) => ({ ...p })),
     headers: buildHeaders(det.headers),
-    bodyMode: isGql ? 'graphql' : (det.body ? 'json' : 'none'),
+    bodyMode: isGql ? 'graphql' : det.body ? 'json' : 'none',
     body: det.body || '',
     gqlQuery: isGql ? det.graphql.query : '',
     gqlVars: isGql ? det.graphql.variables : '',
     form: [],
     auth: {
-      type: det.auth || 'none', bearer: '',
+      type: det.auth || 'none',
+      bearer: '',
       apiKey: { key: '', value: '', placement: 'header' },
       basic: { user: '', pass: '' },
       aws: { profile: '', service: '', region: '' },
-      oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '', code: '', redirectUri: '', username: '', password: '' },
+      oauth2: {
+        grant: 'client_credentials',
+        authUrl: '',
+        tokenUrl: '',
+        clientId: '',
+        clientSecret: '',
+        scope: '',
+        code: '',
+        redirectUri: '',
+        username: '',
+        password: '',
+      },
     },
   };
 }

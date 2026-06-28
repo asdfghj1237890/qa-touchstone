@@ -26,17 +26,17 @@ const indexHtmlContent = `<!DOCTYPE html>
 const testReportDir = path.join(__dirname, '..', 'src', '__tests__', 'test-report');
 
 try {
-    // Create directory if it doesn't exist
-    if (!fs.existsSync(testReportDir)) {
-        fs.mkdirSync(testReportDir, { recursive: true });
-    }
-    
-    // Write the index.html file
-    const indexPath = path.join(testReportDir, 'index.html');
-    fs.writeFileSync(indexPath, indexHtmlContent, 'utf8');
-    
-    console.log('✅ Generated test report index.html successfully');
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(testReportDir)) {
+    fs.mkdirSync(testReportDir, { recursive: true });
+  }
+
+  // Write the index.html file
+  const indexPath = path.join(testReportDir, 'index.html');
+  fs.writeFileSync(indexPath, indexHtmlContent, 'utf8');
+
+  console.log('✅ Generated test report index.html successfully');
 } catch (error) {
-    console.error('❌ Failed to generate test report index.html:', error.message);
-    process.exit(1);
-} 
+  console.error('❌ Failed to generate test report index.html:', error.message);
+  process.exit(1);
+}

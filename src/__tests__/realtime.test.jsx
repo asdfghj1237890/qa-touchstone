@@ -63,9 +63,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value); },
-    removeItem: (key) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -90,15 +96,27 @@ describe('RealtimePage live transports', () => {
     MockEventSource.instances = [];
     Object.defineProperty(globalThis, 'WebSocket', { value: MockWebSocket, configurable: true });
     Object.defineProperty(window, 'WebSocket', { value: MockWebSocket, configurable: true });
-    Object.defineProperty(globalThis, 'EventSource', { value: MockEventSource, configurable: true });
+    Object.defineProperty(globalThis, 'EventSource', {
+      value: MockEventSource,
+      configurable: true,
+    });
     Object.defineProperty(window, 'EventSource', { value: MockEventSource, configurable: true });
   });
 
   afterEach(() => {
-    Object.defineProperty(globalThis, 'WebSocket', { value: originalWebSocket, configurable: true });
+    Object.defineProperty(globalThis, 'WebSocket', {
+      value: originalWebSocket,
+      configurable: true,
+    });
     Object.defineProperty(window, 'WebSocket', { value: originalWebSocket, configurable: true });
-    Object.defineProperty(globalThis, 'EventSource', { value: originalEventSource, configurable: true });
-    Object.defineProperty(window, 'EventSource', { value: originalEventSource, configurable: true });
+    Object.defineProperty(globalThis, 'EventSource', {
+      value: originalEventSource,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'EventSource', {
+      value: originalEventSource,
+      configurable: true,
+    });
   });
 
   it('connects to the public Postman WebSocket echo demo and renders echoed frames', async () => {
@@ -109,7 +127,11 @@ describe('RealtimePage live transports', () => {
     expect(MockWebSocket.instances[0].url).toBe('wss://ws.postman-echo.com/raw');
 
     act(() => MockWebSocket.instances[0].open());
-    await waitFor(() => expect(screen.getByText(/Connected to wss:\/\/ws\.postman-echo\.com\/raw/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Connected to wss:\/\/ws\.postman-echo\.com\/raw/)
+      ).toBeInTheDocument()
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Send/ }));
     expect(MockWebSocket.instances[0].sent[0]).toContain('hello from QA Touchstone');
@@ -120,16 +142,22 @@ describe('RealtimePage live transports', () => {
     renderRealtime();
 
     fireEvent.click(screen.getByRole('button', { name: 'Server-Sent Events' }));
-    expect(screen.getByDisplayValue('https://stream.wikimedia.org/v2/stream/recentchange')).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue('https://stream.wikimedia.org/v2/stream/recentchange')
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Connect/ }));
-    expect(MockEventSource.instances[0].url).toBe('https://stream.wikimedia.org/v2/stream/recentchange');
+    expect(MockEventSource.instances[0].url).toBe(
+      'https://stream.wikimedia.org/v2/stream/recentchange'
+    );
 
     act(() => {
       MockEventSource.instances[0].open();
       MockEventSource.instances[0].emit('{"type":"edit","wiki":"enwiki"}');
     });
     await waitFor(() => {
-      expect(document.querySelector('.rt-msg[data-dir="in"] code').textContent).toContain('"wiki":"enwiki"');
+      expect(document.querySelector('.rt-msg[data-dir="in"] code').textContent).toContain(
+        '"wiki":"enwiki"'
+      );
     });
   });
 

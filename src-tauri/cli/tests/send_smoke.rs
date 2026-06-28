@@ -67,13 +67,24 @@ async fn send_pass_exits_0() {
     write_config(&cfg_path, &config_json);
 
     let status = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "anon"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "anon",
+        ])
         .status()
         .expect("spawn binary");
 
     remove_config(&cfg_path);
-    assert_eq!(status.code(), Some(0), "exit 0 expected for all-pass assertions");
+    assert_eq!(
+        status.code(),
+        Some(0),
+        "exit 0 expected for all-pass assertions"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -112,13 +123,24 @@ async fn send_fail_assertion_exits_4() {
     write_config(&cfg_path, &config_json);
 
     let status = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "anon"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "anon",
+        ])
         .status()
         .expect("spawn binary");
 
     remove_config(&cfg_path);
-    assert_eq!(status.code(), Some(4), "exit 4 expected for failed assertion (status eq 201 vs actual 200)");
+    assert_eq!(
+        status.code(),
+        Some(4),
+        "exit 4 expected for failed assertion (status eq 201 vs actual 200)"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -145,15 +167,26 @@ async fn send_missing_env_exits_2() {
     write_config(&cfg_path, config_json);
 
     let status = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "tok"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "tok",
+        ])
         // Explicitly unset NOPE (in case it's somehow set in CI)
         .env_remove("NOPE")
         .status()
         .expect("spawn binary");
 
     remove_config(&cfg_path);
-    assert_eq!(status.code(), Some(2), "exit 2 expected when env var NOPE is unset (fail-closed secret resolution)");
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "exit 2 expected when env var NOPE is unset (fail-closed secret resolution)"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -193,8 +226,16 @@ async fn send_json_no_secret_in_output() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "tok", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "tok",
+            "--json",
+        ])
         // Supply the secret via env var (resolved by load_config)
         .env("SECRET_TOK", "supersecret123")
         .output()
@@ -219,7 +260,10 @@ async fn send_json_no_secret_in_output() {
     );
 
     // Sanity: stdout must be non-empty JSON-ish output (we did get a response).
-    assert!(!stdout.trim().is_empty(), "stdout must be non-empty with --json");
+    assert!(
+        !stdout.trim().is_empty(),
+        "stdout must be non-empty with --json"
+    );
 
     // The status code should appear in the output (it's safe to include).
     assert!(
@@ -274,8 +318,16 @@ async fn send_redacts_apikey_in_query_url() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "keyid", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "keyid",
+            "--json",
+        ])
         .env("QKEY", "qsecret_abc123")
         .output()
         .expect("spawn binary");
@@ -360,8 +412,16 @@ async fn send_redacts_basic_blob_in_body() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "basicid", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "basicid",
+            "--json",
+        ])
         .env("BPW", "pw_secret_42")
         .output()
         .expect("spawn binary");
@@ -432,8 +492,16 @@ async fn send_redacts_echoed_secret_in_body() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "bearid", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "bearid",
+            "--json",
+        ])
         .env("BTOK", "btok_xyz789")
         .output()
         .expect("spawn binary");
@@ -503,8 +571,16 @@ async fn send_redacts_secret_as_response_body_key() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "tok", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "tok",
+            "--json",
+        ])
         .env("KTOK", "ktok_key_99")
         .output()
         .expect("spawn binary");
@@ -583,8 +659,16 @@ async fn send_redacts_bare_base64_blob() {
     write_config(&cfg_path, &config_json);
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
-        .args(["send", "--config", cfg_path.to_str().unwrap(),
-               "--request", "r", "--identity", "basicid", "--json"])
+        .args([
+            "send",
+            "--config",
+            cfg_path.to_str().unwrap(),
+            "--request",
+            "r",
+            "--identity",
+            "basicid",
+            "--json",
+        ])
         .env("BPW", "pw_bare_77")
         .output()
         .expect("spawn binary");

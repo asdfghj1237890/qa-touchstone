@@ -34,7 +34,9 @@ describe('computeWindow', () => {
   });
 
   it('the rendered slice always covers the viewport (no holes)', () => {
-    const rowH = 30, viewport = 300, total = 500;
+    const rowH = 30,
+      viewport = 300,
+      total = 500;
     for (const scrollTop of [0, 150, 900, 4500, 14000]) {
       const w = computeWindow(total, rowH, viewport, scrollTop, 2);
       const firstVisible = Math.floor(scrollTop / rowH);

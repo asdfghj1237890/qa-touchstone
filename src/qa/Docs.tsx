@@ -9,7 +9,9 @@ import type { QaEnv } from './state/WorkspaceContext';
 // ── QA Touchstone — auto-generated API documentation from a collection ─────
 const { useState: useStateDOC } = React;
 
-function docMethodColor(m: string): string { return window.QATheme.methodColor(m); }
+function docMethodColor(m: string): string {
+  return window.QATheme.methodColor(m);
+}
 
 // One request entry in the docs.
 interface DocRequestProps {
@@ -27,9 +29,15 @@ function DocRequest({ r, env, onOpenRequest }: DocRequestProps) {
   return (
     <div className="doc-req" id={'doc-' + r.id}>
       <div className="doc-req-head">
-        <span className="doc-method" style={{ color: docMethodColor(r.method) }}>{r.method}</span>
-        <code className="doc-path">{/^https?:\/\//i.test(r.path || '') ? r.path : ((env.baseUrl || '') + r.path)}</code>
-        <button className="qa-link doc-open" onClick={() => onOpenRequest(r.id)}>{t('docs.openClient')}</button>
+        <span className="doc-method" style={{ color: docMethodColor(r.method) }}>
+          {r.method}
+        </span>
+        <code className="doc-path">
+          {/^https?:\/\//i.test(r.path || '') ? r.path : (env.baseUrl || '') + r.path}
+        </code>
+        <button className="qa-link doc-open" onClick={() => onOpenRequest(r.id)}>
+          {t('docs.openClient')}
+        </button>
       </div>
       <div className="doc-req-name">{r.name}</div>
 
@@ -39,22 +47,48 @@ function DocRequest({ r, env, onOpenRequest }: DocRequestProps) {
             <div className="doc-section">
               <div className="doc-section-t">{t('docs.queryParams')}</div>
               <table className="doc-table">
-                <thead><tr><th>{t('docs.name')}</th><th>{t('docs.example')}</th><th>{t('docs.required')}</th></tr></thead>
-                <tbody>{params.map((p: any, i: number) => (
-                  <tr key={i}><td><code>{p.key}</code></td><td>{p.value || <span className="doc-muted">—</span>}</td>
-                    <td>{p.on === false ? <span className="doc-muted">{t('common.optional')}</span> : t('common.yes')}</td></tr>
-                ))}</tbody>
+                <thead>
+                  <tr>
+                    <th>{t('docs.name')}</th>
+                    <th>{t('docs.example')}</th>
+                    <th>{t('docs.required')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {params.map((p: any, i: number) => (
+                    <tr key={i}>
+                      <td>
+                        <code>{p.key}</code>
+                      </td>
+                      <td>{p.value || <span className="doc-muted">—</span>}</td>
+                      <td>
+                        {p.on === false ? (
+                          <span className="doc-muted">{t('common.optional')}</span>
+                        ) : (
+                          t('common.yes')
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
           )}
           <div className="doc-section">
             <div className="doc-section-t">{t('docs.authentication')}</div>
-            <div className="doc-auth"><Icon name="key" size={12} /> {docAuthLabel(det.auth, t)}</div>
+            <div className="doc-auth">
+              <Icon name="key" size={12} /> {docAuthLabel(det.auth, t)}
+            </div>
           </div>
           {det.body && (
             <div className="doc-section">
-              <div className="doc-section-t">{t('docs.requestBody')} <span className="doc-ctype">application/json</span></div>
-              <pre className="doc-pre" dangerouslySetInnerHTML={{ __html: window.highlightJson!(det.body) }} />
+              <div className="doc-section-t">
+                {t('docs.requestBody')} <span className="doc-ctype">application/json</span>
+              </div>
+              <pre
+                className="doc-pre"
+                dangerouslySetInnerHTML={{ __html: window.highlightJson!(det.body) }}
+              />
             </div>
           )}
           {det.graphql && (
@@ -66,11 +100,27 @@ function DocRequest({ r, env, onOpenRequest }: DocRequestProps) {
         </div>
         <div className="doc-col">
           <div className="doc-section">
-            <div className="doc-section-t">{t('docs.exampleResponse')}
-              {resp && <span className="doc-status" style={{ color: window.QATheme.statusColor(resp.status) }}>{resp.status} {resp.statusText}</span>}</div>
-            {resp && resp.body != null
-              ? <pre className="doc-pre" dangerouslySetInnerHTML={{ __html: window.highlightJson!(JSON.stringify(resp.body, null, 2)) }} />
-              : <div className="doc-muted doc-nobody">{t('docs.noResponseBody')}</div>}
+            <div className="doc-section-t">
+              {t('docs.exampleResponse')}
+              {resp && (
+                <span
+                  className="doc-status"
+                  style={{ color: window.QATheme.statusColor(resp.status) }}
+                >
+                  {resp.status} {resp.statusText}
+                </span>
+              )}
+            </div>
+            {resp && resp.body != null ? (
+              <pre
+                className="doc-pre"
+                dangerouslySetInnerHTML={{
+                  __html: window.highlightJson!(JSON.stringify(resp.body, null, 2)),
+                }}
+              />
+            ) : (
+              <div className="doc-muted doc-nobody">{t('docs.noResponseBody')}</div>
+            )}
           </div>
         </div>
       </div>
@@ -78,14 +128,18 @@ function DocRequest({ r, env, onOpenRequest }: DocRequestProps) {
   );
 }
 function docAuthLabel(authType: string, t: I18nValue['t']): string {
-  return ({
-    bearer: t('docs.auth.bearer'),
-    oauth2: t('docs.auth.oauth2'),
-    apiKey: t('docs.auth.apiKey'),
-    basic: t('docs.auth.basic'),
-    aws: t('docs.auth.aws'),
-    none: t('docs.auth.none'),
-  } as Record<string, string>)[authType] || t('docs.auth.fallback');
+  return (
+    (
+      {
+        bearer: t('docs.auth.bearer'),
+        oauth2: t('docs.auth.oauth2'),
+        apiKey: t('docs.auth.apiKey'),
+        basic: t('docs.auth.basic'),
+        aws: t('docs.auth.aws'),
+        none: t('docs.auth.none'),
+      } as Record<string, string>
+    )[authType] || t('docs.auth.fallback')
+  );
 }
 
 export interface DocsPageProps {
@@ -110,17 +164,33 @@ function DocsPage({ env, onOpenRequest }: DocsPageProps) {
     <div className="qa-docs">
       <aside className="doc-nav">
         <div className="doc-nav-head">
-          <label className="qa-side-label"><Icon name="fileText" size={12} /> {t('docs.documentation')}</label>
-          <Dropdown value={colId} options={cols.map((c: any) => ({ value: c.id, label: c.name }))} onChange={setColId} />
+          <label className="qa-side-label">
+            <Icon name="fileText" size={12} /> {t('docs.documentation')}
+          </label>
+          <Dropdown
+            value={colId}
+            options={cols.map((c: any) => ({ value: c.id, label: c.name }))}
+            onChange={setColId}
+          />
         </div>
         <div className="doc-nav-scroll">
           {col.folders.map((f: any) => (
             <div key={f.name} className="doc-nav-group">
               <div className="doc-nav-folder">{f.name}</div>
               {f.requests.map((r: any) => (
-                <a key={r.id} className="doc-nav-link" href={'#doc-' + r.id}
-                   onClick={(e) => { e.preventDefault(); const el = document.getElementById('doc-' + r.id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
-                  <span className="doc-nav-m" style={{ color: docMethodColor(r.method) }}>{r.method}</span>
+                <a
+                  key={r.id}
+                  className="doc-nav-link"
+                  href={'#doc-' + r.id}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const el = document.getElementById('doc-' + r.id);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                >
+                  <span className="doc-nav-m" style={{ color: docMethodColor(r.method) }}>
+                    {r.method}
+                  </span>
                   <span className="doc-nav-name">{r.name}</span>
                 </a>
               ))}
@@ -133,12 +203,21 @@ function DocsPage({ env, onOpenRequest }: DocsPageProps) {
         <div className="doc-hero">
           <div>
             <h1>{col.name}</h1>
-            <p className="doc-sub">{t('docs.heroSub', { count: allReqs.length, baseUrl: env.baseUrl || t('common.notSet') })}</p>
+            <p className="doc-sub">
+              {t('docs.heroSub', {
+                count: allReqs.length,
+                baseUrl: env.baseUrl || t('common.notSet'),
+              })}
+            </p>
           </div>
-          <button className="qa-hist-expbtn" onClick={exportHtml}><Icon name="download" size={13} /> {t('docs.exportHtml')}</button>
+          <button className="qa-hist-expbtn" onClick={exportHtml}>
+            <Icon name="download" size={13} /> {t('docs.exportHtml')}
+          </button>
         </div>
         <div className="doc-body">
-          {allReqs.map((r: any) => <DocRequest key={r.id} r={r} env={env} onOpenRequest={onOpenRequest} />)}
+          {allReqs.map((r: any) => (
+            <DocRequest key={r.id} r={r} env={env} onOpenRequest={onOpenRequest} />
+          ))}
         </div>
       </div>
     </div>
@@ -147,19 +226,35 @@ function DocsPage({ env, onOpenRequest }: DocsPageProps) {
 
 // Standalone HTML export of the docs.
 function buildDocsHtml(col: any, env: QaEnv, t: I18nValue['t'] = (key) => key): string {
-  const sc = window.QATheme.statusColor, mc = window.QATheme.methodColor;
-  const reqs = col.folders.flatMap((f: any) => f.requests.map((r: any) => ({ ...r, folder: f.name })));
-  const esc = (s: unknown) => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as Record<string, string>)[c]);
-  const sections = reqs.map((r: any) => {
-    const det = window.QA.REQUEST_DETAILS[r.id] || {};
-    const resp = window.QA.RESPONSES[r.id];
-    const params = (det.params || []).filter((p: any) => p.key);
-    const pTable = params.length ? `<table><tr><th>${esc(t('docs.name'))}</th><th>${esc(t('docs.example'))}</th><th>${esc(t('docs.required'))}</th></tr>${params.map((p: any) => `<tr><td><code>${esc(p.key)}</code></td><td>${esc(p.value || '—')}</td><td>${p.on === false ? esc(t('common.optional')) : esc(t('common.yes'))}</td></tr>`).join('')}</table>` : '';
-    const body = det.body ? `<h4>${esc(t('docs.requestBody'))}</h4><pre>${esc(det.body)}</pre>` : '';
-    const respHtml = resp && resp.body != null ? `<h4>${esc(t('docs.exampleResponse'))} <b style="color:${sc(resp.status)}">${resp.status} ${esc(resp.statusText)}</b></h4><pre>${esc(JSON.stringify(resp.body, null, 2))}</pre>` : '';
-    const fullUrl = /^https?:\/\//i.test(r.path || '') ? r.path : ((env.baseUrl || '') + r.path);
-    return `<section><div class="rh"><span class="m" style="color:${mc(r.method)}">${esc(r.method)}</span> <code>${esc(fullUrl)}</code></div><div class="rn">${esc(r.name)}</div><div class="auth">${esc(t('docs.report.auth'))}: ${esc(docAuthLabel(det.auth, t))}</div>${pTable}${body}${respHtml}</section>`;
-  }).join('');
+  const sc = window.QATheme.statusColor,
+    mc = window.QATheme.methodColor;
+  const reqs = col.folders.flatMap((f: any) =>
+    f.requests.map((r: any) => ({ ...r, folder: f.name }))
+  );
+  const esc = (s: unknown) =>
+    String(s).replace(
+      /[&<>]/g,
+      (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }) as Record<string, string>)[c]
+    );
+  const sections = reqs
+    .map((r: any) => {
+      const det = window.QA.REQUEST_DETAILS[r.id] || {};
+      const resp = window.QA.RESPONSES[r.id];
+      const params = (det.params || []).filter((p: any) => p.key);
+      const pTable = params.length
+        ? `<table><tr><th>${esc(t('docs.name'))}</th><th>${esc(t('docs.example'))}</th><th>${esc(t('docs.required'))}</th></tr>${params.map((p: any) => `<tr><td><code>${esc(p.key)}</code></td><td>${esc(p.value || '—')}</td><td>${p.on === false ? esc(t('common.optional')) : esc(t('common.yes'))}</td></tr>`).join('')}</table>`
+        : '';
+      const body = det.body
+        ? `<h4>${esc(t('docs.requestBody'))}</h4><pre>${esc(det.body)}</pre>`
+        : '';
+      const respHtml =
+        resp && resp.body != null
+          ? `<h4>${esc(t('docs.exampleResponse'))} <b style="color:${sc(resp.status)}">${resp.status} ${esc(resp.statusText)}</b></h4><pre>${esc(JSON.stringify(resp.body, null, 2))}</pre>`
+          : '';
+      const fullUrl = /^https?:\/\//i.test(r.path || '') ? r.path : (env.baseUrl || '') + r.path;
+      return `<section><div class="rh"><span class="m" style="color:${mc(r.method)}">${esc(r.method)}</span> <code>${esc(fullUrl)}</code></div><div class="rn">${esc(r.name)}</div><div class="auth">${esc(t('docs.report.auth'))}: ${esc(docAuthLabel(det.auth, t))}</div>${pTable}${body}${respHtml}</section>`;
+    })
+    .join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(col.name)} — API docs</title><style>
   body{margin:0;background:#15181c;color:#e6edf3;font-family:'Google Sans Code',ui-monospace,monospace;font-size:13px;padding:40px}
   .wrap{max-width:840px;margin:0 auto}h1{font-size:22px;margin:0 0 4px}.sub{color:#97a3ae;margin-bottom:32px}

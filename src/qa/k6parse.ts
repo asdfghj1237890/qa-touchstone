@@ -62,11 +62,15 @@ export interface K6Snapshot {
 
 export function makeState(dtMs: number, nPoints: number): K6ParseState {
   return {
-    dtMs, nPoints,
+    dtMs,
+    nPoints,
     runStartMs: null,
     bins: Array.from({ length: nPoints }, () => ({ lat: [] as number[] })),
     allLat: [],
-    ok: 0, c4: 0, c5: 0, netErr: 0,
+    ok: 0,
+    c4: 0,
+    c5: 0,
+    netErr: 0,
   };
 }
 
@@ -85,7 +89,11 @@ function quantile(sorted: number[], q: number): number {
 export function feed(state: K6ParseState, line: string): void {
   if (!line || typeof line !== 'string') return;
   let obj;
-  try { obj = JSON.parse(line); } catch { return; }
+  try {
+    obj = JSON.parse(line);
+  } catch {
+    return;
+  }
   if (!obj || obj.type !== 'Point' || obj.metric !== 'http_req_duration') return;
   const data = obj.data || {};
   const value = +data.value;
@@ -116,7 +124,14 @@ export function snapshot(state: K6ParseState, slo: K6Slo): K6Snapshot {
   // 每桶取「中位數」而非平均：對 ramp-down 尾段稀疏桶內的慢請求離群值穩健，
   // 不會把一兩筆 7s 尾巴畫成假尖刺。
   const latSeries = state.bins.map((b) =>
-    b.lat.length ? Math.round(quantile([...b.lat].sort((x, y) => x - y), 0.5)) : 0
+    b.lat.length
+      ? Math.round(
+          quantile(
+            [...b.lat].sort((x, y) => x - y),
+            0.5
+          )
+        )
+      : 0
   );
   const rpsSeries = state.bins.map((b) => Math.round(b.lat.length / dtSec));
   const sorted = [...state.allLat].sort((a, b) => a - b);
@@ -124,18 +139,23 @@ export function snapshot(state: K6ParseState, slo: K6Slo): K6Snapshot {
   const sent = state.ok + state.c4 + state.c5 + state.netErr;
   const errCount = state.c4 + state.c5 + state.netErr;
   const err = sent ? (errCount / sent) * 100 : 0;
-  const avg = state.allLat.length ? Math.round(state.allLat.reduce((s, x) => s + x, 0) / state.allLat.length) : 0;
+  const avg = state.allLat.length
+    ? Math.round(state.allLat.reduce((s, x) => s + x, 0) / state.allLat.length)
+    : 0;
   const peakRps = rpsSeries.length ? Math.max(0, ...rpsSeries) : 0;
   return {
     m: {
-      sent, rps: peakRps, avg,
-      p80: Math.round(pct(0.80)),
-      p90: Math.round(pct(0.90)),
+      sent,
+      rps: peakRps,
+      avg,
+      p80: Math.round(pct(0.8)),
+      p90: Math.round(pct(0.9)),
       p95: Math.round(pct(0.95)),
       p99: Math.round(pct(0.99)),
       err: +err.toFixed(2),
     },
-    latSeries, rpsSeries,
+    latSeries,
+    rpsSeries,
     // Keep transport failures (status 0: timeout, connection refused, DNS,
     // TLS) in their own `net` bucket instead of folding them into c5. Folding
     // made an unreachable host read as "100% 5xx" — a server error it never

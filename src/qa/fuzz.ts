@@ -40,44 +40,67 @@ export interface FuzzCase {
   payload: FuzzPayload;
 }
 
-export interface FuzzSeed { name: string; location: unknown; value?: string }
-export interface FuzzPlan { method: string; path: string; seeds: FuzzSeed[] }
+export interface FuzzSeed {
+  name: string;
+  location: unknown;
+  value?: string;
+}
+export interface FuzzPlan {
+  method: string;
+  path: string;
+  seeds: FuzzSeed[];
+}
 
 export type FuzzSignal = 'server-error' | 'error-leak' | 'reflected' | 'ok';
-export interface FuzzVerdict { signal: FuzzSignal; severity: Severity | null }
+export interface FuzzVerdict {
+  signal: FuzzSignal;
+  severity: Severity | null;
+}
 
 // Stack-trace / SQL-error / framework-error signatures. A response that echoes one
 // of these is leaking internals (and usually means the payload reached a sink).
 const ERROR_SIGNATURES: RegExp[] = [
-  /\bat [\w$.]+\([^)]*:\d+(?::\d+)?\)/,                 // JS / Java "at fn (file:line)"
-  /Traceback \(most recent call last\)/,                // Python
+  /\bat [\w$.]+\([^)]*:\d+(?::\d+)?\)/, // JS / Java "at fn (file:line)"
+  /Traceback \(most recent call last\)/, // Python
   /\b(?:SQL syntax|SQLSTATE|SQLException|ORA-\d{5}|PG::\w+|near ".+": syntax error)\b/i, // SQL
-  /\bjava\.lang\.\w+(?:Exception|Error)\b/,             // JVM
-  /\bSystem\.\w+Exception\b/,                            // .NET
+  /\bjava\.lang\.\w+(?:Exception|Error)\b/, // JVM
+  /\bSystem\.\w+Exception\b/, // .NET
   /<b>(?:Warning|Fatal error|Notice|Parse error)<\/b>:/, // PHP
-  /goroutine \d+ \[/,                                    // Go panic
-  /\bUnhandledPromiseRejection\b|\bECONNREFUSED\b/,      // Node-ish
+  /goroutine \d+ \[/, // Go panic
+  /\bUnhandledPromiseRejection\b|\bECONNREFUSED\b/, // Node-ish
 ];
 
 function bodyToString(body: unknown): string {
   if (body == null) return '';
   if (typeof body === 'string') return body;
-  try { return JSON.stringify(body); } catch { return String(body); }
+  try {
+    return JSON.stringify(body);
+  } catch {
+    return String(body);
+  }
 }
 
 // Expand one seed into a case per payload.
 export function fuzzCasesFor(seed: FuzzSeed): FuzzCase[] {
-  return FUZZ_PAYLOADS.map(payload => ({ seedName: seed.name, location: seed.location, payload }));
+  return FUZZ_PAYLOADS.map((payload) => ({
+    seedName: seed.name,
+    location: seed.location,
+    payload,
+  }));
 }
 
 // Classify a fuzzed response. Priority: a server error is the strongest signal,
 // then an internals leak, then a dangerous payload reflected verbatim.
-export function classifyFuzzResponse(payload: FuzzPayload | null | undefined, resp: QaResponse | null | undefined): FuzzVerdict {
+export function classifyFuzzResponse(
+  payload: FuzzPayload | null | undefined,
+  resp: QaResponse | null | undefined
+): FuzzVerdict {
   const status = resp && typeof resp.status === 'number' ? resp.status : null;
   if (status != null && status >= 500) return { signal: 'server-error', severity: 'high' };
 
   const body = bodyToString(resp && resp.body);
-  if (ERROR_SIGNATURES.some(re => re.test(body))) return { signal: 'error-leak', severity: 'high' };
+  if (ERROR_SIGNATURES.some((re) => re.test(body)))
+    return { signal: 'error-leak', severity: 'high' };
 
   if (payload && payload.dangerous && payload.value && body.includes(payload.value)) {
     return { signal: 'reflected', severity: payload.dangerous === 'xss' ? 'high' : 'medium' };
@@ -92,7 +115,11 @@ const SIGNAL_TITLE: Record<Exclude<FuzzSignal, 'ok'>, string> = {
 };
 
 // Build a finding for a fuzz case, or null when the response was handled cleanly.
-export function fuzzFinding(meta: { method: string; path: string }, fuzzCase: FuzzCase, resp: QaResponse | null | undefined): Finding | null {
+export function fuzzFinding(
+  meta: { method: string; path: string },
+  fuzzCase: FuzzCase,
+  resp: QaResponse | null | undefined
+): Finding | null {
   const verdict = classifyFuzzResponse(fuzzCase.payload, resp);
   if (verdict.signal === 'ok' || !verdict.severity) return null;
   return {
@@ -107,14 +134,17 @@ export function fuzzFinding(meta: { method: string; path: string }, fuzzCase: Fu
 }
 
 /** runFuzz 注入的執行器：runner(seed, payload) => Promise<resp>。 */
-export type FuzzRunner = (seed: FuzzSeed, payload: FuzzPayload) => Promise<QaResponse | null | undefined>;
+export type FuzzRunner = (
+  seed: FuzzSeed,
+  payload: FuzzPayload
+) => Promise<QaResponse | null | undefined>;
 
 // Fire every (seed × payload) case through the runner, collecting findings. Never
 // throws out of the loop; a thrown case is recorded and skipped. Honors opts.signal.
 export async function runFuzz(
   plan: FuzzPlan,
   runner: FuzzRunner,
-  opts: { signal?: AbortSignal | null; onCase?: (c: FuzzCase, verdict: FuzzVerdict) => void } = {},
+  opts: { signal?: AbortSignal | null; onCase?: (c: FuzzCase, verdict: FuzzVerdict) => void } = {}
 ): Promise<{ findings: Finding[]; ran: number }> {
   const { signal, onCase } = opts;
   const findings: Finding[] = [];

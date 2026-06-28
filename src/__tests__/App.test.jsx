@@ -8,17 +8,30 @@ import App from '../App';
 // responses, so the send → response flow is exercisable in jsdom.
 
 const RAIL_LABELS = [
-  'Home', 'Test Gen', 'API Client', 'Realtime', 'Runner',
-  'Monitors', 'API Docs', 'Performance', 'Settings',
+  'Home',
+  'Test Gen',
+  'API Client',
+  'Realtime',
+  'Runner',
+  'Monitors',
+  'API Docs',
+  'Performance',
+  'Settings',
 ];
 
 function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value); },
-    removeItem: (key) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -44,11 +57,15 @@ describe('App (redesign shell)', () => {
 
   it('renders macOS-style traffic-light controls on non-Windows platforms', () => {
     const prev = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
-    Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'macOS' }, configurable: true });
+    Object.defineProperty(navigator, 'userAgentData', {
+      value: { platform: 'macOS' },
+      configurable: true,
+    });
     try {
       render(<App />);
-      expect(screen.getByRole('button', { name: 'Close window' })
-        .classList.contains('qa-winctl-close')).toBe(true);
+      expect(
+        screen.getByRole('button', { name: 'Close window' }).classList.contains('qa-winctl-close')
+      ).toBe(true);
       expect(document.querySelector('.qa-winctl-win')).toBeNull();
     } finally {
       if (prev) Object.defineProperty(navigator, 'userAgentData', prev);
@@ -58,15 +75,20 @@ describe('App (redesign shell)', () => {
 
   it('renders Windows-style controls in minimize/maximize/close order on Windows', () => {
     const prev = Object.getOwnPropertyDescriptor(navigator, 'userAgentData');
-    Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'Windows' }, configurable: true });
+    Object.defineProperty(navigator, 'userAgentData', {
+      value: { platform: 'Windows' },
+      configurable: true,
+    });
     try {
       render(<App />);
       expect(document.querySelector('.qa-winctl-win')).not.toBeNull();
-      const order = [...document.querySelectorAll('.qa-winctl-win button')]
-        .map((b) => b.getAttribute('aria-label'));
+      const order = [...document.querySelectorAll('.qa-winctl-win button')].map((b) =>
+        b.getAttribute('aria-label')
+      );
       expect(order).toEqual(['Minimize window', 'Maximize window', 'Close window']);
-      expect(screen.getByRole('button', { name: 'Close window' })
-        .classList.contains('qa-winctl-wclose')).toBe(true);
+      expect(
+        screen.getByRole('button', { name: 'Close window' }).classList.contains('qa-winctl-wclose')
+      ).toBe(true);
     } finally {
       if (prev) Object.defineProperty(navigator, 'userAgentData', prev);
       else delete navigator.userAgentData;
@@ -94,10 +116,7 @@ describe('App (redesign shell)', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'API Client' }));
     fireEvent.click(screen.getByRole('button', { name: /Send/ }));
-    await waitFor(
-      () => expect(screen.getByText(/200/)).toBeInTheDocument(),
-      { timeout: 4000 }
-    );
+    await waitFor(() => expect(screen.getByText(/200/)).toBeInTheDocument(), { timeout: 4000 });
   });
 
   it('switches to Settings and shows its tabs', () => {
@@ -133,13 +152,38 @@ describe('App (redesign shell)', () => {
     vi.useFakeTimers();
     const now = new Date('2026-06-02T00:00:00Z').getTime();
     vi.setSystemTime(now);
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
-    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 7, size: 4, body: { ok: true }, headers: {} } };
-    window.QA.MONITORS = [{ id: 'm1', name: 'M', collectionId: 'c1', env: 'None', cadence: 'Every 5 minutes',
-      region: 'us-east-1', enabled: true, nextDueAt: now - 1, runs: [] }];
+    window.QA.RESPONSES = {
+      r1: { status: 200, statusText: 'OK', time: 7, size: 4, body: { ok: true }, headers: {} },
+    };
+    window.QA.MONITORS = [
+      {
+        id: 'm1',
+        name: 'M',
+        collectionId: 'c1',
+        env: 'None',
+        cadence: 'Every 5 minutes',
+        region: 'us-east-1',
+        enabled: true,
+        nextDueAt: now - 1,
+        runs: [],
+      },
+    ];
 
     render(<App />);
     await vi.advanceTimersByTimeAsync(3000);

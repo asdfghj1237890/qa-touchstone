@@ -8,9 +8,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value); },
-    removeItem: (key) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -28,17 +34,37 @@ describe('Runner runs real requests + live assertions (canned fallback)', () => 
   afterEach(() => cleanup());
   beforeEach(() => {
     installLocalStorage({ qa_locale: 'en-US' });
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'Get thing', path: 'https://api.test/thing' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
-    window.QA.RESPONSES = { r1: { status: 200, statusText: 'OK', time: 9, size: 4, body: { ok: true }, headers: {} } };
+    window.QA.RESPONSES = {
+      r1: { status: 200, statusText: 'OK', time: 9, size: 4, body: { ok: true }, headers: {} },
+    };
   });
 
   it('reports assertion pass/total from the live response', async () => {
     const tests = { r1: [{ type: 'status', op: 'eq', value: 200, on: true }] };
-    renderRunner({ env: { label: 'None', baseUrl: '' }, vars: window.QA.VARIABLES, tests,
-                   cookies: [], sslVerify: true, oauthTokens: {} });
+    renderRunner({
+      env: { label: 'None', baseUrl: '' },
+      vars: window.QA.VARIABLES,
+      tests,
+      cookies: [],
+      sslVerify: true,
+      oauthTokens: {},
+    });
     fireEvent.click(screen.getByRole('button', { name: /Run 1 request/ }));
     await waitFor(() => expect(screen.getByText('1/1')).toBeInTheDocument(), { timeout: 4000 });
   });

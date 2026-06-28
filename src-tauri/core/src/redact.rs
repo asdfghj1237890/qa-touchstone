@@ -80,7 +80,7 @@ impl RedactionSet {
             self.push(secret.to_lowercase());
         }
         // longest-first so a short token cannot corrupt a longer one mid-replacement
-        self.tokens.sort_by(|a, b| b.len().cmp(&a.len()));
+        self.tokens.sort_by_key(|b| std::cmp::Reverse(b.len()));
     }
 
     /// Add a token if non-empty and not already present.
@@ -108,7 +108,9 @@ impl RedactionSet {
             Value::String(s) => Value::String(self.redact_str(s)),
             Value::Array(a) => Value::Array(a.iter().map(|x| self.redact_value(x)).collect()),
             Value::Object(o) => Value::Object(
-                o.iter().map(|(k, x)| (self.redact_str(k), self.redact_value(x))).collect(),
+                o.iter()
+                    .map(|(k, x)| (self.redact_str(k), self.redact_value(x)))
+                    .collect(),
             ),
             other => other.clone(),
         }
@@ -140,26 +142,42 @@ mod tests {
 
     #[test]
     fn bearer_secret_redacted_everywhere() {
-        let r = RedactionSet::from_auth(&Auth::Bearer { token: "topsecret".into() });
-        assert_eq!(r.redact_str("Authorization: Bearer topsecret"), "Authorization: Bearer ***REDACTED***");
-        assert_eq!(r.redact_value(&json!({"topsecret": "topsecret"})), json!({"***REDACTED***": "***REDACTED***"}));
+        let r = RedactionSet::from_auth(&Auth::Bearer {
+            token: "topsecret".into(),
+        });
+        assert_eq!(
+            r.redact_str("Authorization: Bearer topsecret"),
+            "Authorization: Bearer ***REDACTED***"
+        );
+        assert_eq!(
+            r.redact_value(&json!({"topsecret": "topsecret"})),
+            json!({"***REDACTED***": "***REDACTED***"})
+        );
     }
 
     #[test]
     fn basic_redacts_full_bare_and_is_order_safe() {
-        let r = RedactionSet::from_auth(&Auth::Basic { username: "u".into(), password: "passw0rd".into() });
+        let r = RedactionSet::from_auth(&Auth::Basic {
+            username: "u".into(),
+            password: "passw0rd".into(),
+        });
         let full = crate::buildreq::basic_auth_value("u", "passw0rd");
         let bare = full.strip_prefix("Basic ").unwrap();
         assert_eq!(r.redact_str(&full), "***REDACTED***");
         assert_eq!(r.redact_str(bare), "***REDACTED***");
         let toks = r.tokens();
-        assert!(toks.windows(2).all(|w| w[0].len() >= w[1].len()), "tokens longest-first: {toks:?}");
+        assert!(
+            toks.windows(2).all(|w| w[0].len() >= w[1].len()),
+            "tokens longest-first: {toks:?}"
+        );
     }
 
     #[test]
     fn apikey_value_redacted_raw_and_encoded() {
         let r = RedactionSet::from_auth(&Auth::ApiKey {
-            key: "X-API-Key".into(), value: "a b/c".into(), location: ApiKeyIn::Query,
+            key: "X-API-Key".into(),
+            value: "a b/c".into(),
+            location: ApiKeyIn::Query,
         });
         assert_eq!(r.redact_str("key=a b/c"), "key=***REDACTED***");
         assert_eq!(r.redact_str("key=a%20b%2Fc"), "key=***REDACTED***");
@@ -168,9 +186,13 @@ mod tests {
     #[test]
     fn data_row_values_redacted_after_extend() {
         let mut r = RedactionSet::from_auth(&Auth::None);
-        let row: Map<String, Value> = serde_json::from_value(json!({"token": "rowsecret123", "page": 2})).unwrap();
+        let row: Map<String, Value> =
+            serde_json::from_value(json!({"token": "rowsecret123", "page": 2})).unwrap();
         r.extend_with_data_row(&row);
-        assert_eq!(r.redact_str("https://x/?t=rowsecret123"), "https://x/?t=***REDACTED***");
+        assert_eq!(
+            r.redact_str("https://x/?t=rowsecret123"),
+            "https://x/?t=***REDACTED***"
+        );
         assert_eq!(r.redact_str("count=2"), "count=***REDACTED***");
     }
 
@@ -185,9 +207,13 @@ mod tests {
         // A secret substituted into a URL host is lowercased by canonicalization before it
         // appears in final_url; the lowercased form must also be a redaction token.
         let mut r = RedactionSet::from_auth(&Auth::None);
-        let row: Map<String, Value> = serde_json::from_value(json!({"tenant": "SecretTenant"})).unwrap();
+        let row: Map<String, Value> =
+            serde_json::from_value(json!({"tenant": "SecretTenant"})).unwrap();
         r.extend_with_data_row(&row);
-        assert_eq!(r.redact_str("https://secrettenant.example/x"), "https://***REDACTED***.example/x");
+        assert_eq!(
+            r.redact_str("https://secrettenant.example/x"),
+            "https://***REDACTED***.example/x"
+        );
         // mixed-case raw form still caught too
         assert_eq!(r.redact_str("SecretTenant"), "***REDACTED***");
     }
@@ -195,24 +221,36 @@ mod tests {
     #[test]
     fn from_auths_unions_multiple_identities() {
         let r = RedactionSet::from_auths([
-            &Auth::Bearer { token: "AAA".into() },
-            &Auth::Bearer { token: "BBB".into() },
+            &Auth::Bearer {
+                token: "AAA".into(),
+            },
+            &Auth::Bearer {
+                token: "BBB".into(),
+            },
         ]);
-        assert_eq!(r.redact_str("AAA and BBB"), "***REDACTED*** and ***REDACTED***");
+        assert_eq!(
+            r.redact_str("AAA and BBB"),
+            "***REDACTED*** and ***REDACTED***"
+        );
     }
 
     #[test]
     fn json_escaped_secret_form_is_redacted() {
         // Assertion actuals are JSON.stringify'd before redaction; a secret containing a quote
         // appears escaped (`a"b` -> `a\"b`). The escaped form must be in the token set too.
-        let r = RedactionSet::from_auth(&Auth::Bearer { token: "a\"b".into() });
+        let r = RedactionSet::from_auth(&Auth::Bearer {
+            token: "a\"b".into(),
+        });
         // raw form still caught
         assert_eq!(r.redact_str("a\"b"), "***REDACTED***");
         // how a bodyEq actual carries it: serde_json::to_string("a\"b") == "\"a\\\"b\""
         let actual = serde_json::to_string("a\"b").unwrap();
         let red = r.redact_str(&actual);
         assert!(!red.contains("a\\\"b"), "JSON-escaped secret leaked: {red}");
-        assert!(red.contains("***REDACTED***"), "redaction marker present: {red}");
+        assert!(
+            red.contains("***REDACTED***"),
+            "redaction marker present: {red}"
+        );
     }
 
     #[test]

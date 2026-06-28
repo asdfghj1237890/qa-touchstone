@@ -28,7 +28,12 @@ fn postman_collection_entry(data: &Value, file_name: &str, file_path: &str) -> V
         .and_then(|i| i.get("name"))
         .and_then(|n| n.as_str())
         .map(|s| s.to_string())
-        .unwrap_or_else(|| file_name.strip_suffix(".json").unwrap_or(file_name).to_string());
+        .unwrap_or_else(|| {
+            file_name
+                .strip_suffix(".json")
+                .unwrap_or(file_name)
+                .to_string()
+        });
     json!({
         "fileName": file_name,
         "filePath": file_path,
@@ -68,7 +73,11 @@ fn scan_dir_for_collections(folder_path: &str) -> Vec<Value> {
             Err(_) => continue, // 解析失敗略過（對齊 Electron per-file catch）
         };
         if is_postman_collection(&data) {
-            out.push(postman_collection_entry(&data, &name, &path.to_string_lossy()));
+            out.push(postman_collection_entry(
+                &data,
+                &name,
+                &path.to_string_lossy(),
+            ));
         }
         // 非 Postman（OpenAPI/Swagger/其他）略過：本階段不支援轉換。
     }
@@ -85,7 +94,11 @@ fn configured_path(app: &AppHandle) -> Option<String> {
 
 fn canonical_dir(path: impl AsRef<Path>) -> Option<PathBuf> {
     let p = std::fs::canonicalize(path).ok()?;
-    if p.is_dir() { Some(p) } else { None }
+    if p.is_dir() {
+        Some(p)
+    } else {
+        None
+    }
 }
 
 fn path_is_under(path: &Path, root: &Path) -> bool {
@@ -99,7 +112,11 @@ fn configured_collection_root(app: &AppHandle) -> Option<PathBuf> {
 fn allowed_collection_dir(app: &AppHandle, folder_path: &str) -> Option<PathBuf> {
     let root = configured_collection_root(app)?;
     let folder = canonical_dir(folder_path)?;
-    if path_is_under(&folder, &root) { Some(folder) } else { None }
+    if path_is_under(&folder, &root) {
+        Some(folder)
+    } else {
+        None
+    }
 }
 
 #[tauri::command]
@@ -134,44 +151,90 @@ pub fn load_cached_postman_collections(app: AppHandle) -> Vec<Value> {
 }
 
 #[tauri::command]
-pub fn save_postman_collection(app: AppHandle, file_path: String, collection_data: Value) -> SaveResult {
+pub fn save_postman_collection(
+    app: AppHandle,
+    file_path: String,
+    collection_data: Value,
+) -> SaveResult {
     // Path validation — the renderer can in principle send any absolute path,
     // so refuse the obviously-bad shapes before writing. Aligns with the
     // existing fsops guards (read_directory, find_hex_file, read_file_content)
     // even though those are weaker than full canonicalization.
     if file_path.is_empty() {
-        return SaveResult { success: false, error: Some("Empty file path.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Empty file path.".into()),
+        };
     }
     if file_path.contains("..") {
-        return SaveResult { success: false, error: Some("Path traversal not allowed.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Path traversal not allowed.".into()),
+        };
     }
     let path = Path::new(&file_path);
     if !path.is_absolute() {
-        return SaveResult { success: false, error: Some("Path must be absolute.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Path must be absolute.".into()),
+        };
     }
     // Only accept .json — refuses overwriting binaries, scripts, configs etc.
-    if path.extension().and_then(|e| e.to_str()).map(|e| !e.eq_ignore_ascii_case("json")).unwrap_or(true) {
-        return SaveResult { success: false, error: Some("Only .json paths are accepted.".into()) };
+    if path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| !e.eq_ignore_ascii_case("json"))
+        .unwrap_or(true)
+    {
+        return SaveResult {
+            success: false,
+            error: Some("Only .json paths are accepted.".into()),
+        };
     }
     let Some(root) = configured_collection_root(&app) else {
-        return SaveResult { success: false, error: Some("No configured collection root.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("No configured collection root.".into()),
+        };
     };
     // Refuse if the parent directory does not already exist — prevents
     // mkdir-anywhere accidents.
     let Some(parent) = path.parent() else {
-        return SaveResult { success: false, error: Some("Path has no parent directory.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Path has no parent directory.".into()),
+        };
     };
     let Some(canon_parent) = canonical_dir(parent) else {
-        return SaveResult { success: false, error: Some("Parent directory does not exist.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Parent directory does not exist.".into()),
+        };
     };
     if !path_is_under(&canon_parent, &root) {
-        return SaveResult { success: false, error: Some("Path is outside the configured collection root.".into()) };
+        return SaveResult {
+            success: false,
+            error: Some("Path is outside the configured collection root.".into()),
+        };
     }
     if path.exists() {
         match std::fs::canonicalize(path) {
             Ok(canon_file) if path_is_under(&canon_file, &root) => {}
-            Ok(_) => return SaveResult { success: false, error: Some("Refusing to overwrite a file outside the configured collection root.".into()) },
-            Err(e) => return SaveResult { success: false, error: Some(e.to_string()) },
+            Ok(_) => {
+                return SaveResult {
+                    success: false,
+                    error: Some(
+                        "Refusing to overwrite a file outside the configured collection root."
+                            .into(),
+                    ),
+                }
+            }
+            Err(e) => {
+                return SaveResult {
+                    success: false,
+                    error: Some(e.to_string()),
+                }
+            }
         }
     }
     if collection_data.get("info").is_none() {
@@ -182,14 +245,25 @@ pub fn save_postman_collection(app: AppHandle, file_path: String, collection_dat
     }
     let pretty = match serde_json::to_string_pretty(&collection_data) {
         Ok(s) => s,
-        Err(e) => return SaveResult { success: false, error: Some(e.to_string()) },
+        Err(e) => {
+            return SaveResult {
+                success: false,
+                error: Some(e.to_string()),
+            }
+        }
     };
     if let Err(e) = std::fs::write(path, pretty) {
-        return SaveResult { success: false, error: Some(e.to_string()) };
+        return SaveResult {
+            success: false,
+            error: Some(e.to_string()),
+        };
     }
     // 通知前端刷新（前端會 re-load → 重掃）
     let _ = app.emit(POSTMAN_COLLECTIONS_UPDATED, ());
-    SaveResult { success: true, error: None }
+    SaveResult {
+        success: true,
+        error: None,
+    }
 }
 
 #[cfg(test)]
@@ -231,8 +305,13 @@ mod tests {
         std::fs::write(
             dir.join("good.json"),
             r#"{"info":{"name":"Good","schema":"x/v2.1.0/collection.json"},"item":[{"name":"r"}]}"#,
-        ).unwrap();
-        std::fs::write(dir.join("openapi.json"), r#"{"openapi":"3.0.0","info":{"title":"o"}}"#).unwrap();
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("openapi.json"),
+            r#"{"openapi":"3.0.0","info":{"title":"o"}}"#,
+        )
+        .unwrap();
         std::fs::write(dir.join("notjson.txt"), "x").unwrap();
         std::fs::write(dir.join("bad.json"), "{ not json").unwrap();
 

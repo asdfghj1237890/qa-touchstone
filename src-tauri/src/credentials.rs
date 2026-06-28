@@ -26,8 +26,10 @@ pub fn parse_credential_file_content(
     if is_aws_credentials {
         let normalized = content.replace("\r\n", "\n");
         let mut profile_order: Vec<String> = Vec::new();
-        let mut profile_data: std::collections::HashMap<String, std::collections::HashMap<String, String>> =
-            std::collections::HashMap::new();
+        let mut profile_data: std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, String>,
+        > = std::collections::HashMap::new();
         let mut current: Option<String> = None;
         for line in normalized.split('\n') {
             let t = line.trim();
@@ -55,11 +57,15 @@ pub fn parse_credential_file_content(
         let chosen = target_profile
             .map(|s| s.to_string())
             .or_else(|| profile_order.first().cloned());
-        let mut out = ParsedCredentials { profiles: profile_order.clone(), ..Default::default() };
+        let mut out = ParsedCredentials {
+            profiles: profile_order.clone(),
+            ..Default::default()
+        };
         if let Some(name) = chosen {
             if let Some(kv) = profile_data.get(&name) {
                 out.access_key_id = kv.get("aws_access_key_id").cloned().unwrap_or_default();
-                out.secret_access_key = kv.get("aws_secret_access_key").cloned().unwrap_or_default();
+                out.secret_access_key =
+                    kv.get("aws_secret_access_key").cloned().unwrap_or_default();
                 out.session_token = kv.get("aws_session_token").cloned().unwrap_or_default();
             }
         }
@@ -82,7 +88,12 @@ pub fn parse_credential_file_content(
         let sk = get(&["Secret Access Key", "secret_access_key", "SecretAccessKey"]);
         let st = get(&["Session Token", "session_token", "SessionToken"]);
         if !ak.is_empty() && !sk.is_empty() {
-            return ParsedCredentials { access_key_id: ak, secret_access_key: sk, session_token: st, profiles: vec![] };
+            return ParsedCredentials {
+                access_key_id: ak,
+                secret_access_key: sk,
+                session_token: st,
+                profiles: vec![],
+            };
         }
     }
 
@@ -91,22 +102,46 @@ pub fn parse_credential_file_content(
 
     // 3) CSV 分支
     if is_csv && lines.len() >= 2 {
-        let headers: Vec<String> = lines[0].trim().split(',').map(|h| h.trim().to_lowercase()).collect();
-        let values: Vec<String> = lines[1].trim().split(',').map(|v| v.trim().to_string()).collect();
+        let headers: Vec<String> = lines[0]
+            .trim()
+            .split(',')
+            .map(|h| h.trim().to_lowercase())
+            .collect();
+        let values: Vec<String> = lines[1]
+            .trim()
+            .split(',')
+            .map(|v| v.trim().to_string())
+            .collect();
         let access_headers = ["access key id", "accesskeyid", "aws_access_key_id"];
-        let secret_headers = ["secret access key", "secretaccesskey", "aws_secret_access_key"];
+        let secret_headers = [
+            "secret access key",
+            "secretaccesskey",
+            "aws_secret_access_key",
+        ];
         let session_headers = ["session token", "sessiontoken", "aws_session_token"];
-        let mut ai = headers.iter().position(|h| access_headers.contains(&h.as_str()));
-        let mut si = headers.iter().position(|h| secret_headers.contains(&h.as_str()));
-        let mut ti = headers.iter().position(|h| session_headers.contains(&h.as_str()));
+        let mut ai = headers
+            .iter()
+            .position(|h| access_headers.contains(&h.as_str()));
+        let mut si = headers
+            .iter()
+            .position(|h| secret_headers.contains(&h.as_str()));
+        let mut ti = headers
+            .iter()
+            .position(|h| session_headers.contains(&h.as_str()));
         if ai.is_none() {
-            ai = headers.iter().position(|h| h.contains("access key id") || h.contains("accesskeyid"));
+            ai = headers
+                .iter()
+                .position(|h| h.contains("access key id") || h.contains("accesskeyid"));
         }
         if si.is_none() {
-            si = headers.iter().position(|h| h.contains("secret access key") || h.contains("secretaccesskey"));
+            si = headers
+                .iter()
+                .position(|h| h.contains("secret access key") || h.contains("secretaccesskey"));
         }
         if ti.is_none() {
-            ti = headers.iter().position(|h| h.contains("session token") || h.contains("sessiontoken"));
+            ti = headers
+                .iter()
+                .position(|h| h.contains("session token") || h.contains("sessiontoken"));
         }
         let mut ak = String::new();
         let mut sk = String::new();
@@ -127,7 +162,12 @@ pub fn parse_credential_file_content(
             }
         }
         if !ak.is_empty() && !sk.is_empty() {
-            return ParsedCredentials { access_key_id: ak, secret_access_key: sk, session_token: st, profiles: vec![] };
+            return ParsedCredentials {
+                access_key_id: ak,
+                secret_access_key: sk,
+                session_token: st,
+                profiles: vec![],
+            };
         }
     }
 
@@ -169,7 +209,12 @@ pub fn parse_credential_file_content(
         sk = lines[1].trim().to_string();
     }
 
-    ParsedCredentials { access_key_id: ak, secret_access_key: sk, session_token: st, profiles: vec![] }
+    ParsedCredentials {
+        access_key_id: ak,
+        secret_access_key: sk,
+        session_token: st,
+        profiles: vec![],
+    }
 }
 
 #[cfg(test)]
@@ -188,7 +233,8 @@ mod tests {
 
     #[test]
     fn ini_defaults_to_first_profile() {
-        let content = "[default]\naws_access_key_id = AKIA_DEF\naws_secret_access_key = SECRET_DEF\n";
+        let content =
+            "[default]\naws_access_key_id = AKIA_DEF\naws_secret_access_key = SECRET_DEF\n";
         let r = parse_credential_file_content(content, "credentials", None);
         assert_eq!(r.access_key_id, "AKIA_DEF");
         assert_eq!(r.profiles, vec!["default".to_string()]);
@@ -196,7 +242,8 @@ mod tests {
 
     #[test]
     fn json_branch() {
-        let content = r#"{"AccessKeyId":"AKIAJSON","SecretAccessKey":"SECRETJSON","SessionToken":"STJSON"}"#;
+        let content =
+            r#"{"AccessKeyId":"AKIAJSON","SecretAccessKey":"SECRETJSON","SessionToken":"STJSON"}"#;
         let r = parse_credential_file_content(content, "creds.json", None);
         assert_eq!(r.access_key_id, "AKIAJSON");
         assert_eq!(r.secret_access_key, "SECRETJSON");
@@ -227,7 +274,10 @@ mod tests {
         let content = "some preamble\nAccessKeyId = AKIAABCDEFGHIJKLMNOP\nSecretAccessKey = abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\n";
         let r = parse_credential_file_content(content, "blob.txt", None);
         assert_eq!(r.access_key_id, "AKIAABCDEFGHIJKLMNOP");
-        assert_eq!(r.secret_access_key, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN");
+        assert_eq!(
+            r.secret_access_key,
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
+        );
     }
 
     #[test]
@@ -236,6 +286,9 @@ mod tests {
         let content = "AKIAABCDEFGHIJKLMNOP\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN\n";
         let r = parse_credential_file_content(content, "raw.txt", None);
         assert_eq!(r.access_key_id, "AKIAABCDEFGHIJKLMNOP");
-        assert_eq!(r.secret_access_key, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN");
+        assert_eq!(
+            r.secret_access_key,
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
+        );
     }
 }

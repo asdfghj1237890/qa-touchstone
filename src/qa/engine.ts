@@ -18,12 +18,21 @@ export interface QaCapturedCookie {
 
 function qaDynamic(name: string): string | number | null {
   switch (name) {
-    case '$timestamp': return Math.floor(Date.now() / 1000);
-    case '$isoTimestamp': return new Date().toISOString();
-    case '$randomInt': return Math.floor(Math.random() * 1000);
-    case '$guid': return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); });
-    case '$randomEmail': return 'user' + Math.floor(Math.random() * 9999) + '@acme.dev';
-    default: return null;
+    case '$timestamp':
+      return Math.floor(Date.now() / 1000);
+    case '$isoTimestamp':
+      return new Date().toISOString();
+    case '$randomInt':
+      return Math.floor(Math.random() * 1000);
+    case '$guid':
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+      });
+    case '$randomEmail':
+      return 'user' + Math.floor(Math.random() * 9999) + '@acme.dev';
+    default:
+      return null;
   }
 }
 const QA_DYNAMICS = ['$timestamp', '$isoTimestamp', '$randomInt', '$guid', '$randomEmail'];
@@ -32,38 +41,81 @@ const QA_DYNAMICS = ['$timestamp', '$isoTimestamp', '$randomInt', '$guid', '$ran
 //   Global  <  Collection  <  Environment  <  Local (extra, e.g. iteration data)
 // Signature is back-compat: the 3rd arg may be a collectionId (string) OR the
 // `extra`/local object — older callers passed (vars, env, extra).
-function qaVarMap(vars: any, envLabel?: string, collectionIdOrExtra?: string | Record<string, any> | null, extra?: Record<string, any> | null): Record<string, string> {
-  let collectionId: string | null = null, local = extra;
+function qaVarMap(
+  vars: any,
+  envLabel?: string,
+  collectionIdOrExtra?: string | Record<string, any> | null,
+  extra?: Record<string, any> | null
+): Record<string, string> {
+  let collectionId: string | null = null,
+    local = extra;
   if (typeof collectionIdOrExtra === 'string') collectionId = collectionIdOrExtra;
-  else if (collectionIdOrExtra && typeof collectionIdOrExtra === 'object') local = collectionIdOrExtra;
+  else if (collectionIdOrExtra && typeof collectionIdOrExtra === 'object')
+    local = collectionIdOrExtra;
 
   const map: Record<string, string> = {};
-  (vars.globals || []).forEach((v: any) => { if (v.on && v.key) map[v.key] = v.value; });
-  if (collectionId) ((vars.collections || {})[collectionId] || []).forEach((v: any) => { if (v.on && v.key) map[v.key] = v.value; });
-  ((vars.environments || {})[envLabel as string] || []).forEach((v: any) => { if (v.on && v.key) map[v.key] = v.value; });
-  if (local) Object.entries(local).forEach(([k, v]) => { map[k] = v; });
+  (vars.globals || []).forEach((v: any) => {
+    if (v.on && v.key) map[v.key] = v.value;
+  });
+  if (collectionId)
+    ((vars.collections || {})[collectionId] || []).forEach((v: any) => {
+      if (v.on && v.key) map[v.key] = v.value;
+    });
+  ((vars.environments || {})[envLabel as string] || []).forEach((v: any) => {
+    if (v.on && v.key) map[v.key] = v.value;
+  });
+  if (local)
+    Object.entries(local).forEach(([k, v]) => {
+      map[k] = v;
+    });
   return map;
 }
 
 // Like qaVarMap, but records which scope each key's winning value came from.
 const QA_SCOPES = ['global', 'collection', 'environment', 'local'];
-function qaVarSources(vars: any, envLabel?: string, collectionId?: string | null, local?: Record<string, any> | null): Record<string, string> {
+function qaVarSources(
+  vars: any,
+  envLabel?: string,
+  collectionId?: string | null,
+  local?: Record<string, any> | null
+): Record<string, string> {
   const src: Record<string, string> = {};
-  (vars.globals || []).forEach((v: any) => { if (v.on && v.key) src[v.key] = 'global'; });
-  if (collectionId) ((vars.collections || {})[collectionId] || []).forEach((v: any) => { if (v.on && v.key) src[v.key] = 'collection'; });
-  ((vars.environments || {})[envLabel as string] || []).forEach((v: any) => { if (v.on && v.key) src[v.key] = 'environment'; });
-  if (local) Object.keys(local).forEach(k => { src[k] = 'local'; });
+  (vars.globals || []).forEach((v: any) => {
+    if (v.on && v.key) src[v.key] = 'global';
+  });
+  if (collectionId)
+    ((vars.collections || {})[collectionId] || []).forEach((v: any) => {
+      if (v.on && v.key) src[v.key] = 'collection';
+    });
+  ((vars.environments || {})[envLabel as string] || []).forEach((v: any) => {
+    if (v.on && v.key) src[v.key] = 'environment';
+  });
+  if (local)
+    Object.keys(local).forEach((k) => {
+      src[k] = 'local';
+    });
   return src;
 }
-function qaSubstitute(text: string | null | undefined, map?: Record<string, string> | null): string | null | undefined {
+function qaSubstitute(
+  text: string | null | undefined,
+  map?: Record<string, string> | null
+): string | null | undefined {
   if (text == null) return text;
   return String(text).replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => {
-    if (name[0] === '$') { const d = qaDynamic(name); return d == null ? m : String(d); }
-    return (map && name in map) ? map[name] : m;
+    if (name[0] === '$') {
+      const d = qaDynamic(name);
+      return d == null ? m : String(d);
+    }
+    return map && name in map ? map[name] : m;
   });
 }
-function qaHasVars(text: unknown): boolean { return /\{\{[^}]+\}\}/.test(String(text == null ? '' : text)); }
-function qaUnknownVars(text: string | null | undefined, map?: Record<string, string> | null): string[] {
+function qaHasVars(text: unknown): boolean {
+  return /\{\{[^}]+\}\}/.test(String(text == null ? '' : text));
+}
+function qaUnknownVars(
+  text: string | null | undefined,
+  map?: Record<string, string> | null
+): string[] {
   const out: string[] = [];
   String(text || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => {
     if (name[0] !== '$' && !(map && name in map)) out.push(name);
@@ -74,51 +126,119 @@ function qaUnknownVars(text: string | null | undefined, map?: Record<string, str
 
 // ── Assertions ────────────────────────────────────────────────────────────
 function qaGetPath(obj: any, path: unknown): any {
-  return String(path).split('.').reduce((a, k) => (a == null ? undefined : a[k]), obj);
+  return String(path)
+    .split('.')
+    .reduce((a, k) => (a == null ? undefined : a[k]), obj);
 }
 function qaAssertLabel(a: any): string {
   switch (a.type) {
-    case 'status': return `Status ${(({ eq: '=', neq: '≠', lt: '<', gt: '>' } as Record<string, string>)[a.op] || '=')} ${a.value}`;
-    case 'time': return `Response time ${a.op === 'gt' ? '>' : '<'} ${a.value} ms`;
-    case 'bodyHas': return `Body has "${a.path}"`;
-    case 'bodyEq': return `Body "${a.path}" = ${a.value}`;
-    case 'bodyArray': return `Body is an array`;
-    case 'header': return `Header "${a.name}" ${a.op === 'exists' ? 'exists' : a.op === 'contains' ? 'contains ' + a.value : '= ' + a.value}`;
-    default: return a.text || 'check';
+    case 'status':
+      return `Status ${({ eq: '=', neq: '≠', lt: '<', gt: '>' } as Record<string, string>)[a.op] || '='} ${a.value}`;
+    case 'time':
+      return `Response time ${a.op === 'gt' ? '>' : '<'} ${a.value} ms`;
+    case 'bodyHas':
+      return `Body has "${a.path}"`;
+    case 'bodyEq':
+      return `Body "${a.path}" = ${a.value}`;
+    case 'bodyArray':
+      return `Body is an array`;
+    case 'header':
+      return `Header "${a.name}" ${a.op === 'exists' ? 'exists' : a.op === 'contains' ? 'contains ' + a.value : '= ' + a.value}`;
+    default:
+      return a.text || 'check';
   }
 }
 function qaEval(a: any, resp: any): any {
   const body = resp.body;
-  let pass = false, actual = '';
+  let pass = false,
+    actual = '';
   switch (a.type) {
     case 'status': {
-      const s = resp.status; actual = String(s);
-      pass = a.op === 'neq' ? s !== a.value : a.op === 'lt' ? s < a.value : a.op === 'gt' ? s > a.value : s === a.value;
+      const s = resp.status;
+      actual = String(s);
+      pass =
+        a.op === 'neq'
+          ? s !== a.value
+          : a.op === 'lt'
+            ? s < a.value
+            : a.op === 'gt'
+              ? s > a.value
+              : s === a.value;
       break;
     }
-    case 'time': { actual = resp.time + ' ms'; pass = a.op === 'gt' ? resp.time > a.value : resp.time < a.value; break; }
-    case 'bodyHas': { const v = qaGetPath(body, a.path); actual = v === undefined ? 'missing' : 'present'; pass = v !== undefined; break; }
-    case 'bodyEq': { const v = qaGetPath(body, a.path); actual = JSON.stringify(v); pass = String(v) === String(a.value); break; }
-    case 'bodyArray': { const arr = Array.isArray(body) ? body : (body && Array.isArray(body.data) ? body.data : null); actual = arr ? `array(${arr.length})` : typeof body; pass = !!arr; break; }
-    case 'header': { const h = (resp.headers || {}); const key = Object.keys(h).find(k => k.toLowerCase() === String(a.name).toLowerCase()); const val = key ? h[key] : undefined; actual = val === undefined ? 'missing' : String(val); pass = a.op === 'exists' ? val !== undefined : a.op === 'contains' ? String(val || '').includes(a.value) : String(val) === String(a.value); break; }
-    default: { actual = '—'; pass = true; }
+    case 'time': {
+      actual = resp.time + ' ms';
+      pass = a.op === 'gt' ? resp.time > a.value : resp.time < a.value;
+      break;
+    }
+    case 'bodyHas': {
+      const v = qaGetPath(body, a.path);
+      actual = v === undefined ? 'missing' : 'present';
+      pass = v !== undefined;
+      break;
+    }
+    case 'bodyEq': {
+      const v = qaGetPath(body, a.path);
+      actual = JSON.stringify(v);
+      pass = String(v) === String(a.value);
+      break;
+    }
+    case 'bodyArray': {
+      const arr = Array.isArray(body) ? body : body && Array.isArray(body.data) ? body.data : null;
+      actual = arr ? `array(${arr.length})` : typeof body;
+      pass = !!arr;
+      break;
+    }
+    case 'header': {
+      const h = resp.headers || {};
+      const key = Object.keys(h).find((k) => k.toLowerCase() === String(a.name).toLowerCase());
+      const val = key ? h[key] : undefined;
+      actual = val === undefined ? 'missing' : String(val);
+      pass =
+        a.op === 'exists'
+          ? val !== undefined
+          : a.op === 'contains'
+            ? String(val || '').includes(a.value)
+            : String(val) === String(a.value);
+      break;
+    }
+    default: {
+      actual = '—';
+      pass = true;
+    }
   }
   return { ...a, pass, actual };
 }
-function qaRunAssertions(list: any[] | null | undefined, resp: any): any[] { return (list || []).filter(a => a.on !== false).map(a => qaEval(a, resp)); }
+function qaRunAssertions(list: any[] | null | undefined, resp: any): any[] {
+  return (list || []).filter((a) => a.on !== false).map((a) => qaEval(a, resp));
+}
 
 // Parse a generated-case assertion string into a structured assertion.
-function qaParseAssertion(str: string): { type: string; op?: string; value?: number; path?: string; name?: string; text?: string; on: boolean } {
+function qaParseAssertion(str: string): {
+  type: string;
+  op?: string;
+  value?: number;
+  path?: string;
+  name?: string;
+  text?: string;
+  on: boolean;
+} {
   const s = String(str).trim();
   let m;
   if ((m = s.match(/status\s*(==|=|!=|<=|>=|<|>)?\s*(\d{3})/i))) {
-    const op = ({ '!=': 'neq', '<': 'lt', '<=': 'lt', '>': 'gt', '>=': 'gt' } as Record<string, string>)[m[1]] || 'eq';
+    const op =
+      ({ '!=': 'neq', '<': 'lt', '<=': 'lt', '>': 'gt', '>=': 'gt' } as Record<string, string>)[
+        m[1]
+      ] || 'eq';
     return { type: 'status', op, value: +m[2], on: true };
   }
   if (/is\s+(an?\s+)?array/i.test(s)) return { type: 'bodyArray', on: true };
-  if ((m = s.match(/(?:has|includes?|contains?)\s*"([^"]+)"/i))) return { type: 'bodyHas', path: m[1], on: true };
-  if ((m = s.match(/time\s*(<=|<)\s*(\d+)/i))) return { type: 'time', op: 'lt', value: +m[2], on: true };
-  if ((m = s.match(/header\s*"([^"]+)"/i))) return { type: 'header', name: m[1], op: 'exists', on: true };
+  if ((m = s.match(/(?:has|includes?|contains?)\s*"([^"]+)"/i)))
+    return { type: 'bodyHas', path: m[1], on: true };
+  if ((m = s.match(/time\s*(<=|<)\s*(\d+)/i)))
+    return { type: 'time', op: 'lt', value: +m[2], on: true };
+  if ((m = s.match(/header\s*"([^"]+)"/i)))
+    return { type: 'header', name: m[1], op: 'exists', on: true };
   return { type: 'info', text: s, on: true };
 }
 
@@ -137,9 +257,13 @@ function qaCookieDefaultPath(requestPath: string | null | undefined): string {
   return last <= 0 ? '/' : requestPath.slice(0, last);
 }
 
-function qaParseSetCookie(headerValue: string | null | undefined, fallbackHost?: string, fallbackPath?: string): QaCapturedCookie | null {
+function qaParseSetCookie(
+  headerValue: string | null | undefined,
+  fallbackHost?: string,
+  fallbackPath?: string
+): QaCapturedCookie | null {
   if (!headerValue) return null;
-  const parts = headerValue.split(';').map(s => s.trim());
+  const parts = headerValue.split(';').map((s) => s.trim());
   const [nameVal, ...attrs] = parts;
   const eq = nameVal.indexOf('=');
   if (eq < 0) return null;
@@ -147,7 +271,19 @@ function qaParseSetCookie(headerValue: string | null | undefined, fallbackHost?:
   const value = nameVal.slice(eq + 1).trim();
   // hostOnly defaults true; flipped false when a valid Domain attr is parsed.
   // path defaults to RFC 6265's default-path derived from the request path.
-  const ck: QaCapturedCookie = { id: 'ck-' + name + '-' + Date.now().toString(36) + '-' + (qaCookieSeq++).toString(36), name, value, domain: fallbackHost || '', path: qaCookieDefaultPath(fallbackPath || '/'), expires: '', httpOnly: false, secure: false, sameSite: 'Lax', hostOnly: true, on: true };
+  const ck: QaCapturedCookie = {
+    id: 'ck-' + name + '-' + Date.now().toString(36) + '-' + (qaCookieSeq++).toString(36),
+    name,
+    value,
+    domain: fallbackHost || '',
+    path: qaCookieDefaultPath(fallbackPath || '/'),
+    expires: '',
+    httpOnly: false,
+    secure: false,
+    sameSite: 'Lax',
+    hostOnly: true,
+    on: true,
+  };
   for (const a of attrs) {
     const [k, v] = a.split('=');
     const key = k.toLowerCase();
@@ -167,15 +303,19 @@ function qaParseSetCookie(headerValue: string | null | undefined, fallbackHost?:
       }
       ck.domain = dom;
       ck.hostOnly = false;
-    }
-    else if (key === 'path') ck.path = v || '/';
+    } else if (key === 'path') ck.path = v || '/';
     else if (key === 'secure') ck.secure = true;
     else if (key === 'httponly') ck.httpOnly = true;
     else if (key === 'samesite') ck.sameSite = v || 'Lax';
     // Keep the full ISO datetime. Truncating to YYYY-MM-DD meant a cookie
     // with Max-Age=3600 set at noon became "expired" at midnight UTC.
-    else if (key === 'max-age' && v) { const d = new Date(Date.now() + (+v) * 1000); ck.expires = d.toISOString(); }
-    else if (key === 'expires' && v) { const d = new Date(v); if (!isNaN(d as any)) ck.expires = d.toISOString(); }
+    else if (key === 'max-age' && v) {
+      const d = new Date(Date.now() + +v * 1000);
+      ck.expires = d.toISOString();
+    } else if (key === 'expires' && v) {
+      const d = new Date(v);
+      if (!isNaN(d as any)) ck.expires = d.toISOString();
+    }
   }
   return ck;
 }
@@ -183,16 +323,37 @@ function qaParseSetCookie(headerValue: string | null | undefined, fallbackHost?:
 // Merge a newly-captured cookie into an existing jar. The identity key is
 // name+domain+path per RFC 6265 — without path, a cookie scoped to `/admin`
 // would silently overwrite the `/`-scoped cookie of the same name.
-function qaMergeCookie(jar: QaCapturedCookie[], ck: QaCapturedCookie | null | undefined): QaCapturedCookie[] {
+function qaMergeCookie(
+  jar: QaCapturedCookie[],
+  ck: QaCapturedCookie | null | undefined
+): QaCapturedCookie[] {
   if (!ck) return jar;
-  const i = jar.findIndex(c => c.name === ck.name && c.domain === ck.domain && (c.path || '/') === (ck.path || '/'));
-  if (i >= 0) { const next = jar.slice(); next[i] = { ...next[i], value: ck.value, expires: ck.expires || next[i].expires, secure: ck.secure, httpOnly: ck.httpOnly, sameSite: ck.sameSite, hostOnly: ck.hostOnly, on: true }; return next; }
+  const i = jar.findIndex(
+    (c) => c.name === ck.name && c.domain === ck.domain && (c.path || '/') === (ck.path || '/')
+  );
+  if (i >= 0) {
+    const next = jar.slice();
+    next[i] = {
+      ...next[i],
+      value: ck.value,
+      expires: ck.expires || next[i].expires,
+      secure: ck.secure,
+      httpOnly: ck.httpOnly,
+      sameSite: ck.sameSite,
+      hostOnly: ck.hostOnly,
+      on: true,
+    };
+    return next;
+  }
   return [...jar, ck];
 }
 
 // Parse a data file (CSV or JSON array) into an array of row objects for the
 // Collection Runner. Returns { rows, columns, error, format }.
-function qaParseDataFile(text: string | null | undefined, filename?: string | null): { rows: any[] | null; columns: string[]; error: string; format: 'json' | 'csv' | null } {
+function qaParseDataFile(
+  text: string | null | undefined,
+  filename?: string | null
+): { rows: any[] | null; columns: string[]; error: string; format: 'json' | 'csv' | null } {
   const t = (text || '').trim();
   if (!t) return { rows: null, columns: [], error: '', format: null };
   const isJson = /\.json$/i.test(filename || '') || t[0] === '[' || t[0] === '{';
@@ -200,32 +361,75 @@ function qaParseDataFile(text: string | null | undefined, filename?: string | nu
     try {
       const d = JSON.parse(t);
       const arr = Array.isArray(d) ? d : [d];
-      if (!arr.length) return { rows: null, columns: [], error: 'Empty JSON array', format: 'json' };
-      const cols = [...new Set(arr.flatMap(o => Object.keys(o || {})))];
+      if (!arr.length)
+        return { rows: null, columns: [], error: 'Empty JSON array', format: 'json' };
+      const cols = [...new Set(arr.flatMap((o) => Object.keys(o || {})))];
       return { rows: arr, columns: cols, error: '', format: 'json' };
-    } catch { return { rows: null, columns: [], error: 'Invalid JSON', format: 'json' }; }
+    } catch {
+      return { rows: null, columns: [], error: 'Invalid JSON', format: 'json' };
+    }
   }
   // CSV: first row is header. Handles quoted fields and embedded commas.
-  const lines = t.split(/\r?\n/).filter(l => l.length);
-  if (lines.length < 2) return { rows: null, columns: [], error: 'CSV needs a header row + at least one data row', format: 'csv' };
+  const lines = t.split(/\r?\n/).filter((l) => l.length);
+  if (lines.length < 2)
+    return {
+      rows: null,
+      columns: [],
+      error: 'CSV needs a header row + at least one data row',
+      format: 'csv',
+    };
   const parseLine = (line: string): string[] => {
-    const out: string[] = []; let cur = '', q = false;
+    const out: string[] = [];
+    let cur = '',
+      q = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
-      else { if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = ''; } else cur += c; }
+      if (q) {
+        if (c === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (c === '"') q = false;
+        else cur += c;
+      } else {
+        if (c === '"') q = true;
+        else if (c === ',') {
+          out.push(cur);
+          cur = '';
+        } else cur += c;
+      }
     }
-    out.push(cur); return out;
+    out.push(cur);
+    return out;
   };
-  const cols = parseLine(lines[0]).map(c => c.trim());
-  const rows = lines.slice(1).map(line => {
+  const cols = parseLine(lines[0]).map((c) => c.trim());
+  const rows = lines.slice(1).map((line) => {
     const vals = parseLine(line);
-    const o: Record<string, string> = {}; cols.forEach((c, i) => { o[c] = (vals[i] != null ? vals[i] : '').trim(); });
+    const o: Record<string, string> = {};
+    cols.forEach((c, i) => {
+      o[c] = (vals[i] != null ? vals[i] : '').trim();
+    });
     return o;
   });
   return { rows, columns: cols, error: '', format: 'csv' };
 }
 
-Object.assign(window, { qaDynamic, QA_DYNAMICS, qaVarMap, qaVarSources, QA_SCOPES, qaSubstitute, qaHasVars, qaUnknownVars, qaGetPath, qaAssertLabel, qaEval, qaRunAssertions, qaParseAssertion, qaParseSetCookie, qaMergeCookie, qaParseDataFile });
+Object.assign(window, {
+  qaDynamic,
+  QA_DYNAMICS,
+  qaVarMap,
+  qaVarSources,
+  QA_SCOPES,
+  qaSubstitute,
+  qaHasVars,
+  qaUnknownVars,
+  qaGetPath,
+  qaAssertLabel,
+  qaEval,
+  qaRunAssertions,
+  qaParseAssertion,
+  qaParseSetCookie,
+  qaMergeCookie,
+  qaParseDataFile,
+});
 
 export { qaParseSetCookie, qaMergeCookie, qaCookieDefaultPath };

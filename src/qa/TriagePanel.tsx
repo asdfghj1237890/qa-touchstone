@@ -10,7 +10,11 @@ import { runTriage } from './triage';
 import type { TriageFinding, TriagePriority, TriageResult } from './types';
 
 const { useState: useS } = React;
-const PRIO_LABEL: Record<TriagePriority, string> = { p1: 'security.triage.p1', p2: 'security.triage.p2', p3: 'security.triage.p3' };
+const PRIO_LABEL: Record<TriagePriority, string> = {
+  p1: 'security.triage.p1',
+  p2: 'security.triage.p2',
+  p3: 'security.triage.p3',
+};
 
 /** runTriage 的完整回傳（TriageResult + cap 統計）。 */
 type TriageRunResult = TriageResult & { dropped: number; total: number };
@@ -33,26 +37,42 @@ function TriagePanel({ union = [], aiReady, onGoToEngine, runner }: TriagePanelP
   const [expanded, setExpanded] = useS<Record<number, boolean>>({});
 
   const run = async () => {
-    setBusy(true); setError(null);
-    try { setTriage(await doTriage(union)); }
-    catch (e: any) { setError(String((e && e.message) || e)); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError(null);
+    try {
+      setTriage(await doTriage(union));
+    } catch (e: any) {
+      setError(String((e && e.message) || e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const disabled = busy || !aiReady || !union.length;
-  const hint = !aiReady ? t('security.triage.aiUnavailable') : (!union.length ? t('security.triage.empty') : undefined);
+  const hint = !aiReady
+    ? t('security.triage.aiUnavailable')
+    : !union.length
+      ? t('security.triage.empty')
+      : undefined;
 
   return (
     <div className="qa-sec-triage">
       <div className="qa-sec-triage-head">
-        <button className="qa-iconbtn" onClick={() => setOpen(o => !o)} title={t('security.triage.title')}>
+        <button
+          className="qa-iconbtn"
+          onClick={() => setOpen((o) => !o)}
+          title={t('security.triage.title')}
+        >
           <span className={open ? '' : 'qa-rot-90'}>
             <Icon name="chevron" size={14} />
           </span>
         </button>
-        <h3><Icon name="sparkle" size={14} /> {t('security.triage.title')}</h3>
+        <h3>
+          <Icon name="sparkle" size={14} /> {t('security.triage.title')}
+        </h3>
         <button className="qa-link" onClick={run} disabled={disabled} title={hint}>
-          <Icon name="zap" size={13} /> {busy ? t('security.triage.running') : t('security.triage.run')}
+          <Icon name="zap" size={13} />{' '}
+          {busy ? t('security.triage.running') : t('security.triage.run')}
         </button>
       </div>
 
@@ -60,37 +80,68 @@ function TriagePanel({ union = [], aiReady, onGoToEngine, runner }: TriagePanelP
         <div className="qa-sec-triage-body">
           {error && <div className="qa-sec-drawer-err">{error}</div>}
           {triage && triage.dropped > 0 && (
-            <div className="qa-meta">{t('security.triage.capped', { kept: triage.total - triage.dropped, total: triage.total, dropped: triage.dropped })}</div>
-          )}
-          {triage && triage.headline && <div className="qa-sec-triage-headline">{triage.headline}</div>}
-          {triage && triage.items.length === 0 && <div className="qa-sec-empty">{t('security.triage.none')}</div>}
-          {triage && triage.items.map((it, i) => (
-            <div key={i} className={`qa-sec-triage-item qa-prio--${it.priority}`}>
-              <div className="qa-sec-triage-item-head" onClick={() => setExpanded(e => ({ ...e, [i]: !e[i] }))}>
-                <span className={`qa-sec-triage-prio qa-prio--${it.priority}`}>{t(PRIO_LABEL[it.priority])}</span>
-                <span className="qa-sec-triage-cat">{t('security.triage.cat.' + it.category)}</span>
-                <span className="qa-sec-triage-title">{it.title}</span>
-                {it.likelyFalsePositive && <span className="qa-sec-triage-fp">{t('security.triage.fp')}</span>}
-                <span className="qa-meta">{t('security.triage.count', { count: it.findings.length })}</span>
-              </div>
-              {it.rationale && <div className="qa-sec-triage-rationale">{it.rationale}</div>}
-              {expanded[i] && (
-                <ul className="qa-sec-findlist">
-                  {it.findings.map((f, j) => (
-                    <li key={j} className={`qa-sev--${f.severity}`}>
-                      <span className="qa-sec-find-sev">{t('security.severity.' + f.severity)}</span>
-                      <span className="qa-sec-find-oracle">{t('security.triage.engine.' + f.engine)}</span>
-                      <code className="qa-sec-find-path">{f.path}</code>
-                      {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
-                      <button className="qa-link qa-sec-triage-goto" onClick={() => onGoToEngine && onGoToEngine(f.engine)}>
-                        {t('security.triage.goto', { engine: t('security.triage.engine.' + f.engine) })}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <div className="qa-meta">
+              {t('security.triage.capped', {
+                kept: triage.total - triage.dropped,
+                total: triage.total,
+                dropped: triage.dropped,
+              })}
             </div>
-          ))}
+          )}
+          {triage && triage.headline && (
+            <div className="qa-sec-triage-headline">{triage.headline}</div>
+          )}
+          {triage && triage.items.length === 0 && (
+            <div className="qa-sec-empty">{t('security.triage.none')}</div>
+          )}
+          {triage &&
+            triage.items.map((it, i) => (
+              <div key={i} className={`qa-sec-triage-item qa-prio--${it.priority}`}>
+                <div
+                  className="qa-sec-triage-item-head"
+                  onClick={() => setExpanded((e) => ({ ...e, [i]: !e[i] }))}
+                >
+                  <span className={`qa-sec-triage-prio qa-prio--${it.priority}`}>
+                    {t(PRIO_LABEL[it.priority])}
+                  </span>
+                  <span className="qa-sec-triage-cat">
+                    {t('security.triage.cat.' + it.category)}
+                  </span>
+                  <span className="qa-sec-triage-title">{it.title}</span>
+                  {it.likelyFalsePositive && (
+                    <span className="qa-sec-triage-fp">{t('security.triage.fp')}</span>
+                  )}
+                  <span className="qa-meta">
+                    {t('security.triage.count', { count: it.findings.length })}
+                  </span>
+                </div>
+                {it.rationale && <div className="qa-sec-triage-rationale">{it.rationale}</div>}
+                {expanded[i] && (
+                  <ul className="qa-sec-findlist">
+                    {it.findings.map((f, j) => (
+                      <li key={j} className={`qa-sev--${f.severity}`}>
+                        <span className="qa-sec-find-sev">
+                          {t('security.severity.' + f.severity)}
+                        </span>
+                        <span className="qa-sec-find-oracle">
+                          {t('security.triage.engine.' + f.engine)}
+                        </span>
+                        <code className="qa-sec-find-path">{f.path}</code>
+                        {f.evidence && <span className="qa-sec-find-ev">{f.evidence}</span>}
+                        <button
+                          className="qa-link qa-sec-triage-goto"
+                          onClick={() => onGoToEngine && onGoToEngine(f.engine)}
+                        >
+                          {t('security.triage.goto', {
+                            engine: t('security.triage.engine.' + f.engine),
+                          })}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
         </div>
       )}
     </div>

@@ -14,10 +14,24 @@ pub struct CommandResult {
 }
 
 impl CommandResult {
-    pub fn ok_pub() -> Self { Self { success: true, error: None } }
-    pub fn err_pub(e: String) -> Self { Self { success: false, error: Some(e) } }
-    fn ok() -> Self { Self::ok_pub() }
-    fn err(e: String) -> Self { Self::err_pub(e) }
+    pub fn ok_pub() -> Self {
+        Self {
+            success: true,
+            error: None,
+        }
+    }
+    pub fn err_pub(e: String) -> Self {
+        Self {
+            success: false,
+            error: Some(e),
+        }
+    }
+    fn ok() -> Self {
+        Self::ok_pub()
+    }
+    fn err(e: String) -> Self {
+        Self::err_pub(e)
+    }
 }
 
 pub(crate) fn load_config_raw(app: &AppHandle) -> Value {
@@ -34,7 +48,9 @@ pub(crate) fn load_config_raw(app: &AppHandle) -> Value {
 #[tauri::command]
 pub fn load_config(app: AppHandle) -> Value {
     let mut config = load_config_raw(&app);
-    if !config.is_object() { config = json!({}); }
+    if !config.is_object() {
+        config = json!({});
+    }
     config
 }
 
@@ -47,7 +63,9 @@ pub fn save_config(app: AppHandle, config: Value) -> CommandResult {
     let mut current = load_config_raw(&app);
     let cur = current.as_object_mut().unwrap();
     if let Some(incoming) = config.as_object() {
-        for (k, v) in incoming { cur.insert(k.clone(), v.clone()); }
+        for (k, v) in incoming {
+            cur.insert(k.clone(), v.clone());
+        }
     }
     let merged = Value::Object(cur.clone());
     if let Err(e) = write_pretty(&path, &merged) {
@@ -85,7 +103,10 @@ pub fn set_api_credential_configs(app: AppHandle, api_configs: Value) -> Command
         return CommandResult::err_pub("Invalid data format: apiConfigs must be an array.".into());
     }
     // 寫入新陣列、清掉舊的 singular 路徑；save_config 會 merge + 廣播 config-updated
-    save_config(app, json!({ "credentialsFilePaths": api_configs, "credentialsFilePath": "" }))
+    save_config(
+        app,
+        json!({ "credentialsFilePaths": api_configs, "credentialsFilePath": "" }),
+    )
 }
 
 #[cfg(test)]

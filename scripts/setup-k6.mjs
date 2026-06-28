@@ -29,7 +29,16 @@
 // Override the version with K6_VERSION (must have a baked-in checksum below for
 // release mode). Run manually via `npm run setup:k6` / `npm run setup:k6:release`.
 
-import { existsSync, mkdirSync, copyFileSync, chmodSync, rmSync, writeFileSync, readFileSync, createReadStream } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  copyFileSync,
+  chmodSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  createReadStream,
+} from 'node:fs';
 import { execSync, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
@@ -71,7 +80,10 @@ const CHECKSUMS = {
 };
 
 const log = (...a) => console.log(`[setup:k6${RELEASE ? ':release' : ''}]`, ...a);
-const fail = (msg) => { console.error(`[setup:k6${RELEASE ? ':release' : ''}] ERROR: ${msg}`); process.exit(1); };
+const fail = (msg) => {
+  console.error(`[setup:k6${RELEASE ? ':release' : ''}] ERROR: ${msg}`);
+  process.exit(1);
+};
 
 if (!arch || !os) {
   fail(`unsupported platform ${process.platform}/${process.arch}. Install k6 manually at ${DEST}.`);
@@ -92,7 +104,10 @@ function sha256File(path) {
 function verifyK6Binary(binPath) {
   let out;
   try {
-    out = execFileSync(binPath, ['version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    out = execFileSync(binPath, ['version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
   } catch (e) {
     return { ok: false, detail: `could not execute: ${e.message}` };
   }
@@ -123,7 +138,9 @@ async function downloadAndExtract(expectedSha) {
     const got = await sha256File(archivePath);
     if (expectedSha) {
       if (got !== expectedSha) {
-        throw new Error(`SHA256 mismatch for ${archiveStem}.${archiveExt}\n    expected ${expectedSha}\n    got      ${got}`);
+        throw new Error(
+          `SHA256 mismatch for ${archiveStem}.${archiveExt}\n    expected ${expectedSha}\n    got      ${got}`
+        );
       }
       log(`sha256 verified: ${got}`);
     } else {
@@ -155,21 +172,38 @@ async function downloadAndExtract(expectedSha) {
 }
 
 function readProvenance() {
-  try { return JSON.parse(readFileSync(PROV, 'utf8')); } catch { return null; }
+  try {
+    return JSON.parse(readFileSync(PROV, 'utf8'));
+  } catch {
+    return null;
+  }
 }
 function writeProvenance(archiveSha256) {
-  writeFileSync(PROV, JSON.stringify({
-    version: K6_VERSION, os, arch, archive: `${archiveStem}.${archiveExt}`, archiveSha256,
-  }, null, 2) + '\n');
+  writeFileSync(
+    PROV,
+    JSON.stringify(
+      {
+        version: K6_VERSION,
+        os,
+        arch,
+        archive: `${archiveStem}.${archiveExt}`,
+        archiveSha256,
+      },
+      null,
+      2
+    ) + '\n'
+  );
 }
 
 // ── Release: pinned + verified, no PATH, no blind reuse. Fail-closed. ────────
 async function runRelease() {
   const expected = (CHECKSUMS[K6_VERSION] || {})[key];
   if (!expected) {
-    fail(`no pinned SHA256 for k6 v${K6_VERSION} (${key}). Add it from ` +
-      `https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-checksums.txt ` +
-      `to CHECKSUMS in scripts/setup-k6.mjs before building a release.`);
+    fail(
+      `no pinned SHA256 for k6 v${K6_VERSION} (${key}). Add it from ` +
+        `https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-checksums.txt ` +
+        `to CHECKSUMS in scripts/setup-k6.mjs before building a release.`
+    );
   }
 
   // Accept an existing binary only if provenance matches the pinned checksum AND
@@ -177,13 +211,19 @@ async function runRelease() {
   const prov = readProvenance();
   if (existsSync(DEST) && prov && prov.version === K6_VERSION && prov.archiveSha256 === expected) {
     const v = verifyK6Binary(DEST);
-    if (v.ok) { log(`verified cached binary: ${DEST} (${v.detail})`); return; }
+    if (v.ok) {
+      log(`verified cached binary: ${DEST} (${v.detail})`);
+      return;
+    }
     log(`cached binary failed validation, re-fetching — ${v.detail}`);
   }
 
   let archiveSha;
-  try { archiveSha = await downloadAndExtract(expected); }
-  catch (e) { fail(e.message); }
+  try {
+    archiveSha = await downloadAndExtract(expected);
+  } catch (e) {
+    fail(e.message);
+  }
 
   const v = verifyK6Binary(DEST);
   if (!v.ok) fail(`k6 binary validation failed after install — ${v.detail}`);
@@ -195,14 +235,24 @@ async function runRelease() {
 function findOnPath() {
   try {
     const cmd = isWin ? 'where k6' : 'command -v k6';
-    const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], shell: isWin ? undefined : '/bin/sh' })
-      .toString().trim().split(/\r?\n/)[0];
+    const out = execSync(cmd, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      shell: isWin ? undefined : '/bin/sh',
+    })
+      .toString()
+      .trim()
+      .split(/\r?\n/)[0];
     return out && existsSync(out) ? out : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function runDev() {
-  if (existsSync(DEST)) { log(`already present: ${DEST}`); return; }
+  if (existsSync(DEST)) {
+    log(`already present: ${DEST}`);
+    return;
+  }
   mkdirSync(RES_DIR, { recursive: true });
 
   const onPath = findOnPath();
@@ -215,9 +265,12 @@ async function runDev() {
   }
 
   const expected = (CHECKSUMS[K6_VERSION] || {})[key]; // verify when known
-  try { await downloadAndExtract(expected); }
-  catch (e) {
-    fail(`${e.message}\n    Install k6 manually (https://k6.io/docs/get-started/installation/) and place it at ${DEST}.`);
+  try {
+    await downloadAndExtract(expected);
+  } catch (e) {
+    fail(
+      `${e.message}\n    Install k6 manually (https://k6.io/docs/get-started/installation/) and place it at ${DEST}.`
+    );
   }
   log(`installed: ${DEST}`);
 }

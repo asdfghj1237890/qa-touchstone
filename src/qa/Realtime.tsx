@@ -17,7 +17,10 @@ const RT_DEMO_SSE_URL = 'https://stream.wikimedia.org/v2/stream/recentchange';
 const RT_MAX_MESSAGES = 180;
 const RT_MAX_BODY_CHARS = 5000;
 
-function rtNow(): string { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`; }
+function rtNow(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
 function rtTrimBody(body: unknown): string {
   const text = String(body == null ? '' : body);
   return text.length > RT_MAX_BODY_CHARS
@@ -52,7 +55,9 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
   const [status, setStatus] = useStateRT('disconnected'); // disconnected | connecting | open | closed
   const [msgs, setMsgs] = useStateRT<RtMessage[]>([]); // {dir, body, at, event}
   const [counts, setCounts] = useStateRT({ in: 0, out: 0 });
-  const [compose, setCompose] = useStateRT('{"message":"hello from QA Touchstone","channel":"demo"}');
+  const [compose, setCompose] = useStateRT(
+    '{"message":"hello from QA Touchstone","channel":"demo"}'
+  );
   const wsRef = useRefRT<WebSocket | null>(null);
   const eventSourceRef = useRefRT<EventSource | null>(null);
   const lastStreamErrorRef = useRefRT(0);
@@ -62,26 +67,40 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
   const clearTransport = () => {
     if (wsRef.current) {
       const ws = wsRef.current;
-      ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null;
-      try { ws.close(1000, 'client disconnect'); } catch {}
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      try {
+        ws.close(1000, 'client disconnect');
+      } catch {}
       wsRef.current = null;
     }
     if (eventSourceRef.current) {
       const source = eventSourceRef.current;
-      source.onopen = null; source.onmessage = null; source.onerror = null;
-      try { source.close(); } catch {}
+      source.onopen = null;
+      source.onmessage = null;
+      source.onerror = null;
+      try {
+        source.close();
+      } catch {}
       eventSourceRef.current = null;
     }
   };
   useEffectRT(() => () => clearTransport(), []);
-  useEffectRT(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs]);
+  useEffectRT(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [msgs]);
 
-  const resetStream = () => { setMsgs([]); setCounts({ in: 0, out: 0 }); };
+  const resetStream = () => {
+    setMsgs([]);
+    setCounts({ in: 0, out: 0 });
+  };
   const push = (m: Omit<RtMessage, 'at'>) => {
     if (m.dir === 'in' || m.dir === 'out') {
-      setCounts(c => ({ ...c, [m.dir as 'in' | 'out']: c[m.dir as 'in' | 'out'] + 1 }));
+      setCounts((c) => ({ ...c, [m.dir as 'in' | 'out']: c[m.dir as 'in' | 'out'] + 1 }));
     }
-    setMsgs(list => [...list, { at: rtNow(), ...m }].slice(-RT_MAX_MESSAGES));
+    setMsgs((list) => [...list, { at: rtNow(), ...m }].slice(-RT_MAX_MESSAGES));
   };
   const pushStreamError = (message: string) => {
     const now = Date.now();
@@ -102,7 +121,8 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
     if (status === 'open' || status === 'connecting') return;
     const targetUrl = url.trim();
     if (!targetUrl) return;
-    setStatus('connecting'); resetStream();
+    setStatus('connecting');
+    resetStream();
     clearTransport();
     if (isWs) {
       if (typeof WebSocket !== 'function') {
@@ -124,7 +144,10 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
         if (wsRef.current !== ws) return;
         wsRef.current = null;
         setStatus('closed');
-        push({ dir: 'sys', body: t('realtime.closedWithCode', { code: event && event.code ? event.code : 1000 }) });
+        push({
+          dir: 'sys',
+          body: t('realtime.closedWithCode', { code: event && event.code ? event.code : 1000 }),
+        });
       };
       return;
     }
@@ -177,41 +200,90 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
     <div className="rt">
       <div className="rt-bar">
         <div className="qa-segs rt-proto">
-          {RT_PROTOCOLS.map(p => (
-            <button key={p.key} data-active={proto === p.key ? '1' : '0'} onClick={() => switchProto(p.key)}>{t(p.labelKey)}</button>
+          {RT_PROTOCOLS.map((p) => (
+            <button
+              key={p.key}
+              data-active={proto === p.key ? '1' : '0'}
+              onClick={() => switchProto(p.key)}
+            >
+              {t(p.labelKey)}
+            </button>
           ))}
         </div>
         <div className="rt-url">
-          <span className="rt-scheme" data-status={status}>{status === 'open' ? '●' : '○'}</span>
-          <input value={url} onChange={e => setUrl(e.target.value)} spellCheck="false"
-                 placeholder={isWs ? 'wss://host/path' : 'https://host/stream'} disabled={connected} />
+          <span className="rt-scheme" data-status={status}>
+            {status === 'open' ? '●' : '○'}
+          </span>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            spellCheck="false"
+            placeholder={isWs ? 'wss://host/path' : 'https://host/stream'}
+            disabled={connected}
+          />
         </div>
-        {connected || status === 'connecting'
-          ? <button className="rt-btn rt-btn--off" onClick={disconnect}>{status === 'connecting' ? <Spinner size={14} /> : <Icon name="stop" size={14} />} {status === 'connecting' ? t('common.connecting') : t('common.disconnect')}</button>
-          : <button className="rt-btn" onClick={connect}><Icon name="bolt" size={14} /> {t('common.connect')}</button>}
+        {connected || status === 'connecting' ? (
+          <button className="rt-btn rt-btn--off" onClick={disconnect}>
+            {status === 'connecting' ? <Spinner size={14} /> : <Icon name="stop" size={14} />}{' '}
+            {status === 'connecting' ? t('common.connecting') : t('common.disconnect')}
+          </button>
+        ) : (
+          <button className="rt-btn" onClick={connect}>
+            <Icon name="bolt" size={14} /> {t('common.connect')}
+          </button>
+        )}
       </div>
 
       <div className="rt-statusline">
-        <span className="rt-stat" data-status={status}>{t(`realtime.status.${status}`)}</span>
+        <span className="rt-stat" data-status={status}>
+          {t(`realtime.status.${status}`)}
+        </span>
         <span className="qa-meta">{isWs ? 'WebSocket' : 'text/event-stream'}</span>
-        <span className="rt-counts"><span className="rt-c-in">↓ {inCount}</span> <span className="rt-c-out">↑ {outCount}</span></span>
-        {msgs.length > 0 && <button className="qa-link" onClick={resetStream}>{t('common.clear')}</button>}
+        <span className="rt-counts">
+          <span className="rt-c-in">↓ {inCount}</span>{' '}
+          <span className="rt-c-out">↑ {outCount}</span>
+        </span>
+        {msgs.length > 0 && (
+          <button className="qa-link" onClick={resetStream}>
+            {t('common.clear')}
+          </button>
+        )}
       </div>
 
       <div className="rt-stream" ref={scrollRef}>
         {msgs.length === 0 && (
           <div className="pf-empty rt-empty">
-            <div className="pf-empty-icon"><Icon name={isWs ? 'bolt' : 'activity'} size={26} stroke={1.5} /></div>
-            <div className="pf-empty-title">{isWs ? t('realtime.empty.wsTitle') : t('realtime.empty.sseTitle')}</div>
-            <div className="pf-empty-sub">{isWs ? t('realtime.empty.wsSub') : t('realtime.empty.sseSub')}</div>
+            <div className="pf-empty-icon">
+              <Icon name={isWs ? 'bolt' : 'activity'} size={26} stroke={1.5} />
+            </div>
+            <div className="pf-empty-title">
+              {isWs ? t('realtime.empty.wsTitle') : t('realtime.empty.sseTitle')}
+            </div>
+            <div className="pf-empty-sub">
+              {isWs ? t('realtime.empty.wsSub') : t('realtime.empty.sseSub')}
+            </div>
           </div>
         )}
         {msgs.map((m, i) => (
           <div key={i} className="rt-msg" data-dir={m.dir}>
-            <span className="rt-msg-arrow">{m.dir === 'in' ? '↓' : m.dir === 'out' ? '↑' : '•'}</span>
+            <span className="rt-msg-arrow">
+              {m.dir === 'in' ? '↓' : m.dir === 'out' ? '↑' : '•'}
+            </span>
             <div className="rt-msg-body">
               {m.event && <span className="rt-msg-event">{m.event}</span>}
-              <code dangerouslySetInnerHTML={{ __html: m.body[0] === '{' ? window.highlightJson!(m.body) : String(m.body || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') }} />
+              <code
+                dangerouslySetInnerHTML={{
+                  __html:
+                    m.body[0] === '{'
+                      ? window.highlightJson!(m.body)
+                      : String(m.body || '')
+                          .replace(/&/g, '&amp;')
+                          .replace(/</g, '&lt;')
+                          .replace(/>/g, '&gt;')
+                          .replace(/"/g, '&quot;')
+                          .replace(/'/g, '&#39;'),
+                }}
+              />
             </div>
             <span className="rt-msg-at">{m.at}</span>
           </div>
@@ -220,16 +292,25 @@ function RealtimeClient(_props: RealtimeClientProps = {}) {
 
       {isWs && (
         <div className="rt-compose">
-          <textarea value={compose} onChange={e => setCompose(e.target.value)} spellCheck="false"
-                    placeholder='{"type":"subscribe","channel":"orders"}' disabled={!connected}
-                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMsg(); }} />
+          <textarea
+            value={compose}
+            onChange={(e) => setCompose(e.target.value)}
+            spellCheck="false"
+            placeholder='{"type":"subscribe","channel":"orders"}'
+            disabled={!connected}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMsg();
+            }}
+          />
           <button className="rt-send" onClick={sendMsg} disabled={!connected}>
             <Icon name="send" size={14} /> {t('realtime.send')}
           </button>
         </div>
       )}
       {!isWs && connected && (
-        <div className="rt-ssehint"><Icon name="activity" size={13} /> {t('realtime.sseHint')}</div>
+        <div className="rt-ssehint">
+          <Icon name="activity" size={13} /> {t('realtime.sseHint')}
+        </div>
       )}
     </div>
   );

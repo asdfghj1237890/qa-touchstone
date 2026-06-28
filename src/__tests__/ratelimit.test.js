@@ -17,14 +17,22 @@ describe('constants', () => {
 describe('detectThrottleSignal', () => {
   const r = (status, headers = {}) => ({ status, headers, timeMs: 1, error: null });
   it('flags a 429 anywhere in the burst', () => {
-    expect(detectThrottleSignal([r(200), r(429), r(200)])).toEqual({ throttled: true, saw429: true, headerHit: false });
+    expect(detectThrottleSignal([r(200), r(429), r(200)])).toEqual({
+      throttled: true,
+      saw429: true,
+      headerHit: false,
+    });
   });
   it('flags a rate-limit header case-insensitively', () => {
     expect(detectThrottleSignal([r(200, { 'Retry-After': '5' })]).throttled).toBe(true);
     expect(detectThrottleSignal([r(200, { 'X-RateLimit-Remaining': '0' })]).headerHit).toBe(true);
   });
   it('is not throttled when no 429 and no rate-limit headers', () => {
-    expect(detectThrottleSignal([r(200, { 'content-type': 'application/json' }), r(200)])).toEqual({ throttled: false, saw429: false, headerHit: false });
+    expect(detectThrottleSignal([r(200, { 'content-type': 'application/json' }), r(200)])).toEqual({
+      throttled: false,
+      saw429: false,
+      headerHit: false,
+    });
   });
   it('tolerates null/empty entries', () => {
     expect(detectThrottleSignal([null, undefined, r(200)]).throttled).toBe(false);
@@ -66,10 +74,17 @@ describe('runBurst', () => {
   });
 
   it('never exceeds the configured concurrency in flight', async () => {
-    let inFlight = 0, maxInFlight = 0;
+    let inFlight = 0,
+      maxInFlight = 0;
     const runner = () => {
-      inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
-      return new Promise(res => setTimeout(() => { inFlight--; res({ status: 200, headers: {}, time: 1 }); }, 5));
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise((res) =>
+        setTimeout(() => {
+          inFlight--;
+          res({ status: 200, headers: {}, time: 1 });
+        }, 5)
+      );
     };
     await runBurst({ n: 10, concurrency: 3 }, runner, {});
     expect(maxInFlight).toBeLessThanOrEqual(3);
@@ -78,15 +93,23 @@ describe('runBurst', () => {
 
   it('clamps n and concurrency to the caps', async () => {
     let calls = 0;
-    const runner = () => { calls++; return Promise.resolve({ status: 200, headers: {}, time: 1 }); };
+    const runner = () => {
+      calls++;
+      return Promise.resolve({ status: 200, headers: {}, time: 1 });
+    };
     const { stats } = await runBurst({ n: 5000, concurrency: 999 }, runner, {});
-    expect(calls).toBe(CAP);   // n clamped to MAX_N
+    expect(calls).toBe(CAP); // n clamped to MAX_N
     expect(stats.sent).toBe(CAP);
   });
 
   it('records a thrown runner as a net error without aborting the burst', async () => {
     let i = 0;
-    const runner = () => { i++; return i === 2 ? Promise.reject(new Error('boom')) : Promise.resolve({ status: 200, headers: {}, time: 1 }); };
+    const runner = () => {
+      i++;
+      return i === 2
+        ? Promise.reject(new Error('boom'))
+        : Promise.resolve({ status: 200, headers: {}, time: 1 });
+    };
     const { stats } = await runBurst({ n: 3, concurrency: 1 }, runner, {});
     expect(stats.sent).toBe(3);
     expect(stats.net).toBe(1);
@@ -94,15 +117,27 @@ describe('runBurst', () => {
   });
 
   it('does not launch when the abort signal is already set', async () => {
-    const c = new AbortController(); c.abort();
+    const c = new AbortController();
+    c.abort();
     let calls = 0;
-    await runBurst({ n: 10, concurrency: 2 }, () => { calls++; return Promise.resolve({ status: 200, headers: {} }); }, { signal: c.signal });
+    await runBurst(
+      { n: 10, concurrency: 2 },
+      () => {
+        calls++;
+        return Promise.resolve({ status: 200, headers: {} });
+      },
+      { signal: c.signal }
+    );
     expect(calls).toBe(0);
   });
 
   it('streams progress up to n', async () => {
     const seen = [];
-    await runBurst({ n: 4, concurrency: 2 }, () => Promise.resolve({ status: 200, headers: {}, time: 1 }), { onProgress: (done, n) => seen.push([done, n]) });
+    await runBurst(
+      { n: 4, concurrency: 2 },
+      () => Promise.resolve({ status: 200, headers: {}, time: 1 }),
+      { onProgress: (done, n) => seen.push([done, n]) }
+    );
     expect(seen[seen.length - 1]).toEqual([4, 4]);
     expect(seen).toHaveLength(4);
   });
@@ -123,7 +158,7 @@ describe('runBurst', () => {
     expect(stats.net).toBe(n);
     expect(stats.sent).toBe(n);
     // completedCount = responses with a numeric status → 0 here → inconclusive.
-    expect(responses.filter(x => x.status != null).length).toBe(0);
+    expect(responses.filter((x) => x.status != null).length).toBe(0);
   });
 
   it('buckets a rotating mix of statuses into the right stats counts', async () => {
@@ -136,7 +171,10 @@ describe('runBurst', () => {
       { status: 429, time: 40 },
     ];
     let i = 0;
-    const runner = () => { const c = cycle[i++ % cycle.length]; return Promise.resolve({ status: c.status, headers: {}, time: c.time }); };
+    const runner = () => {
+      const c = cycle[i++ % cycle.length];
+      return Promise.resolve({ status: c.status, headers: {}, time: c.time });
+    };
     const { stats } = await runBurst({ n, concurrency: 1 }, runner, {});
     expect(stats.sent).toBe(n);
     expect(stats.ok2xx).toBe(2);
@@ -161,11 +199,19 @@ describe('rlFindingFor', () => {
     const responses = Array.from({ length: 30 }, () => ({ status: 200, headers: {} }));
     const stats = { sent: 30 };
     const f = rlFindingFor(test, responses, stats, 'No rate limiting');
-    expect(f).toMatchObject({ oracle: 'rate-limit', title: 'No rate limiting', path: 'GET /x', source: 'rule' });
+    expect(f).toMatchObject({
+      oracle: 'rate-limit',
+      title: 'No rate limiting',
+      path: 'GET /x',
+      source: 'rule',
+    });
     expect(['low', 'medium', 'high', 'critical']).toContain(f.severity);
   });
   it('returns null when throttling is detected early (429 first → strong)', () => {
-    const responses = [{ status: 429, headers: {} }, { status: 200, headers: {} }];
+    const responses = [
+      { status: 429, headers: {} },
+      { status: 200, headers: {} },
+    ];
     const f = rlFindingFor(test, responses, { sent: 2 }, 'No rate limiting');
     expect(f).toBeNull();
   });
@@ -194,14 +240,27 @@ describe('rateLimitStrength', () => {
     expect(rateLimitStrength(analyzeThrottle([{ status: 200, headers: {} }]))).toBe('none');
   });
   it('strong when a 429 fires early', () => {
-    expect(rateLimitStrength(analyzeThrottle([{ status: 429, headers: {} }, { status: 200, headers: {} }]))).toBe('strong');
+    expect(
+      rateLimitStrength(
+        analyzeThrottle([
+          { status: 429, headers: {} },
+          { status: 200, headers: {} },
+        ])
+      )
+    ).toBe('strong');
   });
   it('weak when the 429 only fires after a large number of requests slip through', () => {
-    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
+    const responses = [
+      ...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })),
+      { status: 429, headers: {} },
+    ];
     expect(rateLimitStrength(analyzeThrottle(responses))).toBe('weak');
   });
   it('weak when protection is only advertised by headers (no enforced 429)', () => {
-    const responses = Array.from({ length: 50 }, () => ({ status: 200, headers: { 'RateLimit-Remaining': '9' } }));
+    const responses = Array.from({ length: 50 }, () => ({
+      status: 200,
+      headers: { 'RateLimit-Remaining': '9' },
+    }));
     expect(rateLimitStrength(analyzeThrottle(responses))).toBe('weak');
   });
 });
@@ -209,19 +268,38 @@ describe('rateLimitStrength', () => {
 describe('rlFindingFor — weak protection (opt-in weakTitle)', () => {
   const test = { method: 'POST', path: '/login', sensitivity: 'sensitive' };
   it('emits a lower-severity advisory when a 429 only fires very late', () => {
-    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
-    const f = rlFindingFor(test, responses, { sent: 200 }, 'No rate limiting', 'Weak rate limiting');
-    expect(f).toMatchObject({ oracle: 'rate-limit', title: 'Weak rate limiting', path: 'POST /login' });
-    expect(['low', 'medium']).toContain(f.severity);            // not high — it does throttle, just late
-    expect(f.evidence).toMatch(/199/);                          // how many slipped through
+    const responses = [
+      ...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })),
+      { status: 429, headers: {} },
+    ];
+    const f = rlFindingFor(
+      test,
+      responses,
+      { sent: 200 },
+      'No rate limiting',
+      'Weak rate limiting'
+    );
+    expect(f).toMatchObject({
+      oracle: 'rate-limit',
+      title: 'Weak rate limiting',
+      path: 'POST /login',
+    });
+    expect(['low', 'medium']).toContain(f.severity); // not high — it does throttle, just late
+    expect(f.evidence).toMatch(/199/); // how many slipped through
   });
   it('emits a weak advisory for advertised-only protection (headers, no 429)', () => {
-    const responses = Array.from({ length: 40 }, () => ({ status: 200, headers: { 'RateLimit-Remaining': '5' } }));
+    const responses = Array.from({ length: 40 }, () => ({
+      status: 200,
+      headers: { 'RateLimit-Remaining': '5' },
+    }));
     const f = rlFindingFor(test, responses, { sent: 40 }, 'No rate limiting', 'Weak rate limiting');
     expect(f.title).toBe('Weak rate limiting');
   });
   it('stays backward-compatible: no weak finding when weakTitle is omitted', () => {
-    const responses = [...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })), { status: 429, headers: {} }];
+    const responses = [
+      ...Array.from({ length: 199 }, () => ({ status: 200, headers: {} })),
+      { status: 429, headers: {} },
+    ];
     expect(rlFindingFor(test, responses, { sent: 200 }, 'No rate limiting')).toBeNull();
   });
 });

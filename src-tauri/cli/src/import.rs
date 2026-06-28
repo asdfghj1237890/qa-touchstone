@@ -8,11 +8,7 @@
 use qa_touchstone_core::import::{qa_parse_import, to_config};
 use std::process::ExitCode;
 
-pub async fn run(
-    input: String,
-    base_url: Option<String>,
-    out: Option<String>,
-) -> ExitCode {
+pub async fn run(input: String, base_url: Option<String>, out: Option<String>) -> ExitCode {
     // Step 1: read the input file (IO error → stderr + exit 2)
     let text = match std::fs::read_to_string(&input) {
         Ok(t) => t,
@@ -45,7 +41,14 @@ pub async fn run(
     if resolved_base.is_empty() {
         let has_templated = cfg_val["requests"]
             .as_array()
-            .map(|reqs| reqs.iter().any(|r| r["url"].as_str().map(|u| u.contains("{{baseUrl}}")).unwrap_or(false)))
+            .map(|reqs| {
+                reqs.iter().any(|r| {
+                    r["url"]
+                        .as_str()
+                        .map(|u| u.contains("{{baseUrl}}"))
+                        .unwrap_or(false)
+                })
+            })
             .unwrap_or(false);
         if has_templated {
             eprintln!("warn: one or more request urls use {{{{baseUrl}}}} but globals.variables.baseUrl is empty — set --base-url or fill globals.variables.baseUrl before send/run");

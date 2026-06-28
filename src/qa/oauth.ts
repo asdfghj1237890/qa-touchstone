@@ -39,7 +39,7 @@ export interface RequestOAuthTokenOptions {
     req: OAuthTokenRequest,
     env: { label: string; baseUrl: string },
     varMap: Record<string, string>,
-    opts: { sslVerify: boolean },
+    opts: { sslVerify: boolean }
   ) => Promise<any>;
 }
 
@@ -49,13 +49,25 @@ const DEFAULT_AUTH: QaAuth = {
   apiKey: { key: '', value: '', placement: 'header' },
   basic: { user: '', pass: '' },
   aws: { profile: '', service: '', region: '' },
-  oauth2: { grant: 'client_credentials', authUrl: '', tokenUrl: '', clientId: '', clientSecret: '', scope: '', code: '', redirectUri: '', username: '', password: '' },
+  oauth2: {
+    grant: 'client_credentials',
+    authUrl: '',
+    tokenUrl: '',
+    clientId: '',
+    clientSecret: '',
+    scope: '',
+    code: '',
+    redirectUri: '',
+    username: '',
+    password: '',
+  },
 };
 
 function sub(value: unknown, map?: Record<string, string>): string {
   const text = String(value == null ? '' : value);
-  if (typeof window !== 'undefined' && window.qaSubstitute) return window.qaSubstitute(text, map || {});
-  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => (map && name in map) ? map[name] : m);
+  if (typeof window !== 'undefined' && window.qaSubstitute)
+    return window.qaSubstitute(text, map || {});
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => (map && name in map ? map[name] : m));
 }
 
 function required(value: unknown, label: string): void {
@@ -67,11 +79,17 @@ function tokenType(value: unknown): string {
   return /^bearer$/i.test(t) ? 'Bearer' : t;
 }
 
-export function buildOAuthTokenRequest(oauth2: OAuthConfig = {}, varMap: Record<string, string> = {}): OAuthTokenRequest {
-  const grant = sub(oauth2.grant || 'client_credentials', varMap).trim().toLowerCase();
+export function buildOAuthTokenRequest(
+  oauth2: OAuthConfig = {},
+  varMap: Record<string, string> = {}
+): OAuthTokenRequest {
+  const grant = sub(oauth2.grant || 'client_credentials', varMap)
+    .trim()
+    .toLowerCase();
   const tokenUrl = sub(oauth2.tokenUrl || '', varMap).trim();
   required(tokenUrl, 'OAuth token URL');
-  if (!/^https?:\/\//i.test(tokenUrl)) throw new Error('OAuth token URL must be an absolute HTTP(S) URL');
+  if (!/^https?:\/\//i.test(tokenUrl))
+    throw new Error('OAuth token URL must be an absolute HTTP(S) URL');
 
   const clientId = sub(oauth2.clientId || '', varMap).trim();
   const clientSecret = sub(oauth2.clientSecret || '', varMap);
@@ -118,7 +136,10 @@ export function buildOAuthTokenRequest(oauth2: OAuthConfig = {}, varMap: Record<
   };
 }
 
-export function parseOAuthTokenResponse(body: unknown, context: { scope?: string } = {}): OAuthTokenResult {
+export function parseOAuthTokenResponse(
+  body: unknown,
+  context: { scope?: string } = {}
+): OAuthTokenResult {
   const data: any = typeof body === 'string' ? JSON.parse(body) : body;
   if (!data || typeof data !== 'object') throw new Error('OAuth token response was not JSON');
   const token = data.access_token;
@@ -134,23 +155,31 @@ export function parseOAuthTokenResponse(body: unknown, context: { scope?: string
   };
 }
 
-export async function exchangeOAuthTokenWithFetch(tokenRequest: OAuthTokenRequest): Promise<OAuthTokenResult> {
+export async function exchangeOAuthTokenWithFetch(
+  tokenRequest: OAuthTokenRequest
+): Promise<OAuthTokenResult> {
   const body = new URLSearchParams(
-    tokenRequest.form.filter(f => f.on !== false && f.key).map(f => [f.key, f.value || ''])
+    tokenRequest.form.filter((f) => f.on !== false && f.key).map((f) => [f.key, f.value || ''])
   );
   const headers = tokenRequest.headers
-    .filter(h => h.on !== false && h.key)
+    .filter((h) => h.on !== false && h.key)
     .reduce((out, h) => ({ ...out, [h.key]: h.value || '' }), {} as Record<string, string>);
   const res = await fetch(tokenRequest.url, { method: 'POST', headers, body });
   const raw = await res.text();
   let data: any;
-  try { data = JSON.parse(raw); }
-  catch { data = raw; }
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = raw;
+  }
   if (!res.ok) {
-    const detail = data && typeof data === 'object'
-      ? (data.error_description || data.error || JSON.stringify(data))
-      : String(data || '');
-    throw new Error(`OAuth token endpoint returned HTTP ${res.status}${detail ? `: ${detail}` : ''}`);
+    const detail =
+      data && typeof data === 'object'
+        ? data.error_description || data.error || JSON.stringify(data)
+        : String(data || '');
+    throw new Error(
+      `OAuth token endpoint returned HTTP ${res.status}${detail ? `: ${detail}` : ''}`
+    );
   }
   return parseOAuthTokenResponse(data, tokenRequest.oauthContext);
 }
@@ -163,18 +192,26 @@ export async function exchangeOAuthTokenWithFetch(tokenRequest: OAuthTokenReques
 export async function requestOAuthToken(
   oauth2Config: OAuthConfig | null | undefined,
   varMap: Record<string, string>,
-  opts: RequestOAuthTokenOptions = {},
+  opts: RequestOAuthTokenOptions = {}
 ): Promise<OAuthTokenResult> {
   const { sslVerify = true, executeRequest } = opts;
   const tokenRequest = buildOAuthTokenRequest(oauth2Config || {}, varMap);
   const tauri = typeof window !== 'undefined' && !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
   if (tauri && executeRequest) {
-    const resp = await executeRequest(tokenRequest, { label: 'OAuth', baseUrl: '' }, {}, { sslVerify });
+    const resp = await executeRequest(
+      tokenRequest,
+      { label: 'OAuth', baseUrl: '' },
+      {},
+      { sslVerify }
+    );
     if (!resp || resp.status < 200 || resp.status >= 300) {
-      const detail = resp && resp.body && typeof resp.body === 'object'
-        ? (resp.body.error_description || resp.body.error || JSON.stringify(resp.body))
-        : '';
-      throw new Error(`OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`);
+      const detail =
+        resp && resp.body && typeof resp.body === 'object'
+          ? resp.body.error_description || resp.body.error || JSON.stringify(resp.body)
+          : '';
+      throw new Error(
+        `OAuth token endpoint returned HTTP ${resp ? resp.status : 0}${detail ? `: ${detail}` : ''}`
+      );
     }
     return parseOAuthTokenResponse(resp.body, tokenRequest.oauthContext);
   }

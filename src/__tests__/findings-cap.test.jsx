@@ -8,9 +8,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (k) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
-    setItem: (k, v) => { store[k] = String(v); },
-    removeItem: (k) => { delete store[k]; },
-    clear: () => { store = {}; },
+    setItem: (k, v) => {
+      store[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete store[k];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -19,14 +25,24 @@ function installLocalStorage(seed = {}) {
 // Distinct fingerprints (engine|ruleId|location|path) via a unique endpoint per row.
 function mkUnion(n) {
   return Array.from({ length: n }, (_, i) => ({
-    engine: 'matrix', ruleId: 'rule-' + i, severity: 'high', title: 'Finding ' + i,
-    method: 'GET', endpoint: '/e' + i, path: 'data.x', identityLabel: 'admin',
+    engine: 'matrix',
+    ruleId: 'rule-' + i,
+    severity: 'high',
+    title: 'Finding ' + i,
+    method: 'GET',
+    endpoint: '/e' + i,
+    path: 'data.x',
+    identityLabel: 'admin',
     ref: { reqId: 'rq' + i, idId: 'admin' },
   }));
 }
 
 const renderPanel = (n) =>
-  render(<I18nProvider><FindingsPanel union={mkUnion(n)} /></I18nProvider>);
+  render(
+    <I18nProvider>
+      <FindingsPanel union={mkUnion(n)} />
+    </I18nProvider>
+  );
 
 const rowCount = () => document.querySelectorAll('tr.qa-find-row').length;
 

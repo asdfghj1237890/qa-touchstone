@@ -56,36 +56,78 @@ const FORMAT_RE: Record<string, RegExp> = {
 
 // Validate `value` against `schema` at `path`, collecting violations (no throw).
 // Stops collecting once MAX_VIOLATIONS is reached so a pathological body is bounded.
-export function validateAgainstSchema(value: unknown, schema: JsonSchema | null | undefined, path = '$', out: Violation[] = []): Violation[] {
+export function validateAgainstSchema(
+  value: unknown,
+  schema: JsonSchema | null | undefined,
+  path = '$',
+  out: Violation[] = []
+): Violation[] {
   if (!schema || typeof schema !== 'object') return out;
   if (out.length >= MAX_VIOLATIONS) return out;
 
-  const types = schema.type == null ? [] : (Array.isArray(schema.type) ? schema.type : [schema.type]);
+  const types = schema.type == null ? [] : Array.isArray(schema.type) ? schema.type : [schema.type];
   const nullable = schema.nullable === true || types.includes('null');
   const actual = jsonType(value);
 
   if (value === null) {
-    if (!nullable && types.length) out.push({ kind: 'type', path, expected: types.join('|'), actual: 'null', message: `${path}: null is not allowed` });
+    if (!nullable && types.length)
+      out.push({
+        kind: 'type',
+        path,
+        expected: types.join('|'),
+        actual: 'null',
+        message: `${path}: null is not allowed`,
+      });
     return out;
   }
 
-  if (types.length && !types.some(t => typeMatches(t, actual))) {
-    out.push({ kind: 'type', path, expected: types.join('|'), actual, message: `${path}: expected ${types.join('|')}, got ${actual}` });
+  if (types.length && !types.some((t) => typeMatches(t, actual))) {
+    out.push({
+      kind: 'type',
+      path,
+      expected: types.join('|'),
+      actual,
+      message: `${path}: expected ${types.join('|')}, got ${actual}`,
+    });
     return out; // a wrong container type makes deeper checks meaningless
   }
 
-  if (Array.isArray(schema.enum) && !schema.enum.some(e => e === value)) {
-    out.push({ kind: 'enum', path, expected: schema.enum.map(String).join('|'), actual: String(value), message: `${path}: ${String(value)} is not one of ${schema.enum.map(String).join('|')}` });
+  if (Array.isArray(schema.enum) && !schema.enum.some((e) => e === value)) {
+    out.push({
+      kind: 'enum',
+      path,
+      expected: schema.enum.map(String).join('|'),
+      actual: String(value),
+      message: `${path}: ${String(value)} is not one of ${schema.enum.map(String).join('|')}`,
+    });
   }
 
-  if (schema.format && typeof value === 'string' && FORMAT_RE[schema.format] && !FORMAT_RE[schema.format].test(value)) {
-    out.push({ kind: 'format', path, expected: schema.format, actual: 'malformed', message: `${path}: not a valid ${schema.format}` });
+  if (
+    schema.format &&
+    typeof value === 'string' &&
+    FORMAT_RE[schema.format] &&
+    !FORMAT_RE[schema.format].test(value)
+  ) {
+    out.push({
+      kind: 'format',
+      path,
+      expected: schema.format,
+      actual: 'malformed',
+      message: `${path}: not a valid ${schema.format}`,
+    });
   }
 
   if (actual === 'object' && (schema.properties || schema.required)) {
     const obj = value as Record<string, unknown>;
     for (const req of schema.required || []) {
-      if (!(req in obj)) out.push({ kind: 'required', path: `${path}.${req}`, expected: 'present', actual: 'absent', message: `${path}.${req}: required property is missing` });
+      if (!(req in obj))
+        out.push({
+          kind: 'required',
+          path: `${path}.${req}`,
+          expected: 'present',
+          actual: 'absent',
+          message: `${path}.${req}: required property is missing`,
+        });
       if (out.length >= MAX_VIOLATIONS) return out;
     }
     for (const [k, sub] of Object.entries(schema.properties || {})) {
@@ -106,15 +148,21 @@ export function validateAgainstSchema(value: unknown, schema: JsonSchema | null 
 }
 
 const KIND_SEVERITY: Record<ViolationKind, Severity> = {
-  type: 'medium', required: 'medium', enum: 'medium', format: 'low',
+  type: 'medium',
+  required: 'medium',
+  enum: 'medium',
+  format: 'low',
 };
 
 // Map violations onto schema-conformance findings. Capped at MAX_VIOLATIONS with a
 // trailing summary finding so the count is honest without flooding the report.
-export function conformanceFindings(body: unknown, schema: JsonSchema | null | undefined): Finding[] {
+export function conformanceFindings(
+  body: unknown,
+  schema: JsonSchema | null | undefined
+): Finding[] {
   if (!schema) return [];
   const violations = validateAgainstSchema(body, schema);
-  const findings: Finding[] = violations.map(v => ({
+  const findings: Finding[] = violations.map((v) => ({
     ruleId: `schema-conformance:${v.kind}`,
     oracle: 'schema-conformance',
     severity: KIND_SEVERITY[v.kind],
@@ -125,8 +173,13 @@ export function conformanceFindings(body: unknown, schema: JsonSchema | null | u
   }));
   if (violations.length >= MAX_VIOLATIONS) {
     findings.push({
-      ruleId: 'schema-conformance:summary', oracle: 'schema-conformance', severity: 'low',
-      title: `…and possibly more (capped at ${MAX_VIOLATIONS})`, path: '$', evidence: `Stopped after ${MAX_VIOLATIONS} violations`, source: 'rule',
+      ruleId: 'schema-conformance:summary',
+      oracle: 'schema-conformance',
+      severity: 'low',
+      title: `…and possibly more (capped at ${MAX_VIOLATIONS})`,
+      path: '$',
+      evidence: `Stopped after ${MAX_VIOLATIONS} violations`,
+      source: 'rule',
     });
   }
   return findings;

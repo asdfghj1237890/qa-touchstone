@@ -3,7 +3,14 @@
 // streaming, no auto-retry that re-sends without a fresh approval. Never log or
 // persist the raw prompt or response.
 import './setup';
-import { loadPrivacyCfg, resolvePolicy, classifyDestination, assertEgressAllowed, buildScrubber, AI_KINDS } from './aiPrivacy';
+import {
+  loadPrivacyCfg,
+  resolvePolicy,
+  classifyDestination,
+  assertEgressAllowed,
+  buildScrubber,
+  AI_KINDS,
+} from './aiPrivacy';
 import { ensureAiPolicy } from './aiPolicy';
 import { requestPromptApproval } from './PromptPreview';
 import { loadJSON } from './storage';
@@ -32,12 +39,21 @@ export interface AiSendOptions {
   backendPolicy?: BackendAiPolicy | null;
   api?: AiPolicyApi | null;
   callLLM?: (prompt: string) => Promise<any>;
-  approve?: (prompt: string, meta: { site: string; kind: string; mode: string; destination: AiDestination }) => Promise<any> | boolean;
+  approve?: (
+    prompt: string,
+    meta: { site: string; kind: string; mode: string; destination: AiDestination }
+  ) => Promise<any> | boolean;
 }
 
-const LLM_CFG_DEFAULTS: LlmCfg = { provider: 'builtin', model: 'claude-haiku-4-5', key: '', baseUrl: '' };
+const LLM_CFG_DEFAULTS: LlmCfg = {
+  provider: 'builtin',
+  model: 'claude-haiku-4-5',
+  key: '',
+  baseUrl: '',
+};
 function _loadLlmCfg(): LlmCfg {
-  if (typeof window !== 'undefined' && typeof window.loadLlmCfg === 'function') return window.loadLlmCfg();
+  if (typeof window !== 'undefined' && typeof window.loadLlmCfg === 'function')
+    return window.loadLlmCfg();
   const raw = loadJSON('qa_llm_cfg', {});
   return { ...LLM_CFG_DEFAULTS, ...(raw && typeof raw === 'object' ? raw : {}) };
 }
@@ -52,12 +68,17 @@ export async function qaCallLLM(prompt: string): Promise<string> {
     if (!(window.claude && window.claude.complete)) throw new Error('built-in Claude unavailable');
     return await window.claude.complete({ messages: [{ role: 'user', content: prompt }] });
   }
-  const url = cfg.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : cfg.baseUrl;
+  const url =
+    cfg.provider === 'openai' ? 'https://api.openai.com/v1/chat/completions' : cfg.baseUrl;
   if (!url) throw new Error('No custom provider endpoint configured (Settings → AI / LLM)');
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
-    body: JSON.stringify({ model: cfg.model, temperature: 0.2, messages: [{ role: 'user', content: prompt }] }),
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
+    body: JSON.stringify({
+      model: cfg.model,
+      temperature: 0.2,
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
   if (!res.ok) throw new Error('HTTP ' + res.status + ' from provider');
   const j = await res.json();
@@ -69,13 +90,14 @@ export async function qaCallLLM(prompt: string): Promise<string> {
 export async function qaAiSend(request: AiSendRequest, opts: AiSendOptions = {}): Promise<any> {
   const llmCfg = opts.llmCfg || _loadLlmCfg();
   const privacyCfg = opts.privacyCfg || loadPrivacyCfg();
-  const backendPolicy = 'backendPolicy' in opts ? opts.backendPolicy : await ensureAiPolicy(opts.api);
+  const backendPolicy =
+    'backendPolicy' in opts ? opts.backendPolicy : await ensureAiPolicy(opts.api);
   const callLLM = opts.callLLM || qaCallLLM;
   const approve = opts.approve || requestPromptApproval;
 
   const policy = resolvePolicy(privacyCfg, backendPolicy);
   const dest = classifyDestination(llmCfg);
-  assertEgressAllowed(policy.effectiveMode, dest, privacyCfg);   // throws EgressBlockedError
+  assertEgressAllowed(policy.effectiveMode, dest, privacyCfg); // throws EgressBlockedError
 
   const def = AI_KINDS[request.kind];
   if (!def) throw new Error('Unknown AI request kind: ' + request.kind);
@@ -83,7 +105,16 @@ export async function qaAiSend(request: AiSendRequest, opts: AiSendOptions = {})
   const redacted = def.redact(request.payload, { scrubber, mode: policy.effectiveMode });
   const prompt = def.buildPrompt(redacted);
 
-  const ok = await approve(prompt, { site: request.site, kind: request.kind, mode: policy.effectiveMode, destination: dest });
-  if (!ok) { const e = new Error('AI send cancelled by user'); e.name = 'AiCancelledError'; throw e; }
+  const ok = await approve(prompt, {
+    site: request.site,
+    kind: request.kind,
+    mode: policy.effectiveMode,
+    destination: dest,
+  });
+  if (!ok) {
+    const e = new Error('AI send cancelled by user');
+    e.name = 'AiCancelledError';
+    throw e;
+  }
   return await callLLM(prompt);
 }

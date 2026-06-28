@@ -3,7 +3,9 @@ use std::process::Command;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-fn bin() -> Command { Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci")) }
+fn bin() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_qa-touchstone-ci"))
+}
 
 fn write_temp(name: &str, contents: &str) -> std::path::PathBuf {
     let mut p = std::env::temp_dir();
@@ -14,7 +16,8 @@ fn write_temp(name: &str, contents: &str) -> std::path::PathBuf {
 }
 
 fn config_json(base: &str) -> String {
-    format!(r#"{{
+    format!(
+        r#"{{
       "version":1,
       "environments":[],
       "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
@@ -26,31 +29,78 @@ fn config_json(base: &str) -> String {
         {{"id":"pass","requests":["ok"]}},
         {{"id":"fail","requests":["ok","bad"]}}
       ]
-    }}"#)
+    }}"#
+    )
 }
 
 #[tokio::test]
 async fn run_all_pass_exits_0() {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/ok")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/ok"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
     let cfg = write_temp("p.json", &config_json(&server.uri()));
-    let out = bin().args(["run","--config",cfg.to_str().unwrap(),"--collection","pass","--identity","anon"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "pass",
+            "--identity",
+            "anon",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[tokio::test]
 async fn run_failed_assertion_exits_4() {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/ok")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/ok"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
     let cfg = write_temp("f.json", &config_json(&server.uri()));
-    let out = bin().args(["run","--config",cfg.to_str().unwrap(),"--collection","fail","--identity","anon"]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "fail",
+            "--identity",
+            "anon",
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(4));
 }
 
 #[test]
 fn unknown_collection_exits_2() {
     let cfg = write_temp("u.json", &config_json("https://example.invalid"));
-    let out = bin().args(["run","--config",cfg.to_str().unwrap(),"--collection","nope","--identity","anon"]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "nope",
+            "--identity",
+            "anon",
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
 
@@ -58,29 +108,60 @@ fn unknown_collection_exits_2() {
 fn data_and_iterations_conflict_exits_2() {
     let cfg = write_temp("c.json", &config_json("https://example.invalid"));
     let data = write_temp("d.csv", "a\n1\n");
-    let out = bin().args([
-        "run","--config",cfg.to_str().unwrap(),"--collection","pass","--identity","anon",
-        "--data",data.to_str().unwrap(),"--iterations","3",
-    ]).output().unwrap();
-    assert_eq!(out.status.code(), Some(2), "clap conflicts_with should reject");
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "pass",
+            "--identity",
+            "anon",
+            "--data",
+            data.to_str().unwrap(),
+            "--iterations",
+            "3",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "clap conflicts_with should reject"
+    );
 }
 
 #[test]
 fn empty_data_exits_2() {
     let cfg = write_temp("e.json", &config_json("https://example.invalid"));
     let data = write_temp("empty.csv", "a\n");
-    let out = bin().args([
-        "run","--config",cfg.to_str().unwrap(),"--collection","pass","--identity","anon",
-        "--data",data.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "pass",
+            "--identity",
+            "anon",
+            "--data",
+            data.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
 
 #[tokio::test]
 async fn run_writes_junit_with_failure_and_error() {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/ok")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
-    let cfg_json = format!(r#"{{
+    Mock::given(method("GET"))
+        .and(path("/ok"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    let cfg_json = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"anon","auth":{{"type":"none"}}}}],
       "requests":[
@@ -89,27 +170,55 @@ async fn run_writes_junit_with_failure_and_error() {
         {{"id":"boom","method":"GET","url":"http://127.0.0.1:1/x","assertions":[{{"type":"status","op":"eq","value":200}}]}}
       ],
       "collections":[{{"id":"mix","requests":["ok","bad","boom"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfg = write_temp("j.json", &cfg_json);
     let junit = write_temp("out.xml", "");
-    let out = bin().args([
-        "run","--config",cfg.to_str().unwrap(),"--collection","mix","--identity","anon",
-        "--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "mix",
+            "--identity",
+            "anon",
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(4)); // a failure + an error
     let xml = std::fs::read_to_string(&junit).unwrap();
     let doc = roxmltree::Document::parse(&xml).expect("well-formed junit file");
-    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("failure")).count(), 1);
-    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("error")).count(), 1);
+    assert_eq!(
+        doc.descendants()
+            .filter(|n| n.has_tag_name("failure"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        doc.descendants()
+            .filter(|n| n.has_tag_name("error"))
+            .count(),
+        1
+    );
 }
 
 // The server echoes whatever query it received into its JSON body, so a secret
 // substituted into the request surfaces in a response-derived assertion `actual`.
 async fn echo_server() -> MockServer {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).respond_with(|req: &wiremock::Request| {
-        ResponseTemplate::new(200).set_body_string(format!("{{\"echo\":\"{}\"}}", req.url.query().unwrap_or("")))
-    }).mount(&server).await;
+    Mock::given(method("GET"))
+        .respond_with(|req: &wiremock::Request| {
+            ResponseTemplate::new(200).set_body_string(format!(
+                "{{\"echo\":\"{}\"}}",
+                req.url.query().unwrap_or("")
+            ))
+        })
+        .mount(&server)
+        .await;
     server
 }
 
@@ -119,21 +228,38 @@ async fn identity_secret_never_appears_in_any_report() {
     // The bearer token rides in the Authorization header (never echoed by the server), so this
     // is an ALLOWLIST guard: `run` must not dump request/auth headers into any report. The
     // redaction-of-secret path itself is covered by data_row_secret_* and the core::redact tests.
-    let cfg = format!(r#"{{
+    let cfg = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"bearer","token":"SUPERSECRETTOKEN"}}}}],
       "requests":[{{"id":"r","method":"GET","url":"{base}/x","assertions":[{{"type":"status","op":"eq","value":200}}]}}],
       "collections":[{{"id":"c","requests":["r"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfgp = write_temp("rs.json", &cfg);
     let junit = write_temp("rs.xml", "");
-    let out = bin().args([
-        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
-        "--json","--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfgp.to_str().unwrap(),
+            "--collection",
+            "c",
+            "--identity",
+            "a",
+            "--json",
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     let xml = std::fs::read_to_string(&junit).unwrap();
-    assert!(!stdout.contains("SUPERSECRETTOKEN"), "json/human leaked token: {stdout}");
+    assert!(
+        !stdout.contains("SUPERSECRETTOKEN"),
+        "json/human leaked token: {stdout}"
+    );
     assert!(!xml.contains("SUPERSECRETTOKEN"), "junit leaked token");
 }
 
@@ -143,65 +269,125 @@ async fn data_row_secret_absent_even_when_it_reaches_url_and_actual() {
     // {{tok}} from the data row is substituted into the query (→ final_url) AND echoed into the
     // body; a FAILING bodyEq surfaces the echoed value into the assertion `actual`, which is
     // emitted in BOTH --json and the JUnit <failure>. Every path must be redacted.
-    let cfg = format!(r#"{{
+    let cfg = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
       "requests":[{{"id":"r","method":"GET","url":"{base}/x?tok={{{{tok}}}}",
         "assertions":[{{"type":"bodyEq","path":"echo","value":"MISMATCH"}}]}}],
       "collections":[{{"id":"c","requests":["r"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfgp = write_temp("dr.json", &cfg);
     let data = write_temp("dr.csv", "tok\nROWSECRETVALUE\n");
     let junit = write_temp("dr.xml", "");
-    let out = bin().args([
-        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
-        "--data",data.to_str().unwrap(),"--json","--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfgp.to_str().unwrap(),
+            "--collection",
+            "c",
+            "--identity",
+            "a",
+            "--data",
+            data.to_str().unwrap(),
+            "--json",
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     let xml = std::fs::read_to_string(&junit).unwrap();
-    assert!(!stdout.contains("ROWSECRETVALUE"), "json leaked data-row secret: {stdout}");
-    assert!(!xml.contains("ROWSECRETVALUE"), "junit leaked data-row secret: {xml}");
+    assert!(
+        !stdout.contains("ROWSECRETVALUE"),
+        "json leaked data-row secret: {stdout}"
+    );
+    assert!(
+        !xml.contains("ROWSECRETVALUE"),
+        "junit leaked data-row secret: {xml}"
+    );
     // Non-vacuous: the value really did reach the emitted assertion `actual` (JUnit <failure>),
     // so the redaction marker must be present — proving redaction did the work, not absence.
-    assert!(xml.contains("***REDACTED***"), "expected redaction marker in JUnit failure actual: {xml}");
+    assert!(
+        xml.contains("***REDACTED***"),
+        "expected redaction marker in JUnit failure actual: {xml}"
+    );
 }
 
 #[tokio::test]
 async fn response_body_and_headers_are_not_emitted_by_run() {
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/x")).respond_with(
-        ResponseTemplate::new(200)
-            .insert_header("X-Marker", "HEADERMARKER")
-            .set_body_string("{\"secretBodyField\":\"BODYMARKER\"}")
-    ).mount(&server).await;
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("X-Marker", "HEADERMARKER")
+                .set_body_string("{\"secretBodyField\":\"BODYMARKER\"}"),
+        )
+        .mount(&server)
+        .await;
     // assertion is on status only — nothing surfaces the body/header into an `actual`.
-    let cfg = format!(r#"{{
+    let cfg = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
       "requests":[{{"id":"r","method":"GET","url":"{base}/x","assertions":[{{"type":"status","op":"eq","value":200}}]}}],
       "collections":[{{"id":"c","requests":["r"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfgp = write_temp("aw.json", &cfg);
     let junit = write_temp("aw.xml", "");
-    let out = bin().args([
-        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
-        "--json","--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfgp.to_str().unwrap(),
+            "--collection",
+            "c",
+            "--identity",
+            "a",
+            "--json",
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&out.stdout);
     let xml = std::fs::read_to_string(&junit).unwrap();
     for marker in ["BODYMARKER", "HEADERMARKER", "secretBodyField"] {
-        assert!(!stdout.contains(marker), "run --json must not emit response body/headers: {marker}");
-        assert!(!xml.contains(marker), "run --junit must not emit response body/headers: {marker}");
+        assert!(
+            !stdout.contains(marker),
+            "run --json must not emit response body/headers: {marker}"
+        );
+        assert!(
+            !xml.contains(marker),
+            "run --junit must not emit response body/headers: {marker}"
+        );
     }
 }
 
 #[test]
 fn iterations_zero_exits_2() {
     let cfg = write_temp("i0.json", &config_json("https://example.invalid"));
-    let out = bin().args([
-        "run","--config",cfg.to_str().unwrap(),"--collection","pass","--identity","anon","--iterations","0",
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfg.to_str().unwrap(),
+            "--collection",
+            "pass",
+            "--identity",
+            "anon",
+            "--iterations",
+            "0",
+        ])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(2));
 }
 
@@ -209,9 +395,18 @@ fn iterations_zero_exits_2() {
 async fn junit_has_one_testsuite_per_data_iteration() {
     // spec §6: a 2-request collection over a 2-row data file → one <testsuite> per iteration.
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/a")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
-    Mock::given(method("GET")).and(path("/b")).respond_with(ResponseTemplate::new(200)).mount(&server).await;
-    let cfg = format!(r#"{{
+    Mock::given(method("GET"))
+        .and(path("/a"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/b"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+    let cfg = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"none"}}}}],
       "requests":[
@@ -219,20 +414,51 @@ async fn junit_has_one_testsuite_per_data_iteration() {
         {{"id":"rb","method":"GET","url":"{base}/b?p={{{{p}}}}","assertions":[{{"type":"status","op":"eq","value":200}}]}}
       ],
       "collections":[{{"id":"c","requests":["ra","rb"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfgp = write_temp("mi.json", &cfg);
-    let data = write_temp("mi.csv", "p\n1\n2\n");   // 2 rows → 2 iterations
+    let data = write_temp("mi.csv", "p\n1\n2\n"); // 2 rows → 2 iterations
     let junit = write_temp("mi.xml", "");
-    let out = bin().args([
-        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
-        "--data",data.to_str().unwrap(),"--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
-    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfgp.to_str().unwrap(),
+            "--collection",
+            "c",
+            "--identity",
+            "a",
+            "--data",
+            data.to_str().unwrap(),
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let xml = std::fs::read_to_string(&junit).unwrap();
     let doc = roxmltree::Document::parse(&xml).expect("well-formed junit");
-    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("testsuite")).count(), 2, "2 iterations → 2 suites: {xml}");
+    assert_eq!(
+        doc.descendants()
+            .filter(|n| n.has_tag_name("testsuite"))
+            .count(),
+        2,
+        "2 iterations → 2 suites: {xml}"
+    );
     // 2 iterations × 2 requests × 1 assertion each = 4 testcases
-    assert_eq!(doc.descendants().filter(|n| n.has_tag_name("testcase")).count(), 4, "{xml}");
+    assert_eq!(
+        doc.descendants()
+            .filter(|n| n.has_tag_name("testcase"))
+            .count(),
+        4,
+        "{xml}"
+    );
 }
 
 #[tokio::test]
@@ -241,26 +467,54 @@ async fn secret_with_quote_redacted_in_json_stringified_actual() {
     // quote-containing bearer token in its JSON body; bodyEq's actual is JSON.stringify'd,
     // so the secret surfaces ESCAPED (SEC\"RET). Both raw and escaped forms must be redacted.
     let server = MockServer::start().await;
-    Mock::given(method("GET")).and(path("/x")).respond_with(
-        ResponseTemplate::new(200).set_body_string("{\"echo\":\"SEC\\\"RET\"}")
-    ).mount(&server).await;
-    let cfg = format!(r#"{{
+    Mock::given(method("GET"))
+        .and(path("/x"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("{\"echo\":\"SEC\\\"RET\"}"))
+        .mount(&server)
+        .await;
+    let cfg = format!(
+        r#"{{
       "version":1,"environments":[],
       "identities":[{{"id":"a","auth":{{"type":"bearer","token":"SEC\"RET"}}}}],
       "requests":[{{"id":"r","method":"GET","url":"{base}/x",
         "assertions":[{{"type":"bodyEq","path":"echo","value":"MISMATCH"}}]}}],
       "collections":[{{"id":"c","requests":["r"]}}]
-    }}"#, base = server.uri());
+    }}"#,
+        base = server.uri()
+    );
     let cfgp = write_temp("q.json", &cfg);
     let junit = write_temp("q.xml", "");
-    let out = bin().args([
-        "run","--config",cfgp.to_str().unwrap(),"--collection","c","--identity","a",
-        "--json","--junit",junit.to_str().unwrap(),
-    ]).output().unwrap();
+    let out = bin()
+        .args([
+            "run",
+            "--config",
+            cfgp.to_str().unwrap(),
+            "--collection",
+            "c",
+            "--identity",
+            "a",
+            "--json",
+            "--junit",
+            junit.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     let xml = std::fs::read_to_string(&junit).unwrap();
-    assert!(!stdout.contains("SEC\"RET"), "raw secret leaked (json): {stdout}");
-    assert!(!stdout.contains("SEC\\\"RET"), "escaped secret leaked (json): {stdout}");
-    assert!(!xml.contains("SEC\"RET"), "raw secret leaked (junit): {xml}");
-    assert!(!xml.contains("SEC\\\"RET"), "escaped secret leaked (junit): {xml}");
+    assert!(
+        !stdout.contains("SEC\"RET"),
+        "raw secret leaked (json): {stdout}"
+    );
+    assert!(
+        !stdout.contains("SEC\\\"RET"),
+        "escaped secret leaked (json): {stdout}"
+    );
+    assert!(
+        !xml.contains("SEC\"RET"),
+        "raw secret leaked (junit): {xml}"
+    );
+    assert!(
+        !xml.contains("SEC\\\"RET"),
+        "escaped secret leaked (junit): {xml}"
+    );
 }

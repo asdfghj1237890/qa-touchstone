@@ -1,7 +1,10 @@
 import React from 'react';
 import {
-  MONITOR_SCHEDULER_INTERVAL_MS, MONITOR_STORAGE_KEY,
-  nextMonitorDueAt, normalizeMonitor, runMonitorCollection,
+  MONITOR_SCHEDULER_INTERVAL_MS,
+  MONITOR_STORAGE_KEY,
+  nextMonitorDueAt,
+  normalizeMonitor,
+  runMonitorCollection,
 } from '../Monitors';
 import { loadJSON, saveJSON } from '../storage';
 import { useWorkspace } from './WorkspaceContext';
@@ -52,7 +55,9 @@ export function MonitorsProvider({ children }: { children: React.ReactNode }) {
   const monitorCtxRef = React.useRef<Record<string, unknown>>({});
   const monitorRunningRef = React.useRef<string | null>(null);
 
-  React.useEffect(() => { monitorsRef.current = monitors; }, [monitors]);
+  React.useEffect(() => {
+    monitorsRef.current = monitors;
+  }, [monitors]);
 
   React.useEffect(() => {
     monitorCtxRef.current = { env, vars, cookies, sslVerify, tests, oauthTokens };
@@ -101,13 +106,22 @@ export function MonitorsProvider({ children }: { children: React.ReactNode }) {
     })();
   };
 
-  const toggleMonitor = (id: string) => setMonitors((ms) => ms.map((m) => {
-    if (m.id !== id) return m;
-    const enabled = !m.enabled;
-    return { ...m, enabled, nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null, nextRun: enabled ? '' : 'paused' };
-  }));
+  const toggleMonitor = (id: string) =>
+    setMonitors((ms) =>
+      ms.map((m) => {
+        if (m.id !== id) return m;
+        const enabled = !m.enabled;
+        return {
+          ...m,
+          enabled,
+          nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null,
+          nextRun: enabled ? '' : 'paused',
+        };
+      })
+    );
 
-  const createMonitor = (mon: Partial<Monitor>) => setMonitors((ms) => [normalizeMonitor(mon), ...ms]);
+  const createMonitor = (mon: Partial<Monitor>) =>
+    setMonitors((ms) => [normalizeMonitor(mon), ...ms]);
 
   React.useEffect(() => {
     const tick = () => {
@@ -121,7 +135,14 @@ export function MonitorsProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
-  const value: MonitorsState = { monitors, setMonitors, monitorRunning, runMonitorById, toggleMonitor, createMonitor };
+  const value: MonitorsState = {
+    monitors,
+    setMonitors,
+    monitorRunning,
+    runMonitorById,
+    toggleMonitor,
+    createMonitor,
+  };
   return <MonitorsContext.Provider value={value}>{children}</MonitorsContext.Provider>;
 }
 

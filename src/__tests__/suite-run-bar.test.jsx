@@ -17,7 +17,13 @@ describe('SuiteRunBar', () => {
   });
   it('shows progress + a Stop button while running', () => {
     const onStop = vi.fn();
-    wrap(<SuiteRunBar suite={{ running: true, engine: 'bola', done: 3, total: 8 }} onRun={() => {}} onStop={onStop} />);
+    wrap(
+      <SuiteRunBar
+        suite={{ running: true, engine: 'bola', done: 3, total: 8 }}
+        onRun={() => {}}
+        onStop={onStop}
+      />
+    );
     expect(screen.getByText(/Running BOLA/)).toBeTruthy();
     fireEvent.click(screen.getByText('Stop'));
     expect(onStop).toHaveBeenCalledTimes(1);
@@ -27,13 +33,29 @@ describe('SuiteRunBar', () => {
 describe('SuiteRunBar export menu', () => {
   it('shows the export menu when canExport and calls onExport with format + redaction', () => {
     const onExport = vi.fn();
-    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}} canExport={true} onExport={onExport} />);
+    wrap(
+      <SuiteRunBar
+        suite={{ running: false }}
+        onRun={() => {}}
+        onStop={() => {}}
+        canExport={true}
+        onExport={onExport}
+      />
+    );
     fireEvent.click(screen.getByText('Export report ▾'));
     fireEvent.click(screen.getByText('SARIF'));
     expect(onExport).toHaveBeenCalledWith('sarif', 'redacted');
   });
   it('hides the export control when canExport is false', () => {
-    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}} canExport={false} onExport={() => {}} />);
+    wrap(
+      <SuiteRunBar
+        suite={{ running: false }}
+        onRun={() => {}}
+        onStop={() => {}}
+        canExport={false}
+        onExport={() => {}}
+      />
+    );
     expect(screen.queryByText('Export report ▾')).toBeNull();
   });
 });
@@ -41,16 +63,32 @@ describe('SuiteRunBar export menu', () => {
 describe('SuiteRunBar evidence option', () => {
   it('offers the Evidence redaction option only when canEvidence and forwards it', () => {
     const onExport = vi.fn();
-    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}}
-                      canExport canEvidence onExport={onExport} onSaveEvidence={() => {}} />);
+    wrap(
+      <SuiteRunBar
+        suite={{ running: false }}
+        onRun={() => {}}
+        onStop={() => {}}
+        canExport
+        canEvidence
+        onExport={onExport}
+        onSaveEvidence={() => {}}
+      />
+    );
     fireEvent.click(screen.getByText('Export report ▾'));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'evidence' } });
     fireEvent.click(screen.getByText('JSON'));
     expect(onExport).toHaveBeenCalledWith('json', 'evidence');
   });
   it('hides the Evidence option when canEvidence is false', () => {
-    wrap(<SuiteRunBar suite={{ running: false }} onRun={() => {}} onStop={() => {}}
-                      canExport onExport={() => {}} />);
+    wrap(
+      <SuiteRunBar
+        suite={{ running: false }}
+        onRun={() => {}}
+        onStop={() => {}}
+        canExport
+        onExport={() => {}}
+      />
+    );
     fireEvent.click(screen.getByText('Export report ▾'));
     expect(screen.queryByRole('option', { name: 'Evidence (redacted artifact)' })).toBeNull();
   });

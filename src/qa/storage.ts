@@ -40,7 +40,9 @@ function notifyError(key: string, error: any) {
         detail: { key, message: String((error && error.message) || error) },
       })
     );
-  } catch { /* window unavailable（純 node 測試）— 已有 console.error */ }
+  } catch {
+    /* window unavailable（純 node 測試）— 已有 console.error */
+  }
 }
 
 // ── Schema versioning / migration ───────────────────────────────────────────
@@ -57,10 +59,19 @@ export type MigrationStep = (data: any) => any;
 // Bring `parsed` up to `targetVersion`. Data with no recorded version (legacy
 // raw) is treated as v0 and run through every step. Only object records carry a
 // version stamp (arrays/scalars pass through unstamped — wrap them if needed).
-export function migrateRecord(parsed: any, targetVersion: number, migrations: MigrationStep[] = []): any {
+export function migrateRecord(
+  parsed: any,
+  targetVersion: number,
+  migrations: MigrationStep[] = []
+): any {
   let data = parsed;
   let from = 0;
-  if (data && typeof data === 'object' && !Array.isArray(data) && typeof data[SCHEMA_VERSION_FIELD] === 'number') {
+  if (
+    data &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    typeof data[SCHEMA_VERSION_FIELD] === 'number'
+  ) {
     from = data[SCHEMA_VERSION_FIELD];
   }
   for (let v = from; v < targetVersion; v++) {
@@ -75,7 +86,12 @@ export function migrateRecord(parsed: any, targetVersion: number, migrations: Mi
 
 // Versioned read: parse `key`, migrate to `currentVersion`, return the result —
 // or `fallback` if the key is absent or a migration throws (never propagates).
-export function loadVersioned<T = unknown>(key: string, currentVersion: number, migrations: MigrationStep[], fallback: T): T {
+export function loadVersioned<T = unknown>(
+  key: string,
+  currentVersion: number,
+  migrations: MigrationStep[],
+  fallback: T
+): T {
   const raw = loadJSON<any>(key, null);
   if (raw == null) return fallback;
   try {
@@ -88,9 +104,10 @@ export function loadVersioned<T = unknown>(key: string, currentVersion: number, 
 
 // Versioned write: stamp `currentVersion` onto an object payload before persisting.
 export function saveVersioned(key: string, currentVersion: number, value: unknown): boolean {
-  const out = (value && typeof value === 'object' && !Array.isArray(value))
-    ? { ...(value as Record<string, unknown>), [SCHEMA_VERSION_FIELD]: currentVersion }
-    : value;
+  const out =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...(value as Record<string, unknown>), [SCHEMA_VERSION_FIELD]: currentVersion }
+      : value;
   return saveJSON(key, out);
 }
 
@@ -141,19 +158,26 @@ export function saveString(key: string, value: unknown): boolean {
 function scheduleMirrorFlush(key: string): void {
   if (!_api || !MIRRORED_KEYS.includes(key)) return;
   if (_flushTimer) clearTimeout(_flushTimer);
-  _flushTimer = setTimeout(() => { flushMirror(); }, FLUSH_DELAY_MS);
+  _flushTimer = setTimeout(() => {
+    flushMirror();
+  }, FLUSH_DELAY_MS);
 }
 
 // 把鏡像 key 目前的 localStorage 原始字串寫進 user_data.json（debounce 後呼叫）。
 export async function flushMirror(): Promise<void> {
   if (!_api) return;
-  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+  if (_flushTimer) {
+    clearTimeout(_flushTimer);
+    _flushTimer = null;
+  }
   const blob: MirrorBlob = { __qaMirror: 1 };
   for (const k of MIRRORED_KEYS) {
     try {
       const raw = localStorage.getItem(k);
       if (raw != null) blob[k] = raw;
-    } catch { /* 單一 key 讀不到就略過 */ }
+    } catch {
+      /* 單一 key 讀不到就略過 */
+    }
   }
   try {
     await _api.saveUserData(blob);
@@ -164,7 +188,9 @@ export async function flushMirror(): Promise<void> {
 
 // App 開機（render 前）呼叫。非 Tauri 環境 loadUserData 會 reject —— 安靜停用鏡像。
 // localStorage 已有的 key 一律以 localStorage 為準（不覆寫），只還原缺少的。
-export async function initStorageMirror(api: StorageMirrorApi | null | undefined): Promise<boolean> {
+export async function initStorageMirror(
+  api: StorageMirrorApi | null | undefined
+): Promise<boolean> {
   if (!api || typeof api.loadUserData !== 'function') return false;
   let blob: unknown = null;
   try {
@@ -173,7 +199,12 @@ export async function initStorageMirror(api: StorageMirrorApi | null | undefined
     return false; // 非 Tauri / 後端不可用：鏡像停用
   }
   _api = api;
-  if (!blob || typeof blob !== 'object' || Array.isArray(blob) || (blob as MirrorBlob).__qaMirror !== 1) {
+  if (
+    !blob ||
+    typeof blob !== 'object' ||
+    Array.isArray(blob) ||
+    (blob as MirrorBlob).__qaMirror !== 1
+  ) {
     return true; // 鏡像啟用，但磁碟尚無快照（首次啟動）
   }
   const snapshot = blob as MirrorBlob;
@@ -182,7 +213,9 @@ export async function initStorageMirror(api: StorageMirrorApi | null | undefined
       if (localStorage.getItem(k) == null && typeof snapshot[k] === 'string') {
         localStorage.setItem(k, snapshot[k]);
       }
-    } catch { /* 還原單一 key 失敗不阻斷其他 key */ }
+    } catch {
+      /* 還原單一 key 失敗不阻斷其他 key */
+    }
   }
   return true;
 }
@@ -190,5 +223,8 @@ export async function initStorageMirror(api: StorageMirrorApi | null | undefined
 // 測試用：重設模組內部狀態。
 export function _resetStorageMirrorForTests(): void {
   _api = null;
-  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+  if (_flushTimer) {
+    clearTimeout(_flushTimer);
+    _flushTimer = null;
+  }
 }

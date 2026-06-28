@@ -65,8 +65,18 @@ describe('qaParseSetCookie — RFC 6265 §5.3 Domain validation (CRITICAL)', () 
   it('rejects expanded-PSL entries (ccTLD seconds + SaaS suffixes)', () => {
     // Spot-check a few entries from the expanded list. If these regress, the
     // PSL has shrunk and a class of cookie-poisoning attack is reopened.
-    for (const dom of ['co.jp', 'co.kr', 'com.tw', 'co.in', 'com.br', 'co.za',
-                       'vercel.app', 'netlify.app', 'herokuapp.com', 'ngrok.app']) {
+    for (const dom of [
+      'co.jp',
+      'co.kr',
+      'com.tw',
+      'co.in',
+      'com.br',
+      'co.za',
+      'vercel.app',
+      'netlify.app',
+      'herokuapp.com',
+      'ngrok.app',
+    ]) {
       // attacker sits at <attacker>.<dom>, tries to scope to the suffix
       expect(qaParseSetCookie('x=1; Domain=' + dom, 'evil.' + dom)).toBeNull();
     }

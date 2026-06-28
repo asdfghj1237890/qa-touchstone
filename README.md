@@ -29,11 +29,11 @@ docs in one app.
 
 ![QA Touchstone](docs/screenshots/01-home.png)
 
-| Security matrix (RBAC) | AI test generation | API client |
-| --- | --- | --- |
-| ![Security matrix](docs/screenshots/02-security-matrix.png) | ![AI test generation](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png) |
-| **Generated API docs** | **Performance / load testing** | **Realtime (WebSocket / SSE)** |
-| ![Generated API docs](docs/screenshots/05-api-docs.png) | ![Performance testing](docs/screenshots/06-performance.png) | ![Realtime testing](docs/screenshots/07-realtime.png) |
+| Security matrix (RBAC)                                      | AI test generation                                             | API client                                            |
+| ----------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------- |
+| ![Security matrix](docs/screenshots/02-security-matrix.png) | ![AI test generation](docs/screenshots/03-test-generation.png) | ![API client](docs/screenshots/04-api-client.png)     |
+| **Generated API docs**                                      | **Performance / load testing**                                 | **Realtime (WebSocket / SSE)**                        |
+| ![Generated API docs](docs/screenshots/05-api-docs.png)     | ![Performance testing](docs/screenshots/06-performance.png)    | ![Realtime testing](docs/screenshots/07-realtime.png) |
 
 <sub>Regenerate with `node scripts/capture-screenshots.mjs` while the dev server is running (drives your system Chrome over the DevTools Protocol; set `LOCALE=zh-TW` for a Chinese UI).</sub>
 
@@ -263,6 +263,244 @@ Build the desktop app:
 ```bash
 npm run tauri:build
 ```
+
+</details>
+
+## Headless CI Runner
+
+<details open>
+<summary>Run QA Touchstone without the desktop UI</summary>
+
+`qa-touchstone-ci` is a standalone, headless runner for CI systems. It does not
+link Tauri or the OS keychain layer, so it can run in a normal GitHub Actions,
+GitLab CI, Jenkins, or container job. Tagged releases publish these CLI assets
+alongside the desktop installers:
+
+- `qa-touchstone-ci-linux-x64.tar.gz`
+- `qa-touchstone-ci-macos-<arch>.tar.gz`
+- `qa-touchstone-ci-windows-x64.zip`
+- matching `.sha256` checksum files
+
+The CI surface is the `qa-touchstone-ci` command set below. It is intentionally
+smaller than the desktop app: CI jobs run deterministic API, security, and
+performance checks from files and environment variables, without the Tauri UI or
+OS keychain.
+
+| CI capability                | Command        | Needs network | Needs k6 on runner | Typical CI output                              |
+| ---------------------------- | -------------- | ------------- | ------------------ | ---------------------------------------------- |
+| Raw smoke probe              | `ping`         | Yes           | No                 | Human status line                              |
+| Postman/OpenAPI conversion   | `import`       | No            | No                 | `qa.json` scaffold                             |
+| One API request + assertions | `send`         | Yes           | No                 | JSON result                                    |
+| Collection/API smoke suite   | `run`          | Yes           | No                 | JSON + optional JUnit XML                      |
+| k6-backed performance check  | `perf`         | Yes           | **Yes**            | JSON + optional k6 summary export              |
+| Security scan/report gate    | `scan`         | Yes           | No                 | JSON, HTML, JUnit XML, SARIF, baseline updates |
+| BOLA config candidate helper | `bola-suggest` | No            | No                 | Human or JSON candidate list                   |
+
+The headless CLI does **not** bundle k6. API checks, collection runs, BOLA
+suggestions, imports, and security scans work with only the `qa-touchstone-ci`
+binary; the `perf` command requires `k6` to already be installed on the CI
+runner, or passed explicitly with `--k6-bin`.
+
+Desktop-only features are not part of the headless artifact: no interactive UI,
+no background monitor scheduler, no OS keychain storage, no bundled desktop k6
+resource, and no AI-assisted generation flow. In CI, store secrets in the
+runner's secret manager and reference them from config as environment-backed
+values such as `{ "env": "API_TOKEN" }`.
+
+Build it locally from this repository:
+
+```bash
+cargo build --manifest-path src-tauri/Cargo.toml -p qa-touchstone-ci --release
+./src-tauri/target/release/qa-touchstone-ci --version
+```
+
+A minimal CI config looks like this:
+
+```json
+{
+  "version": 1,
+  "environments": [{ "name": "staging", "variables": { "baseUrl": "https://api.example.com" } }],
+  "identities": [
+    { "id": "anon", "auth": { "type": "none" } },
+    { "id": "api", "auth": { "type": "bearer", "token": { "env": "API_TOKEN" } } }
+  ],
+  "requests": [
+    {
+      "id": "health",
+      "method": "GET",
+      "url": "{{baseUrl}}/health",
+      "assertions": [{ "type": "status", "op": "eq", "value": 200 }]
+    },
+    {
+      "id": "admin-users",
+      "method": "GET",
+      "url": "{{baseUrl}}/admin/users",
+      "privileged": true
+    }
+  ],
+  "collections": [{ "id": "smoke", "requests": ["health"] }],
+  "security": {
+    "matrix": {
+      "endpoints": ["admin-users"],
+      "expect": { "admin-users": { "anon": "deny", "api": "allow" } }
+    }
+  }
+}
+```
+
+Call it step by step:
+
+```bash
+# Convert Postman / OpenAPI JSON into qa.json when needed.
+qa-touchstone-ci import --input postman.json --base-url https://api.example.com --out qa.generated.json
+
+# Send one request and emit machine-readable JSON.
+API_TOKEN="$API_TOKEN" qa-touchstone-ci send \
+  --config qa.json \
+  --request health \
+  --identity api \
+  --env staging \
+  --json
+
+# Run a collection and write JUnit for CI test results.
+API_TOKEN="$API_TOKEN" qa-touchstone-ci run \
+  --config qa.json \
+  --collection smoke \
+  --identity api \
+  --env staging \
+  --junit reports/qa-run.xml \
+  --json > reports/qa-run.json
+
+# Run a k6 performance check. Requires k6 on PATH, or pass --k6-bin /path/to/k6.
+k6 version
+API_TOKEN="$API_TOKEN" qa-touchstone-ci perf \
+  --config qa.json \
+  --request health \
+  --identity api \
+  --env staging \
+  --stage 30s:5 \
+  --stage 1m:10 \
+  --summary-out reports/k6-summary.json \
+  --json > reports/k6-run.json
+
+# Run the security suite and emit CI artifacts.
+API_TOKEN="$API_TOKEN" qa-touchstone-ci scan \
+  --config qa.json \
+  --env staging \
+  --json \
+  --out reports/security.json \
+  --html reports/security.html \
+  --junit reports/security-junit.xml \
+  --sarif reports/security.sarif \
+  --fail-on high
+```
+
+Exit codes are stable: `0` pass, `1` runtime/network error, `2` invalid input,
+`3` security findings at or above `--fail-on`, and `4` assertion failure or a
+non-zero k6 result from `perf`. To adopt a current scan as the baseline, run `scan` with
+`--baseline .qa/security-baseline.json --update-baseline`; later scans compare
+against that file and gate on new findings.
+
+`perf --script-out` writes the generated k6 script for review/debugging. That
+script can contain auth headers or tokens, so do not upload it as a CI artifact
+unless your secrets policy allows it. The normal temporary script is deleted
+after k6 exits.
+
+Example GitHub Actions job in another repository:
+
+```yaml
+name: qa-touchstone
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  api-security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      QA_TOUCHSTONE_VERSION: v0.22.0
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QA Touchstone CLI
+        run: |
+          set -euo pipefail
+          asset="qa-touchstone-ci-linux-x64.tar.gz"
+          base="https://github.com/asdfghj1237890/qa-touchstone/releases/download/${QA_TOUCHSTONE_VERSION}"
+          curl -fsSLO "${base}/${asset}"
+          curl -fsSLO "${base}/${asset}.sha256"
+          sha256sum -c "${asset}.sha256"
+          tar -xzf "${asset}"
+          sudo mv qa-touchstone-ci-linux-x64/qa-touchstone-ci /usr/local/bin/qa-touchstone-ci
+
+      - name: Run API smoke collection
+        run: |
+          mkdir -p reports
+          qa-touchstone-ci run \
+            --config qa-touchstone.json \
+            --collection smoke \
+            --identity api \
+            --env staging \
+            --junit reports/qa-run.xml \
+            --json > reports/qa-run.json
+
+      - name: Verify k6 is available
+        run: k6 version
+
+      - name: Run k6 performance check
+        run: |
+          qa-touchstone-ci perf \
+            --config qa-touchstone.json \
+            --request health \
+            --identity api \
+            --env staging \
+            --stage 30s:5 \
+            --summary-out reports/k6-summary.json \
+            --json > reports/k6-run.json
+
+      - name: Run security scan
+        id: scan
+        run: |
+          set +e
+          qa-touchstone-ci scan \
+            --config qa-touchstone.json \
+            --env staging \
+            --json \
+            --out reports/security.json \
+            --html reports/security.html \
+            --junit reports/security-junit.xml \
+            --sarif reports/security.sarif \
+            --fail-on high
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/security.sarif
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-touchstone-reports
+          path: reports/
+
+      - name: Fail on QA Touchstone gate
+        if: steps.scan.outputs.exit_code != '0'
+        run: exit ${{ steps.scan.outputs.exit_code }}
+```
+
+Pin action SHAs in production workflows if your organization enforces strict
+supply-chain controls.
 
 </details>
 

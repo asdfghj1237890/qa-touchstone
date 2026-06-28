@@ -4,7 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const RE = /(\bfrom\s+|\bimport\s+|import\(\s*|vi\.mock\(\s*)(['"])(\.{1,2}\/[^'"]+?)\.(?:js|jsx)\2/g;
+const RE =
+  /(\bfrom\s+|\bimport\s+|import\(\s*|vi\.mock\(\s*)(['"])(\.{1,2}\/[^'"]+?)\.(?:js|jsx)\2/g;
 
 let changed = 0;
 let scanned = 0;

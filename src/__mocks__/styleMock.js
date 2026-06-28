@@ -5,4 +5,4 @@ export default {};
 module.exports = {};
 
 // For named exports compatibility
-export const mockClass = 'mock-css-class'; 
+export const mockClass = 'mock-css-class';

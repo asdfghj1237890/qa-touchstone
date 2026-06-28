@@ -5,7 +5,9 @@ const invokeMock = vi.fn();
 const listenMock = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invokeMock(...a) }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listenMock(...a) }));
-vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ close: vi.fn(), minimize: vi.fn(), toggleMaximize: vi.fn() }) }));
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ close: vi.fn(), minimize: vi.fn(), toggleMaximize: vi.fn() }),
+}));
 const openMock = vi.fn();
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...a) => openMock(...a) }));
 
@@ -26,9 +28,13 @@ describe('api module', () => {
 
   it('暴露所有事件訂閱方法（避免呼叫到 undefined 而崩潰）', () => {
     for (const name of [
-      'onConfigUpdated', 'removeConfigListener', 'onConfigLoaded',
-      'processCommandOutput', 'removeCommandOutputListener',
-      'onPostmanCollectionsUpdated', 'removePostmanCollectionsUpdatedListener',
+      'onConfigUpdated',
+      'removeConfigListener',
+      'onConfigLoaded',
+      'processCommandOutput',
+      'removeCommandOutputListener',
+      'onPostmanCollectionsUpdated',
+      'removePostmanCollectionsUpdatedListener',
     ]) {
       expect(typeof api[name], `${name} 應為 function`).toBe('function');
     }
@@ -36,19 +42,43 @@ describe('api module', () => {
 
   it('已下線的 Electron 遺留方法不再暴露（serial / network / flash / certs / fsops legacy）', () => {
     for (const name of [
-      'listSerialPorts', 'configureSerialPort', 'openSerialPort', 'closeSerialPort',
-      'sendSerialData', 'startSerialListening', 'sendFileSerial', 'receiveFileSerial',
-      'onSerialProgress', 'onSerialDataReceived', 'onSerialError',
-      'testSshConnection', 'scanNetworkDevices',
-      'updateFlashPathData', 'getFlashPathData',
-      'scanCertificates', 'getCertificatesPath', 'getSelectedCertificate',
-      'readDirectory', 'readFileContent', 'findHexFile',
-      'runCommandWithRealTimeOutput', 'runProgramWithRealTimeOutput',
-      'scanCredentials', 'getCredentialsPath', 'getSelectedCredential',
-      'openSettings', 'closeWindow',
-      'saveVisiblePages', 'loadVisiblePages', 'clearCaches',
-      'saveFilterModel', 'loadFilterModel', 'saveSelectionModel', 'loadSelectionModel',
-      'saveApiTestState', 'loadApiTestState',
+      'listSerialPorts',
+      'configureSerialPort',
+      'openSerialPort',
+      'closeSerialPort',
+      'sendSerialData',
+      'startSerialListening',
+      'sendFileSerial',
+      'receiveFileSerial',
+      'onSerialProgress',
+      'onSerialDataReceived',
+      'onSerialError',
+      'testSshConnection',
+      'scanNetworkDevices',
+      'updateFlashPathData',
+      'getFlashPathData',
+      'scanCertificates',
+      'getCertificatesPath',
+      'getSelectedCertificate',
+      'readDirectory',
+      'readFileContent',
+      'findHexFile',
+      'runCommandWithRealTimeOutput',
+      'runProgramWithRealTimeOutput',
+      'scanCredentials',
+      'getCredentialsPath',
+      'getSelectedCredential',
+      'openSettings',
+      'closeWindow',
+      'saveVisiblePages',
+      'loadVisiblePages',
+      'clearCaches',
+      'saveFilterModel',
+      'loadFilterModel',
+      'saveSelectionModel',
+      'loadSelectionModel',
+      'saveApiTestState',
+      'loadApiTestState',
     ]) {
       expect(api[name], `${name} 應已移除`).toBeUndefined();
     }
@@ -100,7 +130,9 @@ describe('api module', () => {
   it('setApiCredentialConfigs 轉呼 invoke set_api_credential_configs 帶 apiConfigs', async () => {
     invokeMock.mockResolvedValue({ success: true });
     await api.setApiCredentialConfigs([{ id: 'a' }]);
-    expect(invokeMock).toHaveBeenCalledWith('set_api_credential_configs', { apiConfigs: [{ id: 'a' }] });
+    expect(invokeMock).toHaveBeenCalledWith('set_api_credential_configs', {
+      apiConfigs: [{ id: 'a' }],
+    });
   });
 
   it('loadUserData / saveUserData 轉呼對應 invoke', async () => {
@@ -122,7 +154,15 @@ describe('api module', () => {
     listenMock.mockResolvedValue(unlisten);
     invokeMock.mockResolvedValue(0);
     const cb = vi.fn();
-    const args = ['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'];
+    const args = [
+      'run',
+      '--quiet',
+      '--summary-mode',
+      'disabled',
+      '--out',
+      'json=-',
+      '/tmp/script.js',
+    ];
     const code = await api.runK6WithRealTimeOutput(args, null, cb);
     expect(code).toBe(0);
     expect(listenMock).toHaveBeenCalledWith('command-output', expect.any(Function));
@@ -137,8 +177,14 @@ describe('api module', () => {
       return vi.fn();
     });
     invokeMock.mockResolvedValue(0);
-    const cb = vi.fn((d) => { captured = d; });
-    await api.runK6WithRealTimeOutput(['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'], null, cb);
+    const cb = vi.fn((d) => {
+      captured = d;
+    });
+    await api.runK6WithRealTimeOutput(
+      ['run', '--quiet', '--summary-mode', 'disabled', '--out', 'json=-', '/tmp/script.js'],
+      null,
+      cb
+    );
     expect(captured).toBe('line1');
   });
 
@@ -163,15 +209,21 @@ describe('api module', () => {
   it('savePostmanCollection 帶 filePath/collectionData', async () => {
     invokeMock.mockResolvedValue({ success: true });
     await api.savePostmanCollection('/p/c.json', { info: { name: 'c' } });
-    expect(invokeMock).toHaveBeenCalledWith('save_postman_collection', { filePath: '/p/c.json', collectionData: { info: { name: 'c' } } });
+    expect(invokeMock).toHaveBeenCalledWith('save_postman_collection', {
+      filePath: '/p/c.json',
+      collectionData: { info: { name: 'c' } },
+    });
   });
 
   it('executePostmanRequest 轉呼 invoke execute_postman_request 帶整個 details', async () => {
     invokeMock.mockResolvedValue({ success: true, status: 200, headers: {}, body: '{}' });
     const details = {
       requestDetails: { request: { method: 'GET', url: { raw: 'https://x/y' } } },
-      params: {}, apiConfigId: null, selectedProfile: null,
-      selectedEnvironment: null, isFileTransferCollection: false,
+      params: {},
+      apiConfigId: null,
+      selectedProfile: null,
+      selectedEnvironment: null,
+      isFileTransferCollection: false,
     };
     await api.executePostmanRequest(details);
     expect(invokeMock).toHaveBeenCalledWith('execute_postman_request', details);
@@ -183,7 +235,10 @@ describe('api module', () => {
   it('setAwsSecret 轉呼 invoke set_aws_secret 帶 id/secret', async () => {
     invokeMock.mockResolvedValue({ success: true });
     await api.setAwsSecret('profile-1', 'sk-secret');
-    expect(invokeMock).toHaveBeenCalledWith('set_aws_secret', { id: 'profile-1', secret: 'sk-secret' });
+    expect(invokeMock).toHaveBeenCalledWith('set_aws_secret', {
+      id: 'profile-1',
+      secret: 'sk-secret',
+    });
   });
 
   it('hasAwsSecret 轉呼 invoke has_aws_secret 帶 id 並回傳 boolean', async () => {

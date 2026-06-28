@@ -3,32 +3,66 @@ use serde_json::Value;
 
 #[derive(serde::Deserialize)]
 struct File {
-    #[serde(rename = "denySet")] deny_set: Vec<i64>,
-    #[serde(rename = "match")] match_cases: Vec<MatchCase>,
+    #[serde(rename = "denySet")]
+    deny_set: Vec<i64>,
+    #[serde(rename = "match")]
+    match_cases: Vec<MatchCase>,
     classify: Vec<ClassifyCase>,
     ncf: Vec<NcfCase>,
     control: Vec<ControlCase>,
-    #[serde(rename = "idKey")] id_key: Vec<IdKeyCase>,
+    #[serde(rename = "idKey")]
+    id_key: Vec<IdKeyCase>,
     synth: Vec<SynthCase>,
 }
 
 #[derive(serde::Deserialize)]
-struct MatchCase { name: String, attack: Value, owner: Value, idv: Value, expected: bool }
+struct MatchCase {
+    name: String,
+    attack: Value,
+    owner: Value,
+    idv: Value,
+    expected: bool,
+}
 
 #[derive(serde::Deserialize)]
-struct ClassifyCase { name: String, status: Option<i64>, matched: bool, expected: String }
+struct ClassifyCase {
+    name: String,
+    status: Option<i64>,
+    matched: bool,
+    expected: String,
+}
 
 #[derive(serde::Deserialize)]
-struct NcfCase { name: String, status: Option<i64>, matched: bool, expected: bool }
+struct NcfCase {
+    name: String,
+    status: Option<i64>,
+    matched: bool,
+    expected: bool,
+}
 
 #[derive(serde::Deserialize)]
-struct ControlCase { name: String, control: Value, owner: Value, idv: Value, synth: String, expected: bool }
+struct ControlCase {
+    name: String,
+    control: Value,
+    owner: Value,
+    idv: Value,
+    synth: String,
+    expected: bool,
+}
 
 #[derive(serde::Deserialize)]
-struct IdKeyCase { name: String, key: String, expected: bool }
+struct IdKeyCase {
+    name: String,
+    key: String,
+    expected: bool,
+}
 
 #[derive(serde::Deserialize)]
-struct SynthCase { name: String, sample: Value, expected: String }
+struct SynthCase {
+    name: String,
+    sample: Value,
+    expected: String,
+}
 
 fn verdict_str(v: BolaVerdict) -> &'static str {
     match v {

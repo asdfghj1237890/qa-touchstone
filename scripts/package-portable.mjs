@@ -8,11 +8,22 @@
 //       （放好 resources/k6.exe）。本腳本只組裝，不編譯。
 //
 // 用法：npm run package:portable
-import { readFileSync, existsSync, rmSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  readFileSync,
+  existsSync,
+  rmSync,
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1'), '..');
+const root = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1'),
+  '..'
+);
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 const ver = pkg.version;
 
@@ -35,7 +46,9 @@ const candidates = readdirSync(releaseDir)
   .map((f) => path.join(releaseDir, f));
 if (!candidates.length) die(`${releaseDir} 下找不到 portable exe（請先 \`npm run tauri:build\`）`);
 const exe = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
-console.log(`portable: 使用 ${path.basename(exe)}（最新修改：${statSync(exe).mtime.toISOString()}）`);
+console.log(
+  `portable: 使用 ${path.basename(exe)}（最新修改：${statSync(exe).mtime.toISOString()}）`
+);
 
 const dist = path.join(root, 'dist');
 const stageRoot = path.join(dist, 'QA Touchstone');
@@ -51,8 +64,15 @@ copyFileSync(k6, path.join(stageRoot, 'resources', 'k6.exe'));
 
 // 壓縮：Windows 用 PowerShell 的 Compress-Archive，其他平台用 zip。
 if (process.platform === 'win32') {
-  execFileSync('powershell', ['-NoProfile', '-Command',
-    `Compress-Archive -Path '${stageRoot}' -DestinationPath '${zipPath}' -Force`], { stdio: 'inherit' });
+  execFileSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-Command',
+      `Compress-Archive -Path '${stageRoot}' -DestinationPath '${zipPath}' -Force`,
+    ],
+    { stdio: 'inherit' }
+  );
 } else {
   execFileSync('zip', ['-r', zipPath, 'QA Touchstone'], { cwd: dist, stdio: 'inherit' });
 }

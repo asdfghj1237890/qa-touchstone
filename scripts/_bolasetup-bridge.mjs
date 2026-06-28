@@ -8,8 +8,12 @@ import { tmpdir } from 'node:os';
 
 // esbuild plugin: stub ./setup (side-effect-only), any ?raw import, and api/index.
 const stub = {
-  name: 'stub', setup(b) {
-    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, a => ({ path: a.path, namespace: 'stub' }));
+  name: 'stub',
+  setup(b) {
+    b.onResolve({ filter: /(\?raw$)|(\/setup$)|(api\/index$)/ }, (a) => ({
+      path: a.path,
+      namespace: 'stub',
+    }));
     b.onLoad({ filter: /.*/, namespace: 'stub' }, () => ({
       contents: `
 const guard = new Proxy(function(){}, {
@@ -24,15 +28,25 @@ export default guard;
 };
 const __dir = dirname(fileURLToPath(import.meta.url));
 const tmpDir = mkdtempSync(join(tmpdir(), 'qa-bolasetup-'));
-process.on('exit', () => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+process.on('exit', () => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {}
+});
 
 const res = await build({
   entryPoints: [join(__dir, '..', 'src', 'qa', 'bolaSetup.ts')],
-  bundle: true, format: 'esm', write: false, platform: 'node', logLevel: 'silent', plugins: [stub],
+  bundle: true,
+  format: 'esm',
+  write: false,
+  platform: 'node',
+  logLevel: 'silent',
+  plugins: [stub],
 });
 const tmp = join(tmpDir, 'bolaSetup.mjs');
 writeFileSync(tmp, res.outputFiles[0].text);
 const mod = await import('file://' + tmp.replace(/\\/g, '/'));
-if (typeof mod.detectIdLocation !== 'function') throw new Error('detectIdLocation not exported from bolaSetup.ts bundle');
+if (typeof mod.detectIdLocation !== 'function')
+  throw new Error('detectIdLocation not exported from bolaSetup.ts bundle');
 
 export const detectIdLocation = mod.detectIdLocation;

@@ -6,7 +6,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::AsyncReadExt;
 
 /// 通用設定 —— pipe stdout/stderr、設工作目錄、Unix 上的 PATH/process group。
-fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<String>) -> tokio::process::Command {
+fn finalize_cmd(
+    mut cmd: tokio::process::Command,
+    working_directory: &Option<String>,
+) -> tokio::process::Command {
     if let Some(dir) = working_directory {
         if !dir.is_empty() {
             cmd.current_dir(dir);
@@ -35,26 +38,47 @@ fn finalize_cmd(mut cmd: tokio::process::Command, working_directory: &Option<Str
 
 /// Structured-args spawn — no shell interpretation. Use this for trusted
 /// programs (e.g. the bundled k6 binary) to keep injection surface zero.
-fn build_program(program: &str, args: &[String], working_directory: &Option<String>) -> tokio::process::Command {
+fn build_program(
+    program: &str,
+    args: &[String],
+    working_directory: &Option<String>,
+) -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(program);
     cmd.args(args);
     finalize_cmd(cmd, working_directory)
 }
 
 fn validate_k6_args(args: &[String]) -> Result<(), String> {
-    const PREFIX: [&str; 6] = ["run", "--quiet", "--summary-mode", "disabled", "--out", "json=-"];
-    if args.len() != PREFIX.len() + 1 || !PREFIX.iter().enumerate().all(|(i, expected)| args[i] == *expected) {
+    const PREFIX: [&str; 6] = [
+        "run",
+        "--quiet",
+        "--summary-mode",
+        "disabled",
+        "--out",
+        "json=-",
+    ];
+    if args.len() != PREFIX.len() + 1
+        || !PREFIX
+            .iter()
+            .enumerate()
+            .all(|(i, expected)| args[i] == *expected)
+    {
         return Err("Unsupported k6 invocation".into());
     }
     let script = std::path::PathBuf::from(&args[PREFIX.len()]);
-    let canon_script = std::fs::canonicalize(&script)
-        .map_err(|e| format!("Invalid k6 script path: {e}"))?;
+    let canon_script =
+        std::fs::canonicalize(&script).map_err(|e| format!("Invalid k6 script path: {e}"))?;
     let temp = std::env::temp_dir();
     let canon_temp = std::fs::canonicalize(&temp).unwrap_or(temp);
     if !canon_script.starts_with(&canon_temp) {
         return Err("Refusing to run a k6 script outside the temp dir".into());
     }
-    if canon_script.extension().and_then(|e| e.to_str()).map(|e| e.eq_ignore_ascii_case("js")) != Some(true) {
+    if canon_script
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("js"))
+        != Some(true)
+    {
         return Err("k6 script must be a .js temp file".into());
     }
     Ok(())
@@ -105,7 +129,9 @@ async fn spawn_stream_wait(
     }
 
     let status = child.wait().await;
-    for h in handles { let _ = h.await; }
+    for h in handles {
+        let _ = h.await;
+    }
     // 擁有權檢查：只有 current_process_pid 仍是這次寫的值才清掉。
     if let Some(our) = our_pid {
         let mut guard = state.current_process_pid.lock();
@@ -185,7 +211,10 @@ mod tests {
     #[tokio::test]
     async fn build_program_spawns_without_shell() {
         #[cfg(target_os = "windows")]
-        let (prog, args) = ("cmd", vec!["/C".to_string(), "echo".to_string(), "hi".to_string()]);
+        let (prog, args) = (
+            "cmd",
+            vec!["/C".to_string(), "echo".to_string(), "hi".to_string()],
+        );
         #[cfg(not(target_os = "windows"))]
         let (prog, args) = ("/bin/echo", vec!["hi".to_string()]);
         let mut cmd = build_program(prog, &args, &None);
@@ -195,7 +224,9 @@ mod tests {
         let mut buf = [0u8; 1024];
         loop {
             let n = out.read(&mut buf).await.unwrap();
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             s.push_str(&String::from_utf8_lossy(&buf[..n]));
         }
         let status = child.wait().await.unwrap();
@@ -208,8 +239,13 @@ mod tests {
         let path = std::env::temp_dir().join(format!("qa-k6-{}-test.js", std::process::id()));
         std::fs::write(&path, "export default function() {}\n").unwrap();
         let args = vec![
-            "run".into(), "--quiet".into(), "--summary-mode".into(), "disabled".into(),
-            "--out".into(), "json=-".into(), path.to_string_lossy().to_string(),
+            "run".into(),
+            "--quiet".into(),
+            "--summary-mode".into(),
+            "disabled".into(),
+            "--out".into(),
+            "json=-".into(),
+            path.to_string_lossy().to_string(),
         ];
         assert!(validate_k6_args(&args).is_ok());
         std::fs::remove_file(path).ok();
@@ -238,13 +274,21 @@ mod tests {
         // run A finalizes — must NOT clear, since current is B's pid.
         {
             let mut g = guard.lock();
-            if *g == Some(our_a) { *g = None; }
+            if *g == Some(our_a) {
+                *g = None;
+            }
         }
-        assert_eq!(*guard.lock(), Some(our_b), "A's finalizer wrongly cleared B's PID");
+        assert_eq!(
+            *guard.lock(),
+            Some(our_b),
+            "A's finalizer wrongly cleared B's PID"
+        );
         // run B finalizes — clears its own.
         {
             let mut g = guard.lock();
-            if *g == Some(our_b) { *g = None; }
+            if *g == Some(our_b) {
+                *g = None;
+            }
         }
         assert_eq!(*guard.lock(), None);
     }

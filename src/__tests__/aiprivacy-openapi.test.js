@@ -7,10 +7,21 @@ const SPEC = JSON.stringify({
     '/users/{id}/orders': {
       get: {
         parameters: [{ name: 'id', example: '42831' }],
-        responses: { '200': { content: { 'application/json': { schema: {
-          type: 'object',
-          properties: { email: { type: 'string', example: 'real@acme.com' }, total: { type: 'number', default: 99 } },
-        } } } } },
+        responses: {
+          200: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    email: { type: 'string', example: 'real@acme.com' },
+                    total: { type: 'number', default: 99 },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     },
   },
@@ -18,7 +29,9 @@ const SPEC = JSON.stringify({
 
 describe('redactOpenApi', () => {
   const out = redactOpenApi(SPEC);
-  it('drops servers/host', () => { expect(out).not.toContain('prod.acme.com'); });
+  it('drops servers/host', () => {
+    expect(out).not.toContain('prod.acme.com');
+  });
   it('keeps path templates + methods + field names', () => {
     expect(out).toContain('/users/{id}/orders');
     expect(out).toContain('get');
@@ -38,7 +51,9 @@ describe('redactOpenApi', () => {
     expect(out).not.toContain('internal.acme.corp');
   });
   it('scrubs free-text string values (description) in JSON specs', () => {
-    const spec = JSON.stringify({ paths: { '/x': { get: { description: 'contact admin@acme.com or ssn 123-45-6789' } } } });
+    const spec = JSON.stringify({
+      paths: { '/x': { get: { description: 'contact admin@acme.com or ssn 123-45-6789' } } },
+    });
     const out = redactOpenApi(spec);
     expect(out).not.toContain('admin@acme.com');
     expect(out).not.toContain('123-45-6789');

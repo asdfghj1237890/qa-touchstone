@@ -3,22 +3,22 @@ import { describe, it, expect } from 'vitest';
 import { bflaPlan, classifyBfla, bflaSeverity, bflaFinding, runBfla } from '../qa/bfla';
 
 const anon = { id: 'anon', name: 'anon', auth: { type: 'none' } };
-const user = { id: 'u', name: 'user', auth: { type: 'bearer' } };           // non-privileged
+const user = { id: 'u', name: 'user', auth: { type: 'bearer' } }; // non-privileged
 const admin = { id: 'a', name: 'admin', auth: { type: 'bearer' }, privileged: true };
 
-const adminEp = { reqId: 'e1', method: 'DELETE', path: '/admin/users/1' };   // privileged (write + admin)
-const readPriv = { reqId: 'e2', method: 'GET', path: '/internal/metrics' };  // privileged (admin path)
-const publicEp = { reqId: 'e3', method: 'GET', path: '/profile' };           // not privileged
+const adminEp = { reqId: 'e1', method: 'DELETE', path: '/admin/users/1' }; // privileged (write + admin)
+const readPriv = { reqId: 'e2', method: 'GET', path: '/internal/metrics' }; // privileged (admin path)
+const publicEp = { reqId: 'e3', method: 'GET', path: '/profile' }; // not privileged
 
 describe('bflaPlan', () => {
   it('pairs each privileged endpoint with each NON-privileged identity (expectation: deny)', () => {
     const plan = bflaPlan([adminEp, readPriv, publicEp], [anon, user, admin]);
     // privileged endpoints: adminEp, readPriv. non-priv identities: anon, user. → 2×2 = 4 pairs.
     expect(plan).toHaveLength(4);
-    expect(plan.every(p => p.expectation === 'deny')).toBe(true);
+    expect(plan.every((p) => p.expectation === 'deny')).toBe(true);
     // the privileged admin identity is never the attacker; the public endpoint is never targeted.
-    expect(plan.some(p => p.identity.id === 'a')).toBe(false);
-    expect(plan.some(p => p.endpoint.reqId === 'e3')).toBe(false);
+    expect(plan.some((p) => p.identity.id === 'a')).toBe(false);
+    expect(plan.some((p) => p.endpoint.reqId === 'e3')).toBe(false);
   });
 });
 
@@ -47,7 +47,12 @@ describe('bflaSeverity', () => {
 describe('bflaFinding', () => {
   it('emits an OWASP-API5 finding for a confirmed BFLA hole', () => {
     const f = bflaFinding(adminEp, user, 'vuln');
-    expect(f).toMatchObject({ oracle: 'bfla', ruleId: 'bfla', severity: 'critical', path: 'DELETE /admin/users/1' });
+    expect(f).toMatchObject({
+      oracle: 'bfla',
+      ruleId: 'bfla',
+      severity: 'critical',
+      path: 'DELETE /admin/users/1',
+    });
     expect(f.evidence).toMatch(/user/);
   });
   it('returns null when there is no hole', () => {
@@ -65,20 +70,30 @@ describe('runBfla', () => {
     const { findings, results } = await runBfla(endpoints, identities, runner, {});
     // 1 privileged endpoint × 2 non-priv identities (anon, user) = 2 vulns
     expect(findings).toHaveLength(2);
-    expect(findings.every(f => f.severity === 'critical')).toBe(true);
+    expect(findings.every((f) => f.severity === 'critical')).toBe(true);
     expect(results.length).toBe(2);
   });
 
   it('reports no findings when the endpoint correctly denies under-privileged callers', async () => {
-    const runner = (ep, identity) => Promise.resolve(identity.privileged ? { status: 200, body: {} } : { status: 403, body: {} });
+    const runner = (ep, identity) =>
+      Promise.resolve(identity.privileged ? { status: 200, body: {} } : { status: 403, body: {} });
     const { findings } = await runBfla(endpoints, identities, runner, {});
     expect(findings).toHaveLength(0);
   });
 
   it('stops early when aborted', async () => {
-    const c = new AbortController(); c.abort();
+    const c = new AbortController();
+    c.abort();
     let calls = 0;
-    await runBfla(endpoints, identities, () => { calls++; return Promise.resolve({ status: 200, body: {} }); }, { signal: c.signal });
+    await runBfla(
+      endpoints,
+      identities,
+      () => {
+        calls++;
+        return Promise.resolve({ status: 200, body: {} });
+      },
+      { signal: c.signal }
+    );
     expect(calls).toBe(0);
   });
 });

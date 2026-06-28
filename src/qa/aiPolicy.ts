@@ -12,12 +12,21 @@ export interface AiPolicyApi {
   getAiPolicy?: () => Promise<unknown> | unknown;
 }
 
-export const AI_POLICY_DENY: Readonly<AiPolicy> = Object.freeze({ externalAllowed: false, forcedMode: 'local', locked: true });
+export const AI_POLICY_DENY: Readonly<AiPolicy> = Object.freeze({
+  externalAllowed: false,
+  forcedMode: 'local',
+  locked: true,
+});
 
 let _cached: AiPolicy | null = null;
 let _loading: Promise<AiPolicy> | null = null;
-export function getCachedAiPolicy(): AiPolicy | null { return _cached; }
-export function setCachedAiPolicy(p: AiPolicy | null): void { _cached = p; _loading = null; }
+export function getCachedAiPolicy(): AiPolicy | null {
+  return _cached;
+}
+export function setCachedAiPolicy(p: AiPolicy | null): void {
+  _cached = p;
+  _loading = null;
+}
 
 function normalizePolicy(p: any): AiPolicy {
   if (!p || typeof p !== 'object') return AI_POLICY_DENY;
@@ -33,18 +42,27 @@ function normalizePolicy(p: any): AiPolicy {
 export async function loadAiPolicy(apiMod?: AiPolicyApi | null): Promise<AiPolicy> {
   try {
     const api = apiMod || (await import('../api/index')).default;
-    if (api && api.getAiPolicy) { _cached = normalizePolicy(await api.getAiPolicy()); return _cached; }
-  } catch { /* not in Tauri / command unavailable */ }
-  const viteFlag = (import.meta && import.meta.env && import.meta.env.VITE_QA_ALLOW_EXTERNAL_AI);
+    if (api && api.getAiPolicy) {
+      _cached = normalizePolicy(await api.getAiPolicy());
+      return _cached;
+    }
+  } catch {
+    /* not in Tauri / command unavailable */
+  }
+  const viteFlag = import.meta && import.meta.env && import.meta.env.VITE_QA_ALLOW_EXTERNAL_AI;
   const allowed = viteFlag === 'true' || viteFlag === '1';
-  _cached = allowed ? { externalAllowed: true, forcedMode: undefined, locked: false } : AI_POLICY_DENY;
+  _cached = allowed
+    ? { externalAllowed: true, forcedMode: undefined, locked: false }
+    : AI_POLICY_DENY;
   return _cached;
 }
 
 export async function ensureAiPolicy(apiMod?: AiPolicyApi | null): Promise<AiPolicy> {
   if (_cached) return _cached;
   if (!_loading) {
-    _loading = loadAiPolicy(apiMod).finally(() => { _loading = null; });
+    _loading = loadAiPolicy(apiMod).finally(() => {
+      _loading = null;
+    });
   }
   try {
     return await _loading;

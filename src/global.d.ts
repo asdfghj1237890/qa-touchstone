@@ -24,7 +24,9 @@ declare global {
     loadLlmCfg?: () => { provider: string; model: string; key: string; baseUrl: string };
     saveLlmCfg?: (cfg: any) => void;
     /** claude.ai Artifacts 沙箱注入；桌面版不存在。 */
-    claude?: { complete: (req: { messages: Array<{ role: string; content: string }> }) => Promise<string> };
+    claude?: {
+      complete: (req: { messages: Array<{ role: string; content: string }> }) => Promise<string>;
+    };
     /** Tauri 注入。 */
     __TAURI_INTERNALS__?: unknown;
     __TAURI__?: unknown;
@@ -37,17 +39,36 @@ declare global {
   interface Window {
     qaDynamic?: (name: string) => string | number | null;
     QA_DYNAMICS?: string[];
-    qaVarSources?: (vars: any, envLabel?: string, collectionId?: string | null, local?: Record<string, any> | null) => Record<string, string>;
+    qaVarSources?: (
+      vars: any,
+      envLabel?: string,
+      collectionId?: string | null,
+      local?: Record<string, any> | null
+    ) => Record<string, string>;
     QA_SCOPES?: string[];
     qaHasVars?: (text: unknown) => boolean;
-    qaUnknownVars?: (text: string | null | undefined, map?: Record<string, string> | null) => string[];
+    qaUnknownVars?: (
+      text: string | null | undefined,
+      map?: Record<string, string> | null
+    ) => string[];
     qaGetPath?: (obj: any, path: unknown) => any;
     qaAssertLabel?: (a: any) => string;
     qaEval?: (a: any, resp: any) => any;
     qaRunAssertions?: (list: any[] | null | undefined, resp: any) => any[];
-    qaParseAssertion?: (str: string) => { type: string; op?: string; value?: number; path?: string; name?: string; text?: string; on: boolean };
+    qaParseAssertion?: (str: string) => {
+      type: string;
+      op?: string;
+      value?: number;
+      path?: string;
+      name?: string;
+      text?: string;
+      on: boolean;
+    };
     qaMergeCookie?: (jar: any[], ck: any) => any[];
-    qaParseDataFile?: (text: string | null | undefined, filename?: string | null) => { rows: any[] | null; columns: string[]; error: string; format: 'json' | 'csv' | null };
+    qaParseDataFile?: (
+      text: string | null | undefined,
+      filename?: string | null
+    ) => { rows: any[] | null; columns: string[]; error: string; format: 'json' | 'csv' | null };
   }
 }
 

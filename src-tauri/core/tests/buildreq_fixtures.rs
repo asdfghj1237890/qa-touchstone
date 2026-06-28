@@ -26,8 +26,10 @@ struct Fixtures {
 }
 
 fn load_fixtures() -> Fixtures {
-    let text = fs::read_to_string(fixture_path()).expect("buildreq.json not found — run `node scripts/gen-fixtures.mjs`");
-    let root: serde_json::Value = serde_json::from_str(&text).expect("buildreq.json must be valid JSON");
+    let text = fs::read_to_string(fixture_path())
+        .expect("buildreq.json not found — run `node scripts/gen-fixtures.mjs`");
+    let root: serde_json::Value =
+        serde_json::from_str(&text).expect("buildreq.json must be valid JSON");
     let fixed_now_ms = root["fixedNowMs"]
         .as_i64()
         .expect("buildreq.json must have top-level `fixedNowMs`");
@@ -41,7 +43,11 @@ fn load_fixtures() -> Fixtures {
         .as_array()
         .expect("buildreq.json must have top-level `cases`")
         .clone();
-    Fixtures { fixed_now_ms, floats, cases }
+    Fixtures {
+        fixed_now_ms,
+        floats,
+        cases,
+    }
 }
 
 fn get_expected(cases: &[serde_json::Value], name: &str) -> serde_json::Value {
@@ -66,7 +72,11 @@ fn bare_req(method: &str, url: &str) -> Request {
 }
 
 fn anon() -> Identity {
-    Identity { id: "anon".into(), auth: Auth::None, privileged: false }
+    Identity {
+        id: "anon".into(),
+        auth: Auth::None,
+        privileged: false,
+    }
 }
 
 fn no_map() -> BTreeMap<String, String> {
@@ -81,9 +91,18 @@ fn bearer() {
     let expected = get_expected(&fix.cases, "bearer");
 
     let req = bare_req("GET", "https://x.example/u");
-    let id = Identity { id: "id".into(), auth: Auth::Bearer { token: "TOK".into() }, privileged: false };
+    let id = Identity {
+        id: "id".into(),
+        auth: Auth::Bearer {
+            token: "TOK".into(),
+        },
+        privileged: false,
+    };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "bearer: Rust output must match TS buildPayload golden");
+    assert_eq!(
+        got, expected,
+        "bearer: Rust output must match TS buildPayload golden"
+    );
 }
 
 #[test]
@@ -94,11 +113,18 @@ fn apikey_header() {
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
-        auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Header },
+        auth: Auth::ApiKey {
+            key: "X-API-Key".into(),
+            value: "AK".into(),
+            location: ApiKeyIn::Header,
+        },
         privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "apikey_header: Rust output must match TS buildPayload golden");
+    assert_eq!(
+        got, expected,
+        "apikey_header: Rust output must match TS buildPayload golden"
+    );
 }
 
 #[test]
@@ -109,11 +135,18 @@ fn apikey_query() {
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
-        auth: Auth::ApiKey { key: "X-API-Key".into(), value: "AK".into(), location: ApiKeyIn::Query },
+        auth: Auth::ApiKey {
+            key: "X-API-Key".into(),
+            value: "AK".into(),
+            location: ApiKeyIn::Query,
+        },
         privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "apikey_query: Rust output must match TS buildPayload golden");
+    assert_eq!(
+        got, expected,
+        "apikey_query: Rust output must match TS buildPayload golden"
+    );
 }
 
 #[test]
@@ -124,11 +157,17 @@ fn basic() {
     let req = bare_req("GET", "https://x.example/u");
     let id = Identity {
         id: "id".into(),
-        auth: Auth::Basic { username: "u".into(), password: "p".into() },
+        auth: Auth::Basic {
+            username: "u".into(),
+            password: "p".into(),
+        },
         privileged: false,
     };
     let got = build_request(&req, &id, &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "basic: Rust output must match TS buildPayload golden (Basic dTpw)");
+    assert_eq!(
+        got, expected,
+        "basic: Rust output must match TS buildPayload golden (Basic dTpw)"
+    );
 }
 
 #[test]
@@ -137,9 +176,15 @@ fn query_enc() {
     let expected = get_expected(&fix.cases, "query_enc");
 
     let mut req = bare_req("GET", "https://x.example/s");
-    req.query = vec![Kv { key: "q".into(), value: "a b&c".into() }];
+    req.query = vec![Kv {
+        key: "q".into(),
+        value: "a b&c".into(),
+    }];
     let got = build_request(&req, &anon(), &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "query_enc: Rust output must match TS encodeURIComponent golden");
+    assert_eq!(
+        got, expected,
+        "query_enc: Rust output must match TS encodeURIComponent golden"
+    );
 }
 
 #[test]
@@ -148,9 +193,15 @@ fn json_body() {
     let expected = get_expected(&fix.cases, "json_body");
 
     let mut req = bare_req("POST", "https://x.example/u");
-    req.body = Some(Body { mode: BodyMode::Json, content: r#"{"a":1}"#.into() });
+    req.body = Some(Body {
+        mode: BodyMode::Json,
+        content: r#"{"a":1}"#.into(),
+    });
     let got = build_request(&req, &anon(), &no_map(), &mut NoDynamics).unwrap();
-    assert_eq!(got, expected, "json_body: Rust output must match TS buildPayload golden");
+    assert_eq!(
+        got, expected,
+        "json_body: Rust output must match TS buildPayload golden"
+    );
 }
 
 #[test]
@@ -161,8 +212,14 @@ fn timestamp_query() {
     // $timestamp is clock-only — no float consumption — so PinnedDynamics cursor stays at 0.
     let mut dyns = PinnedDynamics::new(fix.fixed_now_ms, fix.floats.clone());
     let mut req = bare_req("GET", "https://x.example/u");
-    req.query = vec![Kv { key: "t".into(), value: "{{$timestamp}}".into() }];
+    req.query = vec![Kv {
+        key: "t".into(),
+        value: "{{$timestamp}}".into(),
+    }];
     let got = build_request(&req, &anon(), &no_map(), &mut dyns).unwrap();
     // With FIXED_NOW=1700000000000 ms → $timestamp = floor(1700000000000/1000) = 1700000000
-    assert_eq!(got, expected, "timestamp_query: Rust PinnedDynamics must match TS pinned Date.now golden");
+    assert_eq!(
+        got, expected,
+        "timestamp_query: Rust PinnedDynamics must match TS pinned Date.now golden"
+    );
 }

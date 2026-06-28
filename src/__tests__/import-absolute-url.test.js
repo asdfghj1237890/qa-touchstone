@@ -13,14 +13,30 @@ const baseReq = (url) => ({ method: 'GET', url, headers: [], params: [], auth: {
 describe('absolute-URL imports stay callable', () => {
   it('qaParseImport keeps an absolute URL whole (object url form)', () => {
     const collection = {
-      info: { name: 'Demo', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
-      item: [{
-        name: 'Animals',
-        item: [{
-          name: 'Random cat fact',
-          request: { method: 'GET', header: [], url: { raw: 'https://catfact.ninja/fact', protocol: 'https', host: ['catfact', 'ninja'], path: ['fact'] } },
-        }],
-      }],
+      info: {
+        name: 'Demo',
+        schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      },
+      item: [
+        {
+          name: 'Animals',
+          item: [
+            {
+              name: 'Random cat fact',
+              request: {
+                method: 'GET',
+                header: [],
+                url: {
+                  raw: 'https://catfact.ninja/fact',
+                  protocol: 'https',
+                  host: ['catfact', 'ninja'],
+                  path: ['fact'],
+                },
+              },
+            },
+          ],
+        },
+      ],
     };
     const parsed = qaParseImport(JSON.stringify(collection));
     expect(parsed.error).toBeUndefined();
@@ -29,13 +45,51 @@ describe('absolute-URL imports stay callable', () => {
     expect(reqEntry.path).toBe('https://catfact.ninja/fact');
   });
 
+  it('qaParseImport parses inline query from an absolute object raw URL when query[] is absent', () => {
+    const collection = {
+      info: { name: 'Demo', schema: 'v2.1.0' },
+      item: [
+        {
+          name: 'Lookup',
+          request: {
+            method: 'GET',
+            header: [],
+            url: { raw: 'https://api.example.test/search?q=coffee&sort=desc' },
+          },
+        },
+      ],
+    };
+    const parsed = qaParseImport(JSON.stringify(collection));
+    const reqEntry = parsed.collection.folders[0].requests[0];
+    expect(reqEntry.path).toBe('https://api.example.test/search?q=coffee&sort=desc');
+    expect(parsed.details[reqEntry.id].params).toEqual([
+      { key: 'q', value: 'coffee', on: true },
+      { key: 'sort', value: 'desc', on: true },
+    ]);
+
+    window.QA.COLLECTIONS = [parsed.collection];
+    window.QA.REQUEST_DETAILS = parsed.details;
+    const req = buildReq(reqEntry.id);
+    const payload = buildPayload(req, { baseUrl: 'https://ignored.example' }, {});
+    expect(payload.requestDetails.request.url).toBe(
+      'https://api.example.test/search?q=coffee&sort=desc'
+    );
+  });
+
   it('qaParseImport keeps an absolute URL whole (string url form)', () => {
     const collection = {
       info: { name: 'Demo', schema: 'v2.1.0' },
-      item: [{ name: 'Get', request: { method: 'GET', header: [], url: 'https://api.agify.io/?name=michael' } }],
+      item: [
+        {
+          name: 'Get',
+          request: { method: 'GET', header: [], url: 'https://api.agify.io/?name=michael' },
+        },
+      ],
     };
     const parsed = qaParseImport(JSON.stringify(collection));
-    expect(parsed.collection.folders[0].requests[0].path).toBe('https://api.agify.io/?name=michael');
+    expect(parsed.collection.folders[0].requests[0].path).toBe(
+      'https://api.agify.io/?name=michael'
+    );
     // The query must also be parsed into details.params so buildReq strips it
     // from the URL without losing it, and the executor re-emits it once.
     const id = parsed.collection.folders[0].requests[0].id;
@@ -59,7 +113,11 @@ describe('absolute-URL imports stay callable', () => {
   });
 
   it('buildPayload runs an absolute URL as-is (ignores env base)', () => {
-    const payload = buildPayload(baseReq('https://catfact.ninja/fact'), { baseUrl: 'https://api.acme.dev' }, {});
+    const payload = buildPayload(
+      baseReq('https://catfact.ninja/fact'),
+      { baseUrl: 'https://api.acme.dev' },
+      {}
+    );
     expect(payload.requestDetails.request.url).toBe('https://catfact.ninja/fact');
   });
 
@@ -68,10 +126,38 @@ describe('absolute-URL imports stay callable', () => {
     expect(payload.requestDetails.request.url).toBe('https://api.acme.dev/v1/users');
   });
 
+  it('buildPayload marks API key style headers as redirect-sensitive', () => {
+    const payload = buildPayload(
+      {
+        ...baseReq('https://api.test/thing'),
+        headers: [{ key: 'X-Api-Key', value: '{{apiKey}}', on: true }],
+        auth: {
+          type: 'apiKey',
+          apiKey: { key: 'X-Tenant-Token', value: '{{tenantToken}}', placement: 'header' },
+        },
+      },
+      { baseUrl: '' },
+      { apiKey: 'ak', tenantToken: 'tk' }
+    );
+    expect(payload.sensitiveHeaderNames).toEqual(['X-Api-Key', 'X-Tenant-Token']);
+  });
+
   it('buildReq preserves imported request headers', () => {
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'With header', path: 'https://api.test/thing' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'With header', path: 'https://api.test/thing' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = {
       r1: {
         params: [],
@@ -98,9 +184,19 @@ describe('absolute-URL imports stay callable', () => {
     expect(reqs).toHaveLength(26);
     expect(reqs.every((r) => /^https:\/\//.test(r.path))).toBe(true);
     // each absolute URL must execute as-is (no env base prepended)
-    const sample = reqs.find((r) => r.path === 'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true');
-    const payload = buildPayload({ ...baseReq(sample.path), headers: [], params: [] }, { baseUrl: 'https://ignored.example' }, {});
-    expect(payload.requestDetails.request.url).toBe('https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true');
+    const sample = reqs.find(
+      (r) =>
+        r.path ===
+        'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true'
+    );
+    const payload = buildPayload(
+      { ...baseReq(sample.path), headers: [], params: [] },
+      { baseUrl: 'https://ignored.example' },
+      {}
+    );
+    expect(payload.requestDetails.request.url).toBe(
+      'https://api.open-meteo.com/v1/forecast?latitude=25.0330&longitude=121.5654&current_weather=true'
+    );
     // the POST request carries its JSON body through import
     const post = reqs.find((r) => r.path === 'https://jsonplaceholder.typicode.com/posts');
     expect(post.method).toBe('POST');

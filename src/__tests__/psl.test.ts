@@ -72,7 +72,13 @@ describe('PSL — 正規化與邊界', () => {
 
 describe('PSL — supercookie 攻擊面（cookie jar 的實際用法）', () => {
   it('拒絕把 Domain 設在公共後綴的企圖', () => {
-    for (const evil of ['com', 'co.uk', 'github.io', 's3.amazonaws.com', 'xyz.compute.amazonaws.com']) {
+    for (const evil of [
+      'com',
+      'co.uk',
+      'github.io',
+      's3.amazonaws.com',
+      'xyz.compute.amazonaws.com',
+    ]) {
       expect(isPublicSuffix(evil), `Domain=${evil} 必須被拒`).toBe(true);
     }
   });

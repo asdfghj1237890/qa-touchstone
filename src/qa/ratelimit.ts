@@ -2,7 +2,17 @@
 // Fires a bounded real burst at an endpoint and reports whether throttling
 // engages. The ABSENCE of a throttle signal is the finding. UI in RateLimitPanel.
 import './setup';
-import type { BurstResponse, BurstStats, Finding, QaResponse, RateLimitTest, RateLimitVerdict, Severity, ThrottleSignal, ThrottleStrength } from './types';
+import type {
+  BurstResponse,
+  BurstStats,
+  Finding,
+  QaResponse,
+  RateLimitTest,
+  RateLimitVerdict,
+  Severity,
+  ThrottleSignal,
+  ThrottleStrength,
+} from './types';
 
 export const MAX_N = 200;
 export const MAX_CONCURRENCY = 10;
@@ -13,23 +23,35 @@ export const WEAK_AFTER_FRAC = 0.5;
 
 // Lowercased header names that indicate a rate limiter is present.
 export const THROTTLE_HEADERS = [
-  'retry-after', 'ratelimit-limit', 'ratelimit-remaining', 'ratelimit-reset',
-  'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset',
+  'retry-after',
+  'ratelimit-limit',
+  'ratelimit-remaining',
+  'ratelimit-reset',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
 ];
 
 // Scan a burst's responses for a throttle signal: any 429, or any rate-limit
 // header (compared case-insensitively). Presence of a RateLimit-* header means
 // a limiter exists, so it counts as throttled even on a 2xx.
 export function detectThrottleSignal(
-  responses: Array<{ status?: number | null; headers?: Record<string, unknown> | null } | null | undefined> | null | undefined,
+  responses:
+    | Array<{ status?: number | null; headers?: Record<string, unknown> | null } | null | undefined>
+    | null
+    | undefined
 ): ThrottleSignal {
-  let saw429 = false, headerHit = false;
+  let saw429 = false,
+    headerHit = false;
   for (const r of responses || []) {
     if (!r) continue;
     if (r.status === 429) saw429 = true;
     const hdrs = r.headers || {};
     for (const k of Object.keys(hdrs)) {
-      if (THROTTLE_HEADERS.includes(k.toLowerCase())) { headerHit = true; break; }
+      if (THROTTLE_HEADERS.includes(k.toLowerCase())) {
+        headerHit = true;
+        break;
+      }
     }
     if (saw429 && headerHit) break;
   }
@@ -37,7 +59,10 @@ export function detectThrottleSignal(
 }
 
 // completedCount = responses that returned a real HTTP status (net errors excluded).
-export function classifyRateLimit(signal: { throttled?: boolean } | null | undefined, completedCount: number): RateLimitVerdict {
+export function classifyRateLimit(
+  signal: { throttled?: boolean } | null | undefined,
+  completedCount: number
+): RateLimitVerdict {
   if (signal && signal.throttled) return 'pass';
   if (completedCount > 0) return 'vuln';
   return 'inconclusive';
@@ -60,10 +85,19 @@ export type ThrottleAnalysis = {
 // (a real 429) or is merely advertised by headers. This is what lets the caller
 // distinguish "throttled after 2 requests" from "throttled after 199".
 export function analyzeThrottle(
-  responses: Array<{ status?: number | null; headers?: Record<string, unknown> | null } | null | undefined> | null | undefined,
+  responses:
+    | Array<{ status?: number | null; headers?: Record<string, unknown> | null } | null | undefined>
+    | null
+    | undefined
 ): ThrottleAnalysis {
-  let completed = 0, ok2xx = 0, c429 = 0, allowedBeforeThrottle = 0;
-  let saw429 = false, headerHit = false, firstThrottledIndex = -1, idx = -1;
+  let completed = 0,
+    ok2xx = 0,
+    c429 = 0,
+    allowedBeforeThrottle = 0;
+  let saw429 = false,
+    headerHit = false,
+    firstThrottledIndex = -1,
+    idx = -1;
   for (const r of responses || []) {
     if (!r) continue;
     idx++;
@@ -71,17 +105,32 @@ export function analyzeThrottle(
     if (typeof st === 'number' && st > 0) completed++;
     if (st === 429) {
       c429++;
-      if (!saw429) { saw429 = true; firstThrottledIndex = idx; }
+      if (!saw429) {
+        saw429 = true;
+        firstThrottledIndex = idx;
+      }
     } else if (typeof st === 'number' && st >= 200 && st <= 299) {
       ok2xx++;
       if (!saw429) allowedBeforeThrottle++;
     }
     const hdrs = r.headers || {};
     for (const k of Object.keys(hdrs)) {
-      if (THROTTLE_HEADERS.includes(k.toLowerCase())) { headerHit = true; break; }
+      if (THROTTLE_HEADERS.includes(k.toLowerCase())) {
+        headerHit = true;
+        break;
+      }
     }
   }
-  return { completed, ok2xx, c429, saw429, headerHit, throttled: saw429 || headerHit, firstThrottledIndex, allowedBeforeThrottle };
+  return {
+    completed,
+    ok2xx,
+    c429,
+    saw429,
+    headerHit,
+    throttled: saw429 || headerHit,
+    firstThrottledIndex,
+    allowedBeforeThrottle,
+  };
 }
 
 // Grade the protection: none (no signal), strong (a 429 fired early), or weak
@@ -97,7 +146,10 @@ export function rateLimitStrength(a: ThrottleAnalysis | null | undefined): Throt
   return 'weak'; // advertised by headers but never enforced in this burst
 }
 
-export function rateLimitSeverity(sensitivity: string | null | undefined, verdict: string | null | undefined): Severity | null {
+export function rateLimitSeverity(
+  sensitivity: string | null | undefined,
+  verdict: string | null | undefined
+): Severity | null {
   if (verdict !== 'vuln') return null;
   return sensitivity === 'sensitive' ? 'high' : 'low';
 }
@@ -109,7 +161,10 @@ function clampInt(v: any, lo: number, hi: number): number {
 }
 
 /** runBurst 注入的執行器：runner(test, index) => Promise<resp>。 */
-export type BurstRunner = (test: RateLimitTest, index: number) => Promise<QaResponse | null | undefined>;
+export type BurstRunner = (
+  test: RateLimitTest,
+  index: number
+) => Promise<QaResponse | null | undefined>;
 
 // Fire `test.n` requests through the injected `runner(test, index) => Promise<resp>`,
 // keeping at most `test.concurrency` in flight (both clamped to the caps). Records
@@ -118,13 +173,14 @@ export type BurstRunner = (test: RateLimitTest, index: number) => Promise<QaResp
 export async function runBurst(
   test: RateLimitTest,
   runner: BurstRunner,
-  opts: { signal?: AbortSignal | null; onProgress?: (done: number, n: number) => void } = {},
+  opts: { signal?: AbortSignal | null; onProgress?: (done: number, n: number) => void } = {}
 ): Promise<{ responses: BurstResponse[]; stats: BurstStats }> {
   const { signal, onProgress } = opts;
   const n = clampInt(test && test.n, 1, MAX_N);
   const c = clampInt(test && test.concurrency, 1, MAX_CONCURRENCY);
   const responses: BurstResponse[] = [];
-  let launched = 0, done = 0;
+  let launched = 0,
+    done = 0;
   async function worker() {
     while (launched < n) {
       if (signal && signal.aborted) return;
@@ -157,8 +213,19 @@ export async function runBurst(
 
 function computeStats(responses: BurstResponse[]): BurstStats {
   const s: BurstStats = {
-    sent: responses.length, ok2xx: 0, c429: 0, c4xx: 0, c5xx: 0, net: 0, avgMs: 0, maxMs: 0,
-    throttled: false, headerHit: false, firstThrottledIndex: -1, allowedBeforeThrottle: 0, strength: 'none',
+    sent: responses.length,
+    ok2xx: 0,
+    c429: 0,
+    c4xx: 0,
+    c5xx: 0,
+    net: 0,
+    avgMs: 0,
+    maxMs: 0,
+    throttled: false,
+    headerHit: false,
+    firstThrottledIndex: -1,
+    allowedBeforeThrottle: 0,
+    strength: 'none',
   };
   let totMs = 0;
   for (const r of responses) {
@@ -194,7 +261,7 @@ export function rlFindingFor(
   responses: BurstResponse[] | null | undefined,
   stats: Pick<BurstStats, 'sent'>,
   title: string,
-  weakTitle?: string,
+  weakTitle?: string
 ): Finding | null {
   const a = analyzeThrottle(responses);
   if (a.completed === 0) return null; // inconclusive — nothing actually landed
@@ -203,7 +270,9 @@ export function rlFindingFor(
     const severity = rateLimitSeverity(test.sensitivity, 'vuln');
     if (!severity) return null;
     return {
-      oracle: 'rate-limit', severity, title,
+      oracle: 'rate-limit',
+      severity,
+      title,
       path: `${test.method} ${test.path}`,
       evidence: `${stats.sent} requests, no 429/rate-limit headers`,
       source: 'rule',
@@ -214,20 +283,28 @@ export function rlFindingFor(
     const evidence = a.saw429
       ? `${a.allowedBeforeThrottle} of ${stats.sent} requests succeeded before the first 429 — throttling engages late`
       : `rate-limit headers present but no 429 enforced across ${stats.sent} requests`;
-    return { oracle: 'rate-limit', severity, title: weakTitle, path: `${test.method} ${test.path}`, evidence, source: 'rule' };
+    return {
+      oracle: 'rate-limit',
+      severity,
+      title: weakTitle,
+      path: `${test.method} ${test.path}`,
+      evidence,
+      source: 'rule',
+    };
   }
   return null; // strong protection, or weak without a weakTitle (back-compat)
 }
 
 // Tally per-test verdicts across the results map for the summary chips.
 export function summarizeRateLimit(
-  results: Record<string, { verdict?: RateLimitVerdict | null } | null | undefined>,
+  results: Record<string, { verdict?: RateLimitVerdict | null } | null | undefined>
 ): { total: number; pass: number; vuln: number; inconclusive: number } {
   const s = { total: 0, pass: 0, vuln: 0, inconclusive: 0 };
   for (const tid in results) {
     const v = results[tid] && results[tid].verdict;
     if (!v) continue;
-    s.total++; if (s[v] !== undefined) s[v]++;
+    s.total++;
+    if (s[v] !== undefined) s[v]++;
   }
   return s;
 }

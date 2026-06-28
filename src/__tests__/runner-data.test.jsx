@@ -17,9 +17,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value); },
-    removeItem: (key) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -39,10 +45,34 @@ describe('Runner data iteration', () => {
   beforeEach(() => {
     installLocalStorage({ qa_locale: 'en-US' });
     runMock.mockReset();
-    runMock.mockResolvedValue({ status: 200, statusText: 'OK', time: 1, size: 0, body: {}, headers: {} });
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Get user', path: 'https://api.test/users/{{userId}}' },
-    ] }] }];
+    runMock.mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      time: 1,
+      size: 0,
+      body: {},
+      headers: {},
+    });
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              {
+                id: 'r1',
+                method: 'GET',
+                name: 'Get user',
+                path: 'https://api.test/users/{{userId}}',
+              },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
     window.QA.RESPONSES = {};
   });

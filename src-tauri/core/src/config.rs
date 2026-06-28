@@ -11,20 +11,26 @@ enum SecretRef {
 
 impl<'de> serde::Deserialize<'de> for SecretRef {
     fn deserialize<D>(d: D) -> Result<Self, D::Error>
-    where D: serde::Deserializer<'de> {
+    where
+        D: serde::Deserializer<'de>,
+    {
         use serde::de::Error;
         let v = serde_json::Value::deserialize(d)?;
         match v {
             serde_json::Value::String(s) => Ok(SecretRef::Literal(s)),
             serde_json::Value::Object(map) => {
-                let env = map.get("env").and_then(|x| x.as_str())
+                let env = map
+                    .get("env")
+                    .and_then(|x| x.as_str())
                     .ok_or_else(|| D::Error::custom("secret object must have a string `env`"))?;
                 if map.len() != 1 {
                     return Err(D::Error::custom("secret object must contain only `env`"));
                 }
                 Ok(SecretRef::Env(env.to_string()))
             }
-            _ => Err(D::Error::custom("secret must be a string or { \"env\": \"VAR\" }")),
+            _ => Err(D::Error::custom(
+                "secret must be a string or { \"env\": \"VAR\" }",
+            )),
         }
     }
 }
@@ -58,40 +64,78 @@ struct RawConfig {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Globals { #[serde(default)] pub variables: BTreeMap<String, String> }
+pub struct Globals {
+    #[serde(default)]
+    pub variables: BTreeMap<String, String>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Environment { pub name: String, #[serde(default)] pub variables: BTreeMap<String, String> }
+pub struct Environment {
+    pub name: String,
+    #[serde(default)]
+    pub variables: BTreeMap<String, String>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawIdentity { id: String, auth: RawAuth, #[serde(default)] privileged: bool }
+struct RawIdentity {
+    id: String,
+    auth: RawAuth,
+    #[serde(default)]
+    privileged: bool,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase", deny_unknown_fields)]
 enum RawAuth {
     None,
-    Bearer { token: SecretRef },
-    ApiKey { key: String, value: SecretRef, #[serde(rename = "in")] location: ApiKeyIn },
-    Basic { username: SecretRef, password: SecretRef },
+    Bearer {
+        token: SecretRef,
+    },
+    ApiKey {
+        key: String,
+        value: SecretRef,
+        #[serde(rename = "in")]
+        location: ApiKeyIn,
+    },
+    Basic {
+        username: SecretRef,
+        password: SecretRef,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ApiKeyIn { Header, Query }
+pub enum ApiKeyIn {
+    Header,
+    Query,
+}
 
 /// Resolved auth (secrets are now opaque literals).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Auth {
     None,
-    Bearer { token: String },
-    ApiKey { key: String, value: String, location: ApiKeyIn },
-    Basic { username: String, password: String },
+    Bearer {
+        token: String,
+    },
+    ApiKey {
+        key: String,
+        value: String,
+        location: ApiKeyIn,
+    },
+    Basic {
+        username: String,
+        password: String,
+    },
 }
 
 #[derive(Debug, Clone)]
-pub struct Identity { pub id: String, pub auth: Auth, pub privileged: bool }
+pub struct Identity {
+    pub id: String,
+    pub auth: Auth,
+    pub privileged: bool,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -99,37 +143,61 @@ pub struct Request {
     pub id: String,
     pub method: String,
     pub url: String,
-    #[serde(default)] pub headers: Vec<Kv>,
-    #[serde(default)] pub query: Vec<Kv>,
+    #[serde(default)]
+    pub headers: Vec<Kv>,
+    #[serde(default)]
+    pub query: Vec<Kv>,
     pub body: Option<Body>,
-    #[serde(default)] pub assertions: Vec<serde_json::Value>,
-    #[serde(default)] pub privileged: Option<bool>,
+    #[serde(default)]
+    pub assertions: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub privileged: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Kv { pub key: String, pub value: String }
+pub struct Kv {
+    pub key: String,
+    pub value: String,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Body { pub mode: BodyMode, #[serde(default)] pub content: String }
+pub struct Body {
+    pub mode: BodyMode,
+    #[serde(default)]
+    pub content: String,
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum BodyMode { None, Json, Raw }
+pub enum BodyMode {
+    None,
+    Json,
+    Raw,
+}
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum Expectation { Allow, Deny, Skip }
+pub enum Expectation {
+    Allow,
+    Deny,
+    Skip,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MatrixConfig {
-    #[serde(default)] pub endpoints: Vec<String>,
-    #[serde(default = "default_deny_set", rename = "denySet")] pub deny_set: Vec<i64>,
-    #[serde(default)] pub expect: std::collections::BTreeMap<String, std::collections::BTreeMap<String, Expectation>>,
+    #[serde(default)]
+    pub endpoints: Vec<String>,
+    #[serde(default = "default_deny_set", rename = "denySet")]
+    pub deny_set: Vec<i64>,
+    #[serde(default)]
+    pub expect: std::collections::BTreeMap<String, std::collections::BTreeMap<String, Expectation>>,
 }
-fn default_deny_set() -> Vec<i64> { vec![401, 403, 404] }
+fn default_deny_set() -> Vec<i64> {
+    vec![401, 403, 404]
+}
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
@@ -144,38 +212,53 @@ pub enum IdLocation {
 pub struct BolaTest {
     pub id: String,
     pub request: String,
-    #[serde(rename = "idLocation")] pub id_location: IdLocation,
-    #[serde(default, rename = "idValues")] pub id_values: std::collections::BTreeMap<String, serde_json::Value>,
-    #[serde(default, rename = "negativeControl")] pub negative_control: bool,
+    #[serde(rename = "idLocation")]
+    pub id_location: IdLocation,
+    #[serde(default, rename = "idValues")]
+    pub id_values: std::collections::BTreeMap<String, serde_json::Value>,
+    #[serde(default, rename = "negativeControl")]
+    pub negative_control: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct BolaConfig { #[serde(default)] pub tests: Vec<BolaTest> }
+pub struct BolaConfig {
+    #[serde(default)]
+    pub tests: Vec<BolaTest>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RateLimitTest {
     pub id: String,
     pub request: String,
-    #[serde(default)] pub identity: Option<String>,
+    #[serde(default)]
+    pub identity: Option<String>,
     /// Burst size; clamped to 1..=200 at runtime (TS clampInt parity), not rejected.
-    #[serde(default)] pub n: Option<i64>,
+    #[serde(default)]
+    pub n: Option<i64>,
     /// Max requests in flight; clamped to 1..=10 at runtime, not rejected.
-    #[serde(default)] pub concurrency: Option<i64>,
+    #[serde(default)]
+    pub concurrency: Option<i64>,
     /// `"sensitive"` raises a no-protection finding to High (else Low). Free-form per TS.
-    #[serde(default)] pub sensitivity: Option<String>,
+    #[serde(default)]
+    pub sensitivity: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RateLimitConfig { #[serde(default)] pub tests: Vec<RateLimitTest> }
+pub struct RateLimitConfig {
+    #[serde(default)]
+    pub tests: Vec<RateLimitTest>,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BflaConfig {
-    #[serde(default)] pub endpoints: Vec<String>,
-    #[serde(default = "default_deny_set", rename = "denySet")] pub deny_set: Vec<i64>,
+    #[serde(default)]
+    pub endpoints: Vec<String>,
+    #[serde(default = "default_deny_set", rename = "denySet")]
+    pub deny_set: Vec<i64>,
 }
 
 /// One explicit seed location for a fuzz target. Reuses IdLocation.
@@ -209,19 +292,28 @@ pub struct FuzzConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
-    #[serde(default)] pub matrix: Option<MatrixConfig>,
-    #[serde(default)] pub bola: Option<BolaConfig>,
-    #[serde(default)] pub bfla: Option<BflaConfig>,
-    #[serde(default, rename = "rateLimit")] pub rate_limit: Option<RateLimitConfig>,
-    #[serde(default)] pub oracles: Option<OracleConfigRaw>,
-    #[serde(default)] pub fuzz: Option<FuzzConfig>,
+    #[serde(default)]
+    pub matrix: Option<MatrixConfig>,
+    #[serde(default)]
+    pub bola: Option<BolaConfig>,
+    #[serde(default)]
+    pub bfla: Option<BflaConfig>,
+    #[serde(default, rename = "rateLimit")]
+    pub rate_limit: Option<RateLimitConfig>,
+    #[serde(default)]
+    pub oracles: Option<OracleConfigRaw>,
+    #[serde(default)]
+    pub fuzz: Option<FuzzConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct OracleConfigRaw {
-    #[serde(default)] pub sensitive: Option<bool>,
-    #[serde(default)] pub schema: Option<bool>,
-    #[serde(default, rename = "severityOverrides")] pub severity_overrides: BTreeMap<String, crate::security::finding::Severity>,
+    #[serde(default)]
+    pub sensitive: Option<bool>,
+    #[serde(default)]
+    pub schema: Option<bool>,
+    #[serde(default, rename = "severityOverrides")]
+    pub severity_overrides: BTreeMap<String, crate::security::finding::Severity>,
 }
 
 impl OracleConfigRaw {
@@ -254,7 +346,9 @@ fn resolve_secret(s: &SecretRef, env: &dyn Fn(&str) -> Option<String>) -> Result
         SecretRef::Literal(v) => Ok(v.clone()),
         SecretRef::Env(name) => match env(name) {
             Some(v) if !v.is_empty() => Ok(v),
-            Some(_) => Err(format!("required environment variable `{name}` is set but empty")),
+            Some(_) => Err(format!(
+                "required environment variable `{name}` is set but empty"
+            )),
             None => Err(format!("required environment variable `{name}` is unset")),
         },
     }
@@ -263,27 +357,54 @@ fn resolve_secret(s: &SecretRef, env: &dyn Fn(&str) -> Option<String>) -> Result
 fn resolve_auth(raw: RawAuth, env: &dyn Fn(&str) -> Option<String>) -> Result<Auth, String> {
     Ok(match raw {
         RawAuth::None => Auth::None,
-        RawAuth::Bearer { token } => Auth::Bearer { token: resolve_secret(&token, env)? },
-        RawAuth::ApiKey { key, value, location } =>
-            Auth::ApiKey { key, value: resolve_secret(&value, env)?, location },
-        RawAuth::Basic { username, password } =>
-            Auth::Basic { username: resolve_secret(&username, env)?, password: resolve_secret(&password, env)? },
+        RawAuth::Bearer { token } => Auth::Bearer {
+            token: resolve_secret(&token, env)?,
+        },
+        RawAuth::ApiKey {
+            key,
+            value,
+            location,
+        } => Auth::ApiKey {
+            key,
+            value: resolve_secret(&value, env)?,
+            location,
+        },
+        RawAuth::Basic { username, password } => Auth::Basic {
+            username: resolve_secret(&username, env)?,
+            password: resolve_secret(&password, env)?,
+        },
     })
 }
 
 /// Parse a CI config from JSON, resolve `{env}` secrets via `env` (fail-closed), and
 /// run structural `validate()`. A `Config` returned here is therefore always validated.
 pub fn load_config(json: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<Config, String> {
-    let raw: RawConfig = serde_json::from_str(json).map_err(|e| format!("invalid config JSON: {e}"))?;
+    let raw: RawConfig =
+        serde_json::from_str(json).map_err(|e| format!("invalid config JSON: {e}"))?;
     if raw.version != SUPPORTED_VERSION {
-        return Err(format!("unsupported config version {} (this binary supports {SUPPORTED_VERSION})", raw.version));
+        return Err(format!(
+            "unsupported config version {} (this binary supports {SUPPORTED_VERSION})",
+            raw.version
+        ));
     }
-    let identities = raw.identities.into_iter()
-        .map(|i| Ok(Identity { id: i.id, auth: resolve_auth(i.auth, env)?, privileged: i.privileged }))
+    let identities = raw
+        .identities
+        .into_iter()
+        .map(|i| {
+            Ok(Identity {
+                id: i.id,
+                auth: resolve_auth(i.auth, env)?,
+                privileged: i.privileged,
+            })
+        })
         .collect::<Result<Vec<_>, String>>()?;
     let cfg = Config {
-        version: raw.version, globals: raw.globals, environments: raw.environments,
-        identities, requests: raw.requests, collections: raw.collections,
+        version: raw.version,
+        globals: raw.globals,
+        environments: raw.environments,
+        identities,
+        requests: raw.requests,
+        collections: raw.collections,
         security: raw.security,
     };
     // Enforce structural validation at the single construction site so it is impossible
@@ -299,13 +420,21 @@ impl Config {
     /// shape (rows with `on: true`). Rust-only glue — no TS counterpart.
     pub fn scoped_vars(&self) -> crate::engine::ScopedVars {
         use crate::engine::{ScopedVars, VarRow};
-        let row = |(k, v): (&String, &String)| VarRow { key: k.clone(), value: v.clone(), on: true };
+        let row = |(k, v): (&String, &String)| VarRow {
+            key: k.clone(),
+            value: v.clone(),
+            on: true,
+        };
         ScopedVars {
             globals: self.globals.variables.iter().map(row).collect(),
-            collections: self.collections.iter()
+            collections: self
+                .collections
+                .iter()
                 .map(|c| (c.id.clone(), c.variables.iter().map(row).collect()))
                 .collect(),
-            environments: self.environments.iter()
+            environments: self
+                .environments
+                .iter()
                 .map(|e| (e.name.clone(), e.variables.iter().map(row).collect()))
                 .collect(),
         }
@@ -327,37 +456,72 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
     dups("request", cfg.requests.iter().map(|r| r.id.clone()))?;
     dups("collection", cfg.collections.iter().map(|c| c.id.clone()))?;
     dups("identity", cfg.identities.iter().map(|i| i.id.clone()))?;
-    dups("environment", cfg.environments.iter().map(|e| e.name.clone()))?;
-    let req_ids: std::collections::HashSet<&str> = cfg.requests.iter().map(|r| r.id.as_str()).collect();
+    dups(
+        "environment",
+        cfg.environments.iter().map(|e| e.name.clone()),
+    )?;
+    let req_ids: std::collections::HashSet<&str> =
+        cfg.requests.iter().map(|r| r.id.as_str()).collect();
     for c in &cfg.collections {
         for r in &c.requests {
             if !req_ids.contains(r.as_str()) {
-                return Err(format!("collection `{}` references unknown request `{}`", c.id, r));
+                return Err(format!(
+                    "collection `{}` references unknown request `{}`",
+                    c.id, r
+                ));
             }
         }
     }
     if let Some(sec) = &cfg.security {
-        let id_ids: std::collections::HashSet<&str> = cfg.identities.iter().map(|i| i.id.as_str()).collect();
+        let id_ids: std::collections::HashSet<&str> =
+            cfg.identities.iter().map(|i| i.id.as_str()).collect();
         if let Some(m) = &sec.matrix {
             for e in &m.endpoints {
-                if !req_ids.contains(e.as_str()) { return Err(format!("security.matrix endpoint references unknown request `{e}`")); }
+                if !req_ids.contains(e.as_str()) {
+                    return Err(format!(
+                        "security.matrix endpoint references unknown request `{e}`"
+                    ));
+                }
             }
             for (rid, row) in &m.expect {
-                if !req_ids.contains(rid.as_str()) { return Err(format!("security.matrix.expect references unknown request `{rid}`")); }
+                if !req_ids.contains(rid.as_str()) {
+                    return Err(format!(
+                        "security.matrix.expect references unknown request `{rid}`"
+                    ));
+                }
                 for idid in row.keys() {
-                    if !id_ids.contains(idid.as_str()) { return Err(format!("security.matrix.expect references unknown identity `{idid}`")); }
+                    if !id_ids.contains(idid.as_str()) {
+                        return Err(format!(
+                            "security.matrix.expect references unknown identity `{idid}`"
+                        ));
+                    }
                 }
             }
         }
         if let Some(b) = &sec.bola {
             let mut seen = std::collections::HashSet::new();
             for t in &b.tests {
-                if !seen.insert(t.id.clone()) { return Err(format!("duplicate bola test `{}`", t.id)); }
-                if !req_ids.contains(t.request.as_str()) { return Err(format!("bola test `{}` references unknown request `{}`", t.id, t.request)); }
+                if !seen.insert(t.id.clone()) {
+                    return Err(format!("duplicate bola test `{}`", t.id));
+                }
+                if !req_ids.contains(t.request.as_str()) {
+                    return Err(format!(
+                        "bola test `{}` references unknown request `{}`",
+                        t.id, t.request
+                    ));
+                }
                 for (idid, v) in &t.id_values {
-                    if !id_ids.contains(idid.as_str()) { return Err(format!("bola test `{}` idValues references unknown identity `{}`", t.id, idid)); }
+                    if !id_ids.contains(idid.as_str()) {
+                        return Err(format!(
+                            "bola test `{}` idValues references unknown identity `{}`",
+                            t.id, idid
+                        ));
+                    }
                     if !(v.is_string() || v.is_number() || v.is_boolean()) {
-                        return Err(format!("bola test `{}` idValue for `{}` must be a string/number/bool", t.id, idid));
+                        return Err(format!(
+                            "bola test `{}` idValue for `{}` must be a string/number/bool",
+                            t.id, idid
+                        ));
                     }
                 }
             }
@@ -365,17 +529,31 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
         if let Some(rl) = &sec.rate_limit {
             let mut seen = std::collections::HashSet::new();
             for t in &rl.tests {
-                if !seen.insert(t.id.clone()) { return Err(format!("duplicate rateLimit test `{}`", t.id)); }
-                if !req_ids.contains(t.request.as_str()) { return Err(format!("rateLimit test `{}` references unknown request `{}`", t.id, t.request)); }
+                if !seen.insert(t.id.clone()) {
+                    return Err(format!("duplicate rateLimit test `{}`", t.id));
+                }
+                if !req_ids.contains(t.request.as_str()) {
+                    return Err(format!(
+                        "rateLimit test `{}` references unknown request `{}`",
+                        t.id, t.request
+                    ));
+                }
                 if let Some(idid) = &t.identity {
-                    if !id_ids.contains(idid.as_str()) { return Err(format!("rateLimit test `{}` references unknown identity `{}`", t.id, idid)); }
+                    if !id_ids.contains(idid.as_str()) {
+                        return Err(format!(
+                            "rateLimit test `{}` references unknown identity `{}`",
+                            t.id, idid
+                        ));
+                    }
                 }
             }
         }
         if let Some(bf) = &sec.bfla {
             for e in &bf.endpoints {
                 if !req_ids.contains(e.as_str()) {
-                    return Err(format!("security.bfla endpoint references unknown request `{e}`"));
+                    return Err(format!(
+                        "security.bfla endpoint references unknown request `{e}`"
+                    ));
                 }
             }
         }
@@ -386,11 +564,16 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
             }
             for (ti, t) in fz.targets.iter().enumerate() {
                 if !req_ids.contains(t.request.as_str()) {
-                    return Err(format!("security.fuzz target[{ti}] references unknown request `{}`", t.request));
+                    return Err(format!(
+                        "security.fuzz target[{ti}] references unknown request `{}`",
+                        t.request
+                    ));
                 }
                 if let Some(idid) = &t.identity {
                     if !id_ids.contains(idid.as_str()) {
-                        return Err(format!("security.fuzz target[{ti}] references unknown identity `{idid}`"));
+                        return Err(format!(
+                            "security.fuzz target[{ti}] references unknown identity `{idid}`"
+                        ));
                     }
                 }
                 // Validate explicit seeds: name, Body path, and Query key must all be non-empty.
@@ -399,14 +582,22 @@ pub fn validate(cfg: &Config) -> Result<(), String> {
                 if let Some(seeds) = &t.seeds {
                     for s in seeds {
                         if s.name.is_empty() {
-                            return Err(format!("security.fuzz target[{ti}] seed has an empty name"));
+                            return Err(format!(
+                                "security.fuzz target[{ti}] seed has an empty name"
+                            ));
                         }
                         match &s.location {
                             IdLocation::Body { path } if path.is_empty() => {
-                                return Err(format!("security.fuzz target[{ti}] seed `{}` has an empty Body path", s.name));
+                                return Err(format!(
+                                    "security.fuzz target[{ti}] seed `{}` has an empty Body path",
+                                    s.name
+                                ));
                             }
                             IdLocation::Query { key } if key.is_empty() => {
-                                return Err(format!("security.fuzz target[{ti}] seed `{}` has an empty Query key", s.name));
+                                return Err(format!(
+                                    "security.fuzz target[{ti}] seed `{}` has an empty Query key",
+                                    s.name
+                                ));
                             }
                             _ => {}
                         }
@@ -424,7 +615,10 @@ mod tests {
     use std::collections::HashMap;
 
     fn envmap(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     const SAMPLE: &str = r#"{
@@ -440,8 +634,10 @@ mod tests {
 
     #[test]
     fn loads_and_resolves_env() {
-        let cfg = load_config(SAMPLE, &|k| envmap(&[("ADMIN_TOKEN", "secret")]).get(k).cloned())
-            .expect("loads");
+        let cfg = load_config(SAMPLE, &|k| {
+            envmap(&[("ADMIN_TOKEN", "secret")]).get(k).cloned()
+        })
+        .expect("loads");
         assert_eq!(cfg.version, 1);
         let admin = cfg.identities.iter().find(|i| i.id == "admin").unwrap();
         match &admin.auth {
@@ -453,7 +649,10 @@ mod tests {
     #[test]
     fn missing_env_fails_closed() {
         let err = load_config(SAMPLE, &|_| None).unwrap_err();
-        assert!(err.contains("ADMIN_TOKEN"), "error names the missing var: {err}");
+        assert!(
+            err.contains("ADMIN_TOKEN"),
+            "error names the missing var: {err}"
+        );
     }
 
     #[test]
@@ -473,7 +672,10 @@ mod tests {
     fn secret_ref_rejects_extra_keys() {
         let bad = r#"{ "version":1, "environments":[], "requests":[],
           "identities":[{ "id":"a", "auth":{ "type":"bearer", "token":{ "env":"T", "typo":1 } } }] }"#;
-        assert!(load_config(bad, &|_| Some("x".into())).is_err(), "extra key in secret ref must be rejected");
+        assert!(
+            load_config(bad, &|_| Some("x".into())).is_err(),
+            "extra key in secret ref must be rejected"
+        );
     }
 
     #[test]
@@ -481,7 +683,10 @@ mod tests {
         let cfg = r#"{ "version":1, "environments":[], "requests":[],
           "identities":[{ "id":"a", "auth":{ "type":"bearer", "token":"literal-tok" } }] }"#;
         let c = load_config(cfg, &|_| None).expect("literal token loads without env");
-        match &c.identities[0].auth { Auth::Bearer { token } => assert_eq!(token, "literal-tok"), _ => panic!() }
+        match &c.identities[0].auth {
+            Auth::Bearer { token } => assert_eq!(token, "literal-tok"),
+            _ => panic!(),
+        }
     }
 
     #[test]
@@ -509,12 +714,21 @@ mod tests {
 
     #[test]
     fn scoped_vars_populates_globals_and_environments() {
-        let cfg = load_config(SAMPLE, &|k| envmap(&[("ADMIN_TOKEN","s")]).get(k).cloned()).unwrap();
+        let cfg =
+            load_config(SAMPLE, &|k| envmap(&[("ADMIN_TOKEN", "s")]).get(k).cloned()).unwrap();
         let scoped = cfg.scoped_vars();
         // globals.ua present and enabled
-        assert!(scoped.globals.iter().any(|r| r.key == "ua" && r.value == "qa-touchstone-ci" && r.on));
+        assert!(scoped
+            .globals
+            .iter()
+            .any(|r| r.key == "ua" && r.value == "qa-touchstone-ci" && r.on));
         // environment staging carries apiHost
-        assert!(scoped.environments.get("staging").unwrap().iter().any(|r| r.key == "apiHost"));
+        assert!(scoped
+            .environments
+            .get("staging")
+            .unwrap()
+            .iter()
+            .any(|r| r.key == "apiHost"));
     }
 
     #[test]
@@ -523,17 +737,25 @@ mod tests {
             { "id":"k", "auth":{ "type":"apikey", "key":"X-API-Key", "value":{ "env":"AK" }, "in":"header" } },
             { "id":"b", "auth":{ "type":"basic", "username":{ "env":"BU" }, "password":{ "env":"BP" } } }
         ] }"#;
-        let env = envmap(&[("AK","secretkey"),("BU","user"),("BP","pass")]);
+        let env = envmap(&[("AK", "secretkey"), ("BU", "user"), ("BP", "pass")]);
         let cfg = load_config(j, &|k| env.get(k).cloned()).unwrap();
         match &cfg.identities[0].auth {
-            Auth::ApiKey { key, value, location } => {
-                assert_eq!(key, "X-API-Key"); assert_eq!(value, "secretkey");
+            Auth::ApiKey {
+                key,
+                value,
+                location,
+            } => {
+                assert_eq!(key, "X-API-Key");
+                assert_eq!(value, "secretkey");
                 assert_eq!(*location, ApiKeyIn::Header);
             }
             _ => panic!("apiKey"),
         }
         match &cfg.identities[1].auth {
-            Auth::Basic { username, password } => { assert_eq!(username, "user"); assert_eq!(password, "pass"); }
+            Auth::Basic { username, password } => {
+                assert_eq!(username, "user");
+                assert_eq!(password, "pass");
+            }
             _ => panic!("basic"),
         }
     }
@@ -567,7 +789,12 @@ mod tests {
         validate(&cfg).expect("valid config passes");
         // collection-scope var available via scoped_vars under the collection id
         let sv = cfg.scoped_vars();
-        assert!(sv.collections.get("smoke").unwrap().iter().any(|r| r.key == "page" && r.value == "1" && r.on));
+        assert!(sv
+            .collections
+            .get("smoke")
+            .unwrap()
+            .iter()
+            .any(|r| r.key == "page" && r.value == "1" && r.on));
     }
 
     #[test]
@@ -584,7 +811,10 @@ mod tests {
         let dup = r#"{ "version":1,"environments":[],"identities":[],
           "requests":[{"id":"a","method":"GET","url":"https://x"},{"id":"a","method":"GET","url":"https://y"}],
           "collections":[] }"#;
-        assert!(load_config(dup, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+        assert!(load_config(dup, &|_| None)
+            .unwrap_err()
+            .to_lowercase()
+            .contains("duplicate"));
     }
 
     #[test]
@@ -599,7 +829,10 @@ mod tests {
             {"id":"c","requests":["a"],"variables":{"page":"2"}}
           ] }"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.contains("duplicate") && err.contains("collection"), "{err}");
+        assert!(
+            err.contains("duplicate") && err.contains("collection"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -608,7 +841,10 @@ mod tests {
           "identities":[{"id":"x","auth":{"type":"none"}},{"id":"x","auth":{"type":"none"}}],
           "requests":[],"collections":[] }"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.contains("duplicate") && err.contains("identity"), "{err}");
+        assert!(
+            err.contains("duplicate") && err.contains("identity"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -617,7 +853,10 @@ mod tests {
           "environments":[{"name":"staging","variables":{}},{"name":"staging","variables":{}}],
           "identities":[],"requests":[],"collections":[] }"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.contains("duplicate") && err.contains("environment"), "{err}");
+        assert!(
+            err.contains("duplicate") && err.contains("environment"),
+            "{err}"
+        );
     }
 
     const WITH_SECURITY: &str = r#"{
@@ -631,10 +870,16 @@ mod tests {
     fn parses_security_matrix() {
         let c = load_config(WITH_SECURITY, &|_| None).unwrap();
         let m = c.security.as_ref().unwrap().matrix.as_ref().unwrap();
-        assert_eq!(m.endpoints, vec!["getU","delU"]);
-        assert_eq!(m.deny_set, vec![401,403]);
+        assert_eq!(m.endpoints, vec!["getU", "delU"]);
+        assert_eq!(m.deny_set, vec![401, 403]);
         assert_eq!(m.expect["delU"]["anon"], Expectation::Deny);
-        assert!(c.identities.iter().find(|i| i.id=="admin").unwrap().privileged);
+        assert!(
+            c.identities
+                .iter()
+                .find(|i| i.id == "admin")
+                .unwrap()
+                .privileged
+        );
     }
 
     #[test]
@@ -667,11 +912,15 @@ mod tests {
     fn parses_bola_config() {
         let c = load_config(WITH_BOLA, &|_| None).unwrap();
         let t = &c.security.unwrap().bola.unwrap().tests[0];
-        assert_eq!(t.id, "t1"); assert_eq!(t.request, "getOrder");
+        assert_eq!(t.id, "t1");
+        assert_eq!(t.request, "getOrder");
         assert!(t.negative_control);
         assert_eq!(t.id_values["alice"], serde_json::json!("ordA"));
         assert_eq!(t.id_values["bob"], serde_json::json!(2)); // numeric id preserved
-        match &t.id_location { IdLocation::Path { index } => assert_eq!(*index, 1), _ => panic!() }
+        match &t.id_location {
+            IdLocation::Path { index } => assert_eq!(*index, 1),
+            _ => panic!(),
+        }
     }
 
     #[test]
@@ -686,7 +935,10 @@ mod tests {
         let bad = r#"{ "version":1,"environments":[],"identities":[{"id":"a","auth":{"type":"none"}}],
           "requests":[{"id":"r","method":"GET","url":"https://x"}],
           "security":{"bola":{"tests":[{"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{"a":[1,2]}}]}} }"#;
-        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("idvalue"));
+        assert!(load_config(bad, &|_| None)
+            .unwrap_err()
+            .to_lowercase()
+            .contains("idvalue"));
     }
 
     #[test]
@@ -705,7 +957,10 @@ mod tests {
             {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}},
             {"id":"t","request":"r","idLocation":{"kind":"query","key":"id"},"idValues":{}}
           ]}} }"#;
-        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+        assert!(load_config(bad, &|_| None)
+            .unwrap_err()
+            .to_lowercase()
+            .contains("duplicate"));
     }
 
     const WITH_RATELIMIT: &str = r#"{
@@ -736,7 +991,12 @@ mod tests {
           "security":{"rateLimit":{"tests":[{"id":"t","request":"r"}]}} }"#;
         let c = load_config(j, &|_| None).unwrap();
         let t = &c.security.unwrap().rate_limit.unwrap().tests[0];
-        assert!(t.n.is_none() && t.concurrency.is_none() && t.identity.is_none() && t.sensitivity.is_none());
+        assert!(
+            t.n.is_none()
+                && t.concurrency.is_none()
+                && t.identity.is_none()
+                && t.sensitivity.is_none()
+        );
     }
 
     #[test]
@@ -759,7 +1019,10 @@ mod tests {
         let bad = r#"{ "version":1,"environments":[],"identities":[],
           "requests":[{"id":"r","method":"GET","url":"https://x"}],
           "security":{"rateLimit":{"tests":[{"id":"t","request":"r"},{"id":"t","request":"r"}]}} }"#;
-        assert!(load_config(bad, &|_| None).unwrap_err().to_lowercase().contains("duplicate"));
+        assert!(load_config(bad, &|_| None)
+            .unwrap_err()
+            .to_lowercase()
+            .contains("duplicate"));
     }
 
     #[test]
@@ -769,10 +1032,15 @@ mod tests {
           "security":{"matrix":{"endpoints":["r"]},"oracles":{"sensitive":false,"llm":false,"severityOverrides":{"secrets":"critical"}}} }"#;
         let c = load_config(j, &|_| None).unwrap();
         let o = c.security.unwrap().oracles.unwrap().resolve();
-        assert!(!o.sensitive && o.schema && o.severity_overrides["secrets"] == crate::security::finding::Severity::Critical);
+        assert!(
+            !o.sensitive
+                && o.schema
+                && o.severity_overrides["secrets"] == crate::security::finding::Severity::Critical
+        );
     }
 
-    #[test] fn bfla_config_defaults() {
+    #[test]
+    fn bfla_config_defaults() {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{}}}"#;
         let cfg = load_config(j, &|_| None).unwrap();
         let bfla = cfg.security.unwrap().bfla.unwrap();
@@ -780,7 +1048,8 @@ mod tests {
         assert_eq!(bfla.deny_set, vec![401i64, 403, 404], "default deny_set");
     }
 
-    #[test] fn bfla_config_explicit() {
+    #[test]
+    fn bfla_config_explicit() {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"},{"id":"s","method":"POST","url":"https://h/s"}],"security":{"bfla":{"endpoints":["r"],"denySet":[401,403]}}}"#;
         let cfg = load_config(j, &|_| None).unwrap();
         let bfla = cfg.security.unwrap().bfla.unwrap();
@@ -788,18 +1057,26 @@ mod tests {
         assert_eq!(bfla.deny_set, vec![401i64, 403]);
     }
 
-    #[test] fn bfla_config_empty_deny_set_honored() {
+    #[test]
+    fn bfla_config_empty_deny_set_honored() {
         // explicit denySet:[] must be honored as-is (not fall back to the default)
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{"denySet":[]}}}"#;
         let cfg = load_config(j, &|_| None).unwrap();
         let bfla = cfg.security.unwrap().bfla.unwrap();
-        assert!(bfla.deny_set.is_empty(), "explicit empty denySet must be preserved");
+        assert!(
+            bfla.deny_set.is_empty(),
+            "explicit empty denySet must be preserved"
+        );
     }
 
-    #[test] fn bfla_config_rejects_unknown_endpoint_ref() {
+    #[test]
+    fn bfla_config_rejects_unknown_endpoint_ref() {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],"security":{"bfla":{"endpoints":["noexist"]}}}"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.contains("security.bfla endpoint references unknown request `noexist`"), "error: {err}");
+        assert!(
+            err.contains("security.bfla endpoint references unknown request `noexist`"),
+            "error: {err}"
+        );
     }
 
     #[test]
@@ -823,7 +1100,10 @@ mod tests {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r"}],
           "security":{"fuzz":{"targets":[{"request":"r"}],"maxSeedsPerTarget":0}}}"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.contains("maxSeedsPerTarget"), "error must mention maxSeedsPerTarget: {err}");
+        assert!(
+            err.contains("maxSeedsPerTarget"),
+            "error must mention maxSeedsPerTarget: {err}"
+        );
     }
 
     #[test]
@@ -858,7 +1138,10 @@ mod tests {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"GET","url":"https://h/r/1"}],
           "security":{"fuzz":{"targets":[{"request":"r","seeds":[{"name":"","location":{"kind":"path","index":0}}]}]}}}"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.to_lowercase().contains("empty"), "error must mention empty: {err}");
+        assert!(
+            err.to_lowercase().contains("empty"),
+            "error must mention empty: {err}"
+        );
     }
 
     #[test]
@@ -867,6 +1150,9 @@ mod tests {
         let j = r#"{"version":1,"environments":[],"identities":[],"requests":[{"id":"r","method":"POST","url":"https://h/r","body":{"mode":"json","content":"{}"}}],
           "security":{"fuzz":{"targets":[{"request":"r","seeds":[{"name":"item-id","location":{"kind":"body","path":""}}]}]}}}"#;
         let err = load_config(j, &|_| None).unwrap_err();
-        assert!(err.to_lowercase().contains("empty"), "error must mention empty: {err}");
+        assert!(
+            err.to_lowercase().contains("empty"),
+            "error must mention empty: {err}"
+        );
     }
 }

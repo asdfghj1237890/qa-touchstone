@@ -7,21 +7,33 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const saveFileDialog = vi.fn();
 const saveTextFile = vi.fn();
 vi.mock('../api/index', () => ({
-  default: { saveFileDialog: (...a) => saveFileDialog(...a), saveTextFile: (...a) => saveTextFile(...a) },
+  default: {
+    saveFileDialog: (...a) => saveFileDialog(...a),
+    saveTextFile: (...a) => saveTextFile(...a),
+  },
 }));
 
 import { downloadFile } from '../qa/download';
 
 describe('downloadFile — Tauri native save path', () => {
-  beforeEach(() => { saveFileDialog.mockReset(); saveTextFile.mockReset(); window.__TAURI_INTERNALS__ = {}; });
-  afterEach(() => { delete window.__TAURI_INTERNALS__; });
+  beforeEach(() => {
+    saveFileDialog.mockReset();
+    saveTextFile.mockReset();
+    window.__TAURI_INTERNALS__ = {};
+  });
+  afterEach(() => {
+    delete window.__TAURI_INTERNALS__;
+  });
 
   it('routes a string export through the save dialog + backend write, with an extension-derived filter', async () => {
     saveFileDialog.mockResolvedValue('/picked/report.sarif.json');
     await downloadFile('report.sarif.json', '{"runs":[]}', 'application/json');
     expect(saveFileDialog).toHaveBeenCalledWith({
       defaultPath: 'report.sarif.json',
-      filters: [{ name: 'JSON', extensions: ['json'] }, { name: 'All files', extensions: ['*'] }],
+      filters: [
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
     });
     expect(saveTextFile).toHaveBeenCalledWith('/picked/report.sarif.json', '{"runs":[]}');
   });
@@ -44,8 +56,10 @@ describe('downloadFile — Tauri native save path', () => {
 
 describe('downloadFile — browser blob fallback', () => {
   beforeEach(() => {
-    saveFileDialog.mockReset(); saveTextFile.mockReset();
-    delete window.__TAURI_INTERNALS__; delete window.__TAURI__;
+    saveFileDialog.mockReset();
+    saveTextFile.mockReset();
+    delete window.__TAURI_INTERNALS__;
+    delete window.__TAURI__;
   });
 
   it('uses an <a download> blob when not in Tauri, and never calls the backend', async () => {

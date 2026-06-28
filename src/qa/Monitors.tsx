@@ -13,7 +13,14 @@ const { useState: useStateMON, useRef: useRefMON, useEffect: useEffMON } = React
 
 export const MONITOR_STORAGE_KEY = 'qa_monitors';
 export const MONITOR_SCHEDULER_INTERVAL_MS = 1000;
-export const CADENCES = ['Every 5 minutes', 'Every 15 minutes', 'Every hour', 'Every 6 hours', 'Daily at 02:00', 'Weekly'];
+export const CADENCES = [
+  'Every 5 minutes',
+  'Every 15 minutes',
+  'Every hour',
+  'Every 6 hours',
+  'Daily at 02:00',
+  'Weekly',
+];
 const CADENCE_KEYS: Record<string, string> = {
   'Every 5 minutes': 'monitors.cadence.5m',
   'Every 15 minutes': 'monitors.cadence.15m',
@@ -72,13 +79,22 @@ export function normalizeMonitor(mon: Partial<Monitor>, now = Date.now()): Monit
   return {
     ...mon,
     enabled,
-    nextDueAt: enabled && Number.isFinite(rawDue) && rawDue > 0 ? rawDue : (enabled ? nextMonitorDueAt(mon.cadence, now) : null),
-    nextRun: enabled ? (mon.nextRun || '') : 'paused',
+    nextDueAt:
+      enabled && Number.isFinite(rawDue) && rawDue > 0
+        ? rawDue
+        : enabled
+          ? nextMonitorDueAt(mon.cadence, now)
+          : null,
+    nextRun: enabled ? mon.nextRun || '' : 'paused',
     runs: Array.isArray(mon.runs) ? mon.runs.slice() : [],
   } as Monitor;
 }
 
-export function nextRunLabel(mon: Monitor | null | undefined, t: I18nValue['t'], now = Date.now()): string {
+export function nextRunLabel(
+  mon: Monitor | null | undefined,
+  t: I18nValue['t'],
+  now = Date.now()
+): string {
   if (!mon || mon.enabled === false) return t('monitors.paused');
   const dueAt = Number(mon.nextDueAt);
   if (!Number.isFinite(dueAt) || dueAt <= 0) {
@@ -94,15 +110,23 @@ export function nextRunLabel(mon: Monitor | null | undefined, t: I18nValue['t'],
 }
 
 function monitorEnv(mon: Partial<Monitor> | null | undefined, fallbackEnv: any) {
-  return window.QA.ENVIRONMENTS.find((e: any) => e.label === (mon && mon.env)) || fallbackEnv || { label: 'None', baseUrl: '' };
+  return (
+    window.QA.ENVIRONMENTS.find((e: any) => e.label === (mon && mon.env)) ||
+    fallbackEnv || { label: 'None', baseUrl: '' }
+  );
 }
 
-export async function runMonitorCollection(mon: Partial<Monitor> | null | undefined, ctx: Record<string, any> = {}): Promise<MonitorRunResult | null> {
+export async function runMonitorCollection(
+  mon: Partial<Monitor> | null | undefined,
+  ctx: Record<string, any> = {}
+): Promise<MonitorRunResult | null> {
   const col = window.QA.COLLECTIONS.find((c: any) => c.id === (mon && mon.collectionId));
   if (!col) return null;
   const runEnv = monitorEnv(mon, ctx.env);
   const reqs = col.folders.flatMap((f: any) => f.requests);
-  let passed = 0, failed = 0, totalMs = 0;
+  let passed = 0,
+    failed = 0,
+    totalMs = 0;
   for (const r of reqs) {
     let resp;
     try {
@@ -120,8 +144,11 @@ export async function runMonitorCollection(mon: Partial<Monitor> | null | undefi
     totalMs += resp.time || 0;
     const asserts = window.qaRunAssertions!((ctx.tests || {})[r.id] || [], resp);
     // A request with no assertions counts as pass iff status < 400.
-    const ok = asserts.length ? asserts.every((a: any) => a.pass) : (resp.status >= 200 && resp.status < 400);
-    if (ok) passed += 1; else failed += 1;
+    const ok = asserts.length
+      ? asserts.every((a: any) => a.pass)
+      : resp.status >= 200 && resp.status < 400;
+    if (ok) passed += 1;
+    else failed += 1;
   }
   const now = new Date();
   return {
@@ -140,11 +167,18 @@ function RunSparks({ runs }: { runs: MonitorRunResult[] }) {
   const { t } = useI18n();
   return (
     <div className="mon-sparks">
-      {runs.slice(0, 12).reverse().map((r, i) => (
-        <span key={i} className="mon-spark" data-status={r.status}
-              title={`${r.at} · ${t('monitors.runPassed', { passed: r.passed, total: r.passed + r.failed })} · ${r.ms}ms`}
-              style={{ height: 6 + Math.min(28, r.ms / 45) }} />
-      ))}
+      {runs
+        .slice(0, 12)
+        .reverse()
+        .map((r, i) => (
+          <span
+            key={i}
+            className="mon-spark"
+            data-status={r.status}
+            title={`${r.at} · ${t('monitors.runPassed', { passed: r.passed, total: r.passed + r.failed })} · ${r.ms}ms`}
+            style={{ height: 6 + Math.min(28, r.ms / 45) }}
+          />
+        ))}
     </div>
   );
 }
@@ -162,7 +196,7 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }: Mon
   const { t } = useI18n();
   const last = mon.runs[0];
   const total = mon.runs.length;
-  const fails = mon.runs.filter(r => r.status === 'fail').length;
+  const fails = mon.runs.filter((r) => r.status === 'fail').length;
   const uptime = total ? Math.round(((total - fails) / total) * 100) : 100;
   return (
     <div className="mon-card" data-enabled={mon.enabled ? '1' : '0'}>
@@ -171,16 +205,36 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }: Mon
           <span className="mon-dot" data-status={last ? last.status : 'idle'} />
           <div>
             <strong>{mon.name}</strong>
-            <div className="mon-meta">{collectionName} · {mon.env} · {mon.region}</div>
+            <div className="mon-meta">
+              {collectionName} · {mon.env} · {mon.region}
+            </div>
           </div>
         </div>
-        <button className="pf-toggle" data-on={mon.enabled ? '1' : '0'} onClick={() => onToggle(mon.id)} aria-label={t('monitors.toggle')}><span /></button>
+        <button
+          className="pf-toggle"
+          data-on={mon.enabled ? '1' : '0'}
+          onClick={() => onToggle(mon.id)}
+          aria-label={t('monitors.toggle')}
+        >
+          <span />
+        </button>
       </div>
 
       <div className="mon-card-stats">
-        <div className="mon-stat"><span className="mon-stat-v">{cadenceLabel(mon.cadence, t)}</span><span className="mon-stat-l">{t('monitors.schedule')}</span></div>
-        <div className="mon-stat"><span className="mon-stat-v" data-good={uptime >= 95 ? '1' : '0'}>{uptime}%</span><span className="mon-stat-l">{t('monitors.uptime')}</span></div>
-        <div className="mon-stat"><span className="mon-stat-v">{nextRunLabel(mon, t, now)}</span><span className="mon-stat-l">{t('monitors.nextRun')}</span></div>
+        <div className="mon-stat">
+          <span className="mon-stat-v">{cadenceLabel(mon.cadence, t)}</span>
+          <span className="mon-stat-l">{t('monitors.schedule')}</span>
+        </div>
+        <div className="mon-stat">
+          <span className="mon-stat-v" data-good={uptime >= 95 ? '1' : '0'}>
+            {uptime}%
+          </span>
+          <span className="mon-stat-l">{t('monitors.uptime')}</span>
+        </div>
+        <div className="mon-stat">
+          <span className="mon-stat-v">{nextRunLabel(mon, t, now)}</span>
+          <span className="mon-stat-l">{t('monitors.nextRun')}</span>
+        </div>
       </div>
 
       <RunSparks runs={mon.runs} />
@@ -188,9 +242,13 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }: Mon
       <div className="mon-runs">
         {mon.runs.slice(0, 5).map((r, i) => (
           <div className="mon-run" key={i}>
-            <span className="mon-run-status" data-status={r.status}>{r.status === 'pass' ? '✓' : '✕'}</span>
+            <span className="mon-run-status" data-status={r.status}>
+              {r.status === 'pass' ? '✓' : '✕'}
+            </span>
             <span className="mon-run-at">{r.at}</span>
-            <span className="mon-run-res">{t('monitors.runPassed', { passed: r.passed, total: r.passed + r.failed })}</span>
+            <span className="mon-run-res">
+              {t('monitors.runPassed', { passed: r.passed, total: r.passed + r.failed })}
+            </span>
             <span className="mon-run-ms">{r.ms}ms</span>
           </div>
         ))}
@@ -198,7 +256,8 @@ function MonitorCard({ mon, onToggle, onRun, running, collectionName, now }: Mon
 
       <div className="mon-card-foot">
         <button className="qa-hist-expbtn" onClick={() => onRun(mon.id)} disabled={running}>
-          {running ? <Spinner size={12} /> : <Icon name="play" size={12} />} {running ? t('monitors.running') : t('monitors.runNow')}
+          {running ? <Spinner size={12} /> : <Icon name="play" size={12} />}{' '}
+          {running ? t('monitors.running') : t('monitors.runNow')}
         </button>
       </div>
     </div>
@@ -235,13 +294,18 @@ function MonitorsPage({
   onCreateMonitor,
 }: MonitorsPageProps) {
   const { t } = useI18n();
-  const [localMonitors, setLocalMonitors] = useStateMON<MonitorUi[]>(() => window.QA.MONITORS.map((m: any) => normalizeMonitor(m)) as MonitorUi[]);
+  const [localMonitors, setLocalMonitors] = useStateMON<MonitorUi[]>(
+    () => window.QA.MONITORS.map((m: any) => normalizeMonitor(m)) as MonitorUi[]
+  );
   const [localRunning, setLocalRunning] = useStateMON<string | null>(null);
   const [creating, setCreating] = useStateMON(false);
-  const [nowTick, setNowTick] = useStateMON(Date.now());
-  const isControlled = Array.isArray(controlledMonitors) && typeof setControlledMonitors === 'function';
+  const [nowTick, setNowTick] = useStateMON(() => Date.now());
+  const isControlled =
+    Array.isArray(controlledMonitors) && typeof setControlledMonitors === 'function';
   const monitors = (isControlled ? controlledMonitors : localMonitors) as MonitorUi[];
-  const setMonitors = (isControlled ? setControlledMonitors : setLocalMonitors) as React.Dispatch<React.SetStateAction<MonitorUi[]>>;
+  const setMonitors = (isControlled ? setControlledMonitors : setLocalMonitors) as React.Dispatch<
+    React.SetStateAction<MonitorUi[]>
+  >;
   const running = controlledRunning == null ? localRunning : controlledRunning;
   const mountedRef = useRefMON(true);
   // Synchronous re-entry guard: React `running` state isn't updated within the
@@ -251,40 +315,78 @@ function MonitorsPage({
   // under React.StrictMode the mount runs setup→cleanup→setup, so a cleanup-only
   // effect would leave mountedRef stuck false and make runNow's post-await guard
   // skip setMonitors/setRunning forever (button stuck on "Running…").
-  useEffMON(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  useEffMON(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffMON(() => {
     const timer = setInterval(() => setNowTick(Date.now()), MONITOR_SCHEDULER_INTERVAL_MS);
     return () => clearInterval(timer);
   }, []);
-  const colName = (id: string | undefined) => (window.QA.COLLECTIONS.find((c: any) => c.id === id) || {}).name || id;
+  const colName = (id: string | undefined) =>
+    (window.QA.COLLECTIONS.find((c: any) => c.id === id) || {}).name || id;
 
-  const toggle = onToggleMonitor || ((id: string) => setMonitors(ms => ms.map(m => {
-    if (m.id !== id) return m;
-    const enabled = !m.enabled;
-    return { ...m, enabled, nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null, nextRun: enabled ? '' : 'paused' };
-  })));
+  const toggle =
+    onToggleMonitor ||
+    ((id: string) =>
+      setMonitors((ms) =>
+        ms.map((m) => {
+          if (m.id !== id) return m;
+          const enabled = !m.enabled;
+          return {
+            ...m,
+            enabled,
+            nextDueAt: enabled ? nextMonitorDueAt(m.cadence) : null,
+            nextRun: enabled ? '' : 'paused',
+          };
+        })
+      ));
 
-  const runNow = onRunMonitor || ((id: string) => {
-    if (runningRef.current) return;
-    const mon = monitors.find(m => m.id === id);
-    if (!mon) return;
-    runningRef.current = true;
-    setLocalRunning(id);
-    (async () => {
-      try {
-        const run = await runMonitorCollection(mon, { env, vars, cookies, sslVerify, tests, oauthTokens, trigger: 'manual' });
-        if (!run) return;
-        if (!mountedRef.current) return;
-        setMonitors(ms2 => ms2.map(m => m.id === id ? { ...m, nextDueAt: nextMonitorDueAt(m.cadence), runs: [run, ...m.runs].slice(0, 20) } : m));
-      } finally {
-        runningRef.current = false;
-        if (mountedRef.current) setLocalRunning(null);
-      }
-    })();
-  });
+  const runNow =
+    onRunMonitor ||
+    ((id: string) => {
+      if (runningRef.current) return;
+      const mon = monitors.find((m) => m.id === id);
+      if (!mon) return;
+      runningRef.current = true;
+      setLocalRunning(id);
+      (async () => {
+        try {
+          const run = await runMonitorCollection(mon, {
+            env,
+            vars,
+            cookies,
+            sslVerify,
+            tests,
+            oauthTokens,
+            trigger: 'manual',
+          });
+          if (!run) return;
+          if (!mountedRef.current) return;
+          setMonitors((ms2) =>
+            ms2.map((m) =>
+              m.id === id
+                ? {
+                    ...m,
+                    nextDueAt: nextMonitorDueAt(m.cadence),
+                    runs: [run, ...m.runs].slice(0, 20),
+                  }
+                : m
+            )
+          );
+        } finally {
+          runningRef.current = false;
+          if (mountedRef.current) setLocalRunning(null);
+        }
+      })();
+    });
 
-  const activeCount = monitors.filter(m => m.enabled).length;
-  const failingCount = monitors.filter(m => m.enabled && m.runs[0] && m.runs[0].status === 'fail').length;
+  const activeCount = monitors.filter((m) => m.enabled).length;
+  const failingCount = monitors.filter(
+    (m) => m.enabled && m.runs[0] && m.runs[0].status === 'fail'
+  ).length;
 
   return (
     <div className="qa-monitors">
@@ -294,15 +396,31 @@ function MonitorsPage({
           <p className="mon-top-sub">{t('monitors.subtitle')}</p>
         </div>
         <div className="mon-top-stats">
-          <div className="mon-top-stat"><strong>{activeCount}</strong><span>{t('monitors.active')}</span></div>
-          <div className="mon-top-stat" data-alert={failingCount ? '1' : '0'}><strong>{failingCount}</strong><span>{t('monitors.failing')}</span></div>
-          <button className="qa-send mon-new" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> {t('monitors.new')}</button>
+          <div className="mon-top-stat">
+            <strong>{activeCount}</strong>
+            <span>{t('monitors.active')}</span>
+          </div>
+          <div className="mon-top-stat" data-alert={failingCount ? '1' : '0'}>
+            <strong>{failingCount}</strong>
+            <span>{t('monitors.failing')}</span>
+          </div>
+          <button className="qa-send mon-new" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={14} /> {t('monitors.new')}
+          </button>
         </div>
       </div>
 
       <div className="mon-grid">
-        {monitors.map(m => (
-          <MonitorCard key={m.id} mon={m} onToggle={toggle} onRun={runNow} running={running === m.id} collectionName={colName(m.collectionId)} now={nowTick} />
+        {monitors.map((m) => (
+          <MonitorCard
+            key={m.id}
+            mon={m}
+            onToggle={toggle}
+            onRun={runNow}
+            running={running === m.id}
+            collectionName={colName(m.collectionId)}
+            now={nowTick}
+          />
         ))}
         {!monitors.length && (
           <div className="qa-auth-note" style={{ gridColumn: '1 / -1' }}>
@@ -312,12 +430,26 @@ function MonitorsPage({
         )}
       </div>
 
-      {creating && <NewMonitorModal env={env} onClose={() => setCreating(false)}
-        onCreate={(m) => {
-          const create = onCreateMonitor || ((next: Partial<Monitor>) => setMonitors(ms => [normalizeMonitor(next) as MonitorUi, ...ms]));
-          create({ ...m, id: 'mon-' + Date.now().toString(36), runs: [], nextRun: '', enabled: true });
-          setCreating(false);
-        }} />}
+      {creating && (
+        <NewMonitorModal
+          env={env}
+          onClose={() => setCreating(false)}
+          onCreate={(m) => {
+            const create =
+              onCreateMonitor ||
+              ((next: Partial<Monitor>) =>
+                setMonitors((ms) => [normalizeMonitor(next) as MonitorUi, ...ms]));
+            create({
+              ...m,
+              id: 'mon-' + Date.now().toString(36),
+              runs: [],
+              nextRun: '',
+              enabled: true,
+            });
+            setCreating(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -333,33 +465,78 @@ function NewMonitorModal({ env, onClose, onCreate }: NewMonitorModalProps) {
   const cols = window.QA.COLLECTIONS;
   // Real environments only (filter the placeholder `None` out); fall back to
   // the currently active env label if the user hasn't added any from Settings.
-  const realEnvs = window.QA.ENVIRONMENTS.filter((e: any) => e.label !== 'None').map((e: any) => e.label);
+  const realEnvs = window.QA.ENVIRONMENTS.filter((e: any) => e.label !== 'None').map(
+    (e: any) => e.label
+  );
   const envs = realEnvs.length ? realEnvs : [env.label];
   const [name, setName] = useStateMON('');
   const [collectionId, setCollectionId] = useStateMON<string>(cols[0] ? cols[0].id : '');
   const [cadence, setCadence] = useStateMON(CADENCES[1]);
   const [region, setRegion] = useStateMON(REGIONS[0]);
-  const [menv, setMenv] = useStateMON(env.label !== 'None' ? env.label : (realEnvs[0] || env.label));
+  const [menv, setMenv] = useStateMON(env.label !== 'None' ? env.label : realEnvs[0] || env.label);
   return (
     <div className="qa-modal-scrim" onMouseDown={onClose}>
-      <div className="qa-modal qa-monnew" onMouseDown={e => e.stopPropagation()}>
+      <div className="qa-modal qa-monnew" onMouseDown={(e) => e.stopPropagation()}>
         <div className="qa-modal-head">
-          <span className="qa-modal-title"><Icon name="clock" size={15} /> {t('monitors.new')}</span>
-          <button className="qa-iconbtn" onClick={onClose} aria-label={t('common.close')}><Icon name="x" size={15} /></button>
+          <span className="qa-modal-title">
+            <Icon name="clock" size={15} /> {t('monitors.new')}
+          </span>
+          <button className="qa-iconbtn" onClick={onClose} aria-label={t('common.close')}>
+            <Icon name="x" size={15} />
+          </button>
         </div>
         <div className="qa-monnew-body">
-          <FieldRow label={t('monitors.modal.name')}><input className="qa-inp" value={name} placeholder="User Service · smoke" onChange={e => setName(e.target.value)} /></FieldRow>
-          <FieldRow label={t('monitors.modal.collection')}><Dropdown value={collectionId} options={cols.map((c: any) => ({ value: c.id, label: c.name }))} onChange={setCollectionId} /></FieldRow>
+          <FieldRow label={t('monitors.modal.name')}>
+            <input
+              className="qa-inp"
+              value={name}
+              placeholder="User Service · smoke"
+              onChange={(e) => setName(e.target.value)}
+            />
+          </FieldRow>
+          <FieldRow label={t('monitors.modal.collection')}>
+            <Dropdown
+              value={collectionId}
+              options={cols.map((c: any) => ({ value: c.id, label: c.name }))}
+              onChange={setCollectionId}
+            />
+          </FieldRow>
           <div className="qa-field-grid">
-            <FieldRow label={t('monitors.modal.environment')}><Dropdown value={menv} options={envs} onChange={setMenv} /></FieldRow>
-            <FieldRow label={t('monitors.modal.region')}><Dropdown value={region} options={REGIONS} onChange={setRegion} /></FieldRow>
+            <FieldRow label={t('monitors.modal.environment')}>
+              <Dropdown value={menv} options={envs} onChange={setMenv} />
+            </FieldRow>
+            <FieldRow label={t('monitors.modal.region')}>
+              <Dropdown value={region} options={REGIONS} onChange={setRegion} />
+            </FieldRow>
           </div>
-          <FieldRow label={t('monitors.modal.schedule')}><Dropdown value={cadence} options={CADENCES.map(c => ({ value: c, label: cadenceLabel(c, t) }))} onChange={setCadence} /></FieldRow>
-          <div className="qa-auth-note"><Icon name="clock" size={13} /> {t('monitors.modal.note')}</div>
+          <FieldRow label={t('monitors.modal.schedule')}>
+            <Dropdown
+              value={cadence}
+              options={CADENCES.map((c) => ({ value: c, label: cadenceLabel(c, t) }))}
+              onChange={setCadence}
+            />
+          </FieldRow>
+          <div className="qa-auth-note">
+            <Icon name="clock" size={13} /> {t('monitors.modal.note')}
+          </div>
         </div>
         <div className="qa-modal-foot">
-          <button className="qa-pathbtn" onClick={onClose}>{t('common.cancel')}</button>
-          <button className="qa-send" disabled={!name.trim()} onClick={() => onCreate({ name: name.trim() || t('monitors.modal.untitled'), collectionId, env: menv, region, cadence })}>
+          <button className="qa-pathbtn" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="qa-send"
+            disabled={!name.trim()}
+            onClick={() =>
+              onCreate({
+                name: name.trim() || t('monitors.modal.untitled'),
+                collectionId,
+                env: menv,
+                region,
+                cadence,
+              })
+            }
+          >
             <Icon name="clock" size={14} /> {t('monitors.modal.create')}
           </button>
         </div>

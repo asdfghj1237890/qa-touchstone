@@ -1,38 +1,81 @@
 // src/__tests__/security-report.test.js
 import { describe, it, expect } from 'vitest';
-import { buildReport, reportToJson, reportToHtml, htmlEscape, reportToJUnit, reportToSarif, sevToSarifLevel } from '../qa/securityReport';
+import {
+  buildReport,
+  reportToJson,
+  reportToHtml,
+  htmlEscape,
+  reportToJUnit,
+  reportToSarif,
+  sevToSarifLevel,
+} from '../qa/securityReport';
 
 const item = (over = {}) => ({
-  fp: 'fp1', effectiveSeverity: 'high', engine: 'matrix', ruleId: 'jwt',
-  path: 'data.token', locationLabel: 'GET /me · admin', title: 'JWT in response',
-  evidence: 'eyJ…<redacted>…0', count: 1, ...over,
+  fp: 'fp1',
+  effectiveSeverity: 'high',
+  engine: 'matrix',
+  ruleId: 'jwt',
+  path: 'data.token',
+  locationLabel: 'GET /me · admin',
+  title: 'JWT in response',
+  evidence: 'eyJ…<redacted>…0',
+  count: 1,
+  ...over,
 });
 const run = (items, over = {}) => ({
-  runId: 'r-finish', status: 'complete', startedAt: 'T0', finishedAt: 'T1', durationMs: 5000,
-  scopeHash: 'sh', engines: [{ engine: 'matrix', ran: true, durationMs: 5000, findingCount: items.length, error: null }],
-  items, ...over,
+  runId: 'r-finish',
+  status: 'complete',
+  startedAt: 'T0',
+  finishedAt: 'T1',
+  durationMs: 5000,
+  scopeHash: 'sh',
+  engines: [
+    { engine: 'matrix', ran: true, durationMs: 5000, findingCount: items.length, error: null },
+  ],
+  items,
+  ...over,
 });
 const lc = (records = {}) => ({ fpVersion: 1, records });
 
 describe('buildReport', () => {
   it('assembles meta, engines, summary, and findings with annotations joined by fp', () => {
-    const rep = buildReport(run([item()]), null, lc({ fp1: { owner: 'alice', status: 'acknowledged' } }), {});
+    const rep = buildReport(
+      run([item()]),
+      null,
+      lc({ fp1: { owner: 'alice', status: 'acknowledged' } }),
+      {}
+    );
     expect(rep.meta.tool).toBe('QA Touchstone');
     expect(rep.meta.runId).toBe('r-finish');
     expect(rep.summary.total).toBe(1);
     expect(rep.summary.bySeverity.high).toBe(1);
-    expect(rep.findings[0]).toMatchObject({ fp: 'fp1', severity: 'high', title: 'JWT in response', owner: 'alice', status: 'acknowledged', presence: 'new' });
+    expect(rep.findings[0]).toMatchObject({
+      fp: 'fp1',
+      severity: 'high',
+      title: 'JWT in response',
+      owner: 'alice',
+      status: 'acknowledged',
+      presence: 'new',
+    });
   });
   it('newHighCritical counts new high/critical not suppressed (matches gate)', () => {
-    const items = [item({ fp: 'a', effectiveSeverity: 'critical' }), item({ fp: 'b', effectiveSeverity: 'high' }), item({ fp: 'c', effectiveSeverity: 'low' })];
+    const items = [
+      item({ fp: 'a', effectiveSeverity: 'critical' }),
+      item({ fp: 'b', effectiveSeverity: 'high' }),
+      item({ fp: 'c', effectiveSeverity: 'low' }),
+    ];
     const rep = buildReport(run(items), null, lc({ b: { suppressed: true } }), {});
     expect(rep.summary.newHighCritical).toBe(1); // a counts; b suppressed; c low
   });
   it('marks carried vs new via the baseline, and reconstructs resolved from baseline', () => {
     const cur = run([item({ fp: 'a' }), item({ fp: 'b' })]);
-    const base = { runId: 'base', scopeHash: 'sh', items: [item({ fp: 'b' }), item({ fp: 'gone', locationLabel: 'GET /old · admin' })] };
+    const base = {
+      runId: 'base',
+      scopeHash: 'sh',
+      items: [item({ fp: 'b' }), item({ fp: 'gone', locationLabel: 'GET /old · admin' })],
+    };
     const rep = buildReport(cur, base, lc(), {});
-    const byFp = Object.fromEntries(rep.findings.map(f => [f.fp, f]));
+    const byFp = Object.fromEntries(rep.findings.map((f) => [f.fp, f]));
     expect(byFp.a.presence).toBe('new');
     expect(byFp.b.presence).toBe('carried');
     expect(byFp.gone.presence).toBe('resolved');
@@ -40,8 +83,12 @@ describe('buildReport', () => {
     expect(rep.summary.resolved).toBe(1);
   });
   it('redaction strict omits evidence; redacted keeps the masked string', () => {
-    expect(buildReport(run([item()]), null, lc(), { redaction: 'redacted' }).findings[0].evidence).toBe('eyJ…<redacted>…0');
-    expect(buildReport(run([item()]), null, lc(), { redaction: 'strict' }).findings[0]).not.toHaveProperty('evidence');
+    expect(
+      buildReport(run([item()]), null, lc(), { redaction: 'redacted' }).findings[0].evidence
+    ).toBe('eyJ…<redacted>…0');
+    expect(
+      buildReport(run([item()]), null, lc(), { redaction: 'strict' }).findings[0]
+    ).not.toHaveProperty('evidence');
   });
   it('with no baseline, everything is new and scopeMismatch is false', () => {
     const rep = buildReport(run([item()]), null, lc(), {});
@@ -80,22 +127,33 @@ describe('htmlEscape', () => {
 });
 
 describe('reportToJUnit', () => {
-  const mk = (records = {}, base = null) => buildReport(
-    run([item({ fp: 'a', effectiveSeverity: 'critical' }), item({ fp: 'b', effectiveSeverity: 'high' }),
-         item({ fp: 'c', effectiveSeverity: 'low' })]),
-    base, lc(records), {});
+  const mk = (records = {}, base = null) =>
+    buildReport(
+      run([
+        item({ fp: 'a', effectiveSeverity: 'critical' }),
+        item({ fp: 'b', effectiveSeverity: 'high' }),
+        item({ fp: 'c', effectiveSeverity: 'low' }),
+      ]),
+      base,
+      lc(records),
+      {}
+    );
   it('failures attribute equals the gate (new high/critical, not suppressed)', () => {
     const xml = reportToJUnit(mk());
     expect(xml).toMatch(/<testsuites [^>]*failures="2"/); // a + b are new high/critical
   });
   it('a suppressed finding becomes <skipped>, not a failure', () => {
     const xml = reportToJUnit(mk({ a: { suppressed: true } }));
-    expect(xml).toMatch(/<testsuites [^>]*failures="1"/);  // only b now
+    expect(xml).toMatch(/<testsuites [^>]*failures="1"/); // only b now
     expect(xml).toMatch(/<testsuites [^>]*skipped="1"/);
     expect(xml).toContain('<skipped');
   });
   it('a carried high is a passing testcase, not a failure', () => {
-    const base = { runId: 'base', scopeHash: 'sh', items: [item({ fp: 'b', effectiveSeverity: 'high' })] };
+    const base = {
+      runId: 'base',
+      scopeHash: 'sh',
+      items: [item({ fp: 'b', effectiveSeverity: 'high' })],
+    };
     const xml = reportToJUnit(mk({}, base));
     expect(xml).toMatch(/<testsuites [^>]*failures="1"/); // b carried -> only a fails
   });
@@ -118,13 +176,17 @@ describe('sevToSarifLevel', () => {
 
 describe('buildReport redaction levels', () => {
   it('"strict" omits both evidence and evidenceArtifact', () => {
-    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'strict' });
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), {
+      redaction: 'strict',
+    });
     expect(rep.findings[0].evidence).toBeUndefined();
     expect(rep.findings[0].evidenceArtifact).toBeUndefined();
     expect(rep.meta.redaction).toBe('strict');
   });
   it('"redacted" keeps the short evidence but NOT the artifact', () => {
-    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), { redaction: 'redacted' });
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'matrix' } })]), null, lc(), {
+      redaction: 'redacted',
+    });
     expect(rep.findings[0].evidence).toBe('eyJ…<redacted>…0');
     expect(rep.findings[0].evidenceArtifact).toBeUndefined();
   });
@@ -135,7 +197,9 @@ describe('buildReport redaction levels', () => {
     expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'matrix' });
   });
   it('"evidence" falls back to a persisted item artifact when the map has no entry', () => {
-    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'bola' } })]), null, lc(), { redaction: 'evidence' });
+    const rep = buildReport(run([item({ evidenceArtifact: { engine: 'bola' } })]), null, lc(), {
+      redaction: 'evidence',
+    });
     expect(rep.findings[0].evidenceArtifact).toMatchObject({ engine: 'bola' });
   });
   it('"evidence" emits no evidenceArtifact key when neither map nor item has one', () => {
@@ -148,18 +212,29 @@ describe('buildReport redaction levels', () => {
 describe('reportToSarif', () => {
   const parse = (model) => JSON.parse(reportToSarif(model));
   it('emits a valid 2.1.0 skeleton with unique rules and a result per current finding', () => {
-    const sarif = parse(buildReport(run([item({ fp: 'a' }), item({ fp: 'b', ruleId: 'jwt' })]), null, lc(), {}));
+    const sarif = parse(
+      buildReport(run([item({ fp: 'a' }), item({ fp: 'b', ruleId: 'jwt' })]), null, lc(), {})
+    );
     expect(sarif.version).toBe('2.1.0');
     const driver = sarif.runs[0].tool.driver;
     expect(driver.name).toBe('QA Touchstone');
-    expect(driver.rules.map(r => r.id)).toEqual(['jwt']); // both share ruleId jwt -> unique
+    expect(driver.rules.map((r) => r.id)).toEqual(['jwt']); // both share ruleId jwt -> unique
     expect(sarif.runs[0].results).toHaveLength(2);
     expect(sarif.runs[0].results[0].partialFingerprints.qaFingerprint).toBeTruthy();
   });
   it('sets baselineState and suppressions', () => {
     const base = { runId: 'base', scopeHash: 'sh', items: [item({ fp: 'b' })] };
-    const sarif = parse(buildReport(run([item({ fp: 'a' }), item({ fp: 'b' })]), base, lc({ a: { suppressed: true, suppressReason: 'fp' } }), {}));
-    const byFp = Object.fromEntries(sarif.runs[0].results.map(r => [r.partialFingerprints.qaFingerprint, r]));
+    const sarif = parse(
+      buildReport(
+        run([item({ fp: 'a' }), item({ fp: 'b' })]),
+        base,
+        lc({ a: { suppressed: true, suppressReason: 'fp' } }),
+        {}
+      )
+    );
+    const byFp = Object.fromEntries(
+      sarif.runs[0].results.map((r) => [r.partialFingerprints.qaFingerprint, r])
+    );
     expect(byFp.a.baselineState).toBe('new');
     expect(byFp.b.baselineState).toBe('unchanged');
     expect(byFp.a.suppressions[0].justification).toBe('fp');
@@ -170,11 +245,12 @@ describe('reportToSarif', () => {
 describe('reportToSarif — rule metadata (GitHub code scanning friendliness)', () => {
   const parse = (model) => JSON.parse(reportToSarif(model));
   it('every rule carries a name, descriptions, helpUri, default level, and tags', () => {
-    const driver = parse(buildReport(run([item({ ruleId: 'jwt' })]), null, lc(), {})).runs[0].tool.driver;
+    const driver = parse(buildReport(run([item({ ruleId: 'jwt' })]), null, lc(), {})).runs[0].tool
+      .driver;
     const rule = driver.rules[0];
     expect(rule.id).toBe('jwt');
     expect(typeof rule.name).toBe('string');
-    expect(rule.name).not.toContain(' ');                 // SARIF rule name is an opaque token
+    expect(rule.name).not.toContain(' '); // SARIF rule name is an opaque token
     expect(rule.shortDescription.text.length).toBeGreaterThan(0);
     expect(rule.fullDescription.text.length).toBeGreaterThan(0);
     expect(rule.helpUri).toMatch(/^https?:\/\//);
@@ -183,12 +259,26 @@ describe('reportToSarif — rule metadata (GitHub code scanning friendliness)', 
     expect(rule.properties.tags).toContain('security');
   });
   it('attaches a GitHub security-severity score derived from the worst finding severity', () => {
-    const driver = parse(buildReport(run([item({ ruleId: 'object-authz', effectiveSeverity: 'critical' })]), null, lc(), {})).runs[0].tool.driver;
+    const driver = parse(
+      buildReport(
+        run([item({ ruleId: 'object-authz', effectiveSeverity: 'critical' })]),
+        null,
+        lc(),
+        {}
+      )
+    ).runs[0].tool.driver;
     const score = Number(driver.rules[0].properties['security-severity']);
     expect(score).toBeGreaterThanOrEqual(9.0); // critical
   });
   it('synthesizes metadata for an unknown rule id without throwing', () => {
-    const driver = parse(buildReport(run([item({ ruleId: 'totally-custom-rule', title: 'Custom thing' })]), null, lc(), {})).runs[0].tool.driver;
+    const driver = parse(
+      buildReport(
+        run([item({ ruleId: 'totally-custom-rule', title: 'Custom thing' })]),
+        null,
+        lc(),
+        {}
+      )
+    ).runs[0].tool.driver;
     expect(driver.rules[0].id).toBe('totally-custom-rule');
     expect(driver.rules[0].name).toBeTruthy();
     expect(driver.rules[0].shortDescription.text).toBeTruthy();
@@ -198,7 +288,14 @@ describe('reportToSarif — rule metadata (GitHub code scanning friendliness)', 
 describe('reportToSarif — result locations', () => {
   const parse = (model) => JSON.parse(reportToSarif(model));
   it('each result has a ruleIndex that resolves back to its rule', () => {
-    const sarif = parse(buildReport(run([item({ fp: 'a', ruleId: 'jwt' }), item({ fp: 'b', ruleId: 'object-authz' })]), null, lc(), {}));
+    const sarif = parse(
+      buildReport(
+        run([item({ fp: 'a', ruleId: 'jwt' }), item({ fp: 'b', ruleId: 'object-authz' })]),
+        null,
+        lc(),
+        {}
+      )
+    );
     const { rules } = sarif.runs[0].tool.driver;
     for (const r of sarif.runs[0].results) {
       expect(typeof r.ruleIndex).toBe('number');
@@ -218,12 +315,26 @@ describe('reportToSarif — result locations', () => {
 describe('reportToHtml evidence artifact', () => {
   const artifact = {
     engine: 'matrix',
-    request: { method: 'GET', url: '/me?token=<redacted>', identity: 'admin', headers: { authorization: '<redacted>' } },
-    response: { status: 200, headers: { 'content-type': 'application/json' }, snippetPath: 'data.token', snippet: { token: 'eyJ…<redacted>…0', name: '<str:3>' }, nonJson: null, truncated: false },
+    request: {
+      method: 'GET',
+      url: '/me?token=<redacted>',
+      identity: 'admin',
+      headers: { authorization: '<redacted>' },
+    },
+    response: {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      snippetPath: 'data.token',
+      snippet: { token: 'eyJ…<redacted>…0', name: '<str:3>' },
+      nonJson: null,
+      truncated: false,
+    },
   };
   it('renders an expandable <details> with the masked, escaped request line', () => {
     const map = new Map([['fp1', artifact]]);
-    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    const html = reportToHtml(
+      buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map })
+    );
     expect(html).toContain('<details>');
     expect(html).toContain('GET /me?token=&lt;redacted&gt;');
   });
@@ -238,11 +349,25 @@ describe('reportToHtml evidence headers are single-escaped', () => {
   it('escapes header values exactly once (no double-escape)', () => {
     const artifact = {
       engine: 'matrix',
-      request: { method: 'GET', url: '/x', identity: 'a', headers: { authorization: '<redacted>' } },
-      response: { status: 200, headers: { 'x-test': '<a>&b' }, snippetPath: '', snippet: { k: '<num>' }, nonJson: null, truncated: false },
+      request: {
+        method: 'GET',
+        url: '/x',
+        identity: 'a',
+        headers: { authorization: '<redacted>' },
+      },
+      response: {
+        status: 200,
+        headers: { 'x-test': '<a>&b' },
+        snippetPath: '',
+        snippet: { k: '<num>' },
+        nonJson: null,
+        truncated: false,
+      },
     };
     const map = new Map([['fp1', artifact]]);
-    const html = reportToHtml(buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map }));
+    const html = reportToHtml(
+      buildReport(run([item()]), null, lc(), { redaction: 'evidence', evidence: map })
+    );
     // request header value single-escaped
     expect(html).toContain('authorization: &lt;redacted&gt;');
     // response header value with & and <> single-escaped

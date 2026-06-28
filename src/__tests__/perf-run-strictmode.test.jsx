@@ -9,9 +9,15 @@ function installLocalStorage(seed = {}) {
   let store = { ...seed };
   const storage = {
     getItem: (key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null),
-    setItem: (key, value) => { store[key] = String(value); },
-    removeItem: (key) => { delete store[key]; },
-    clear: () => { store = {}; },
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
   };
   Object.defineProperty(globalThis, 'localStorage', { value: storage, configurable: true });
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
@@ -25,9 +31,21 @@ describe('PerfTest Run under React.StrictMode', () => {
   afterEach(() => cleanup());
   beforeEach(() => {
     installLocalStorage({ qa_locale: 'en-US' });
-    window.QA.COLLECTIONS = [{ id: 'c1', name: 'C', count: 1, folders: [{ name: 'F', requests: [
-      { id: 'r1', method: 'GET', name: 'Cat fact', path: 'https://catfact.ninja/fact' },
-    ] }] }];
+    window.QA.COLLECTIONS = [
+      {
+        id: 'c1',
+        name: 'C',
+        count: 1,
+        folders: [
+          {
+            name: 'F',
+            requests: [
+              { id: 'r1', method: 'GET', name: 'Cat fact', path: 'https://catfact.ninja/fact' },
+            ],
+          },
+        ],
+      },
+    ];
     window.QA.REQUEST_DETAILS = { r1: { params: [], headers: [], body: null, auth: 'none' } };
     api.writeTempText = vi.fn().mockResolvedValue('/tmp/script.js');
     api.runK6WithRealTimeOutput = vi.fn().mockResolvedValue(0);

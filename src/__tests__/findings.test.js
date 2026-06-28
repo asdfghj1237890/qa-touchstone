@@ -1,30 +1,57 @@
 // src/__tests__/findings.test.js
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  FP_VERSION, LIFECYCLE_KEY,
-  ruleIdOf, locationOf, locationLabel, fnv1a, fingerprint,
-  snapshotOf, scopeHashOf, diffRuns, gateCount,
-  loadLifecycle, saveLifecycle, upsertRecord,
-  loadSnapshots, saveSnapshots, recordRun, pinBaseline,
+  FP_VERSION,
+  LIFECYCLE_KEY,
+  ruleIdOf,
+  locationOf,
+  locationLabel,
+  fnv1a,
+  fingerprint,
+  snapshotOf,
+  scopeHashOf,
+  diffRuns,
+  gateCount,
+  loadLifecycle,
+  saveLifecycle,
+  upsertRecord,
+  loadSnapshots,
+  saveSnapshots,
+  recordRun,
+  pinBaseline,
 } from '../qa/findings';
 
 const matrixF = (over = {}) => ({
-  engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
-  path: 'data.token', evidence: 'eyJ…', method: 'GET', endpoint: '/me',
-  identityLabel: 'admin', ref: { reqId: 'r1', idId: 'admin' }, ...over,
+  engine: 'matrix',
+  ruleId: 'jwt',
+  severity: 'high',
+  title: 'JWT in response',
+  path: 'data.token',
+  evidence: 'eyJ…',
+  method: 'GET',
+  endpoint: '/me',
+  identityLabel: 'admin',
+  ref: { reqId: 'r1', idId: 'admin' },
+  ...over,
 });
 
 describe('FP_VERSION', () => {
-  it('is a positive integer', () => { expect(FP_VERSION).toBeGreaterThanOrEqual(1); });
+  it('is a positive integer', () => {
+    expect(FP_VERSION).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('ruleIdOf', () => {
-  it('prefers explicit ruleId', () => { expect(ruleIdOf({ ruleId: 'jwt', oracle: 'sensitive-data' })).toBe('jwt'); });
+  it('prefers explicit ruleId', () => {
+    expect(ruleIdOf({ ruleId: 'jwt', oracle: 'sensitive-data' })).toBe('jwt');
+  });
   it('falls back to oracle (BOLA/rate-limit have stable oracle ids)', () => {
     expect(ruleIdOf({ oracle: 'object-authz' })).toBe('object-authz');
     expect(ruleIdOf({ oracle: 'rate-limit' })).toBe('rate-limit');
   });
-  it('defaults to "unknown" when neither present', () => { expect(ruleIdOf({})).toBe('unknown'); });
+  it('defaults to "unknown" when neither present', () => {
+    expect(ruleIdOf({})).toBe('unknown');
+  });
 });
 
 describe('locationOf', () => {
@@ -32,8 +59,9 @@ describe('locationOf', () => {
     expect(locationOf(matrixF())).toBe('GET /me @admin');
   });
   it('bola uses test + attacker -> owner', () => {
-    expect(locationOf({ engine: 'bola', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } }))
-      .toBe('bola:t1:a->o');
+    expect(
+      locationOf({ engine: 'bola', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } })
+    ).toBe('bola:t1:a->o');
   });
   it('ratelimit uses test id', () => {
     expect(locationOf({ engine: 'ratelimit', ref: { testId: 't9' } })).toBe('rl:t9');
@@ -53,8 +81,9 @@ describe('fingerprint', () => {
     expect(fingerprint(matrixF({ path: 'data.secret' })).fp).not.toBe(base);
   });
   it('treats array indices as equal (normalizePath collapses [n])', () => {
-    expect(fingerprint(matrixF({ path: 'items[0].token' })).fp)
-      .toBe(fingerprint(matrixF({ path: 'items[3].token' })).fp);
+    expect(fingerprint(matrixF({ path: 'items[0].token' })).fp).toBe(
+      fingerprint(matrixF({ path: 'items[3].token' })).fp
+    );
   });
   it('exposes the canonical fpMaterial beside the hash', () => {
     expect(fingerprint(matrixF()).fpMaterial).toBe('matrix|jwt|GET /me @admin|data.token');
@@ -63,8 +92,12 @@ describe('fingerprint', () => {
 
 describe('locationLabel', () => {
   const matrixF = (over = {}) => ({
-    engine: 'matrix', method: 'GET', endpoint: '/me', identityLabel: 'admin',
-    ref: { reqId: 'r1', idId: 'admin' }, ...over,
+    engine: 'matrix',
+    method: 'GET',
+    endpoint: '/me',
+    identityLabel: 'admin',
+    ref: { reqId: 'r1', idId: 'admin' },
+    ...over,
   });
   it('matrix uses method, endpoint, and identity label', () => {
     expect(locationLabel(matrixF())).toBe('GET /me · admin');
@@ -73,8 +106,9 @@ describe('locationLabel', () => {
     expect(locationLabel(matrixF({ identityLabel: '' }))).toBe('GET /me');
   });
   it('bola uses a human label with attacker/owner', () => {
-    expect(locationLabel({ engine: 'bola', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } }))
-      .toBe('BOLA t1 (a→o)');
+    expect(
+      locationLabel({ engine: 'bola', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } })
+    ).toBe('BOLA t1 (a→o)');
   });
   it('ratelimit uses a human label with the test id', () => {
     expect(locationLabel({ engine: 'ratelimit', ref: { testId: 't9' } })).toBe('Rate-limit t9');
@@ -122,8 +156,18 @@ describe('snapshotOf', () => {
   it('snapshot items have the expected key set', () => {
     const snap = snapshotOf([matrixF()], lc(), {});
     const item = snap.items[0];
-    expect(Object.keys(item).sort()).toEqual(
-      ['count','dfp','effectiveSeverity','engine','evidence','fp','locationLabel','path','ruleId','title']);
+    expect(Object.keys(item).sort()).toEqual([
+      'count',
+      'dfp',
+      'effectiveSeverity',
+      'engine',
+      'evidence',
+      'fp',
+      'locationLabel',
+      'path',
+      'ruleId',
+      'title',
+    ]);
   });
 });
 
@@ -153,7 +197,9 @@ describe('fingerprint — survives a documented rule rename', () => {
 
 describe('detailHash — title + evidence drift dimension', () => {
   it('changes when evidence changes (e.g. a rotated JWT)', () => {
-    expect(detailHash(matrixF({ evidence: 'eyJ…aaa' }))).not.toBe(detailHash(matrixF({ evidence: 'eyJ…bbb' })));
+    expect(detailHash(matrixF({ evidence: 'eyJ…aaa' }))).not.toBe(
+      detailHash(matrixF({ evidence: 'eyJ…bbb' }))
+    );
   });
   it('changes when the title changes', () => {
     expect(detailHash(matrixF({ title: 'A' }))).not.toBe(detailHash(matrixF({ title: 'B' })));
@@ -165,11 +211,17 @@ describe('detailHash — title + evidence drift dimension', () => {
 
 describe('diffDetail — carried findings whose evidence drifted', () => {
   it('flags a carried fp whose detail hash changed, but not an unchanged one', () => {
-    const cur = [{ fp: 'a', dfp: 'x2' }, { fp: 'b', dfp: 'y' }];
-    const base = [{ fp: 'a', dfp: 'x1' }, { fp: 'b', dfp: 'y' }];
+    const cur = [
+      { fp: 'a', dfp: 'x2' },
+      { fp: 'b', dfp: 'y' },
+    ];
+    const base = [
+      { fp: 'a', dfp: 'x1' },
+      { fp: 'b', dfp: 'y' },
+    ];
     const changed = diffDetail(cur, base);
-    expect(changed.has('a')).toBe(true);   // same finding, evidence rotated
-    expect(changed.has('b')).toBe(false);  // unchanged
+    expect(changed.has('a')).toBe(true); // same finding, evidence rotated
+    expect(changed.has('b')).toBe(false); // unchanged
   });
   it('does not flag a brand-new finding (no baseline counterpart)', () => {
     expect(diffDetail([{ fp: 'n', dfp: 'z' }], []).has('n')).toBe(false);
@@ -178,15 +230,34 @@ describe('diffDetail — carried findings whose evidence drifted', () => {
 
 describe('snapshotOf enrichment (title + evidence)', () => {
   it('copies title and masked evidence into snapshot items', () => {
-    const union = [{ engine: 'matrix', ruleId: 'jwt', severity: 'high', title: 'JWT in response',
-      path: 'data.token', evidence: 'eyJ…<redacted>…0', method: 'GET', endpoint: '/me',
-      identityLabel: 'admin', ref: { reqId: 'r1', idId: 'admin' } }];
+    const union = [
+      {
+        engine: 'matrix',
+        ruleId: 'jwt',
+        severity: 'high',
+        title: 'JWT in response',
+        path: 'data.token',
+        evidence: 'eyJ…<redacted>…0',
+        method: 'GET',
+        endpoint: '/me',
+        identityLabel: 'admin',
+        ref: { reqId: 'r1', idId: 'admin' },
+      },
+    ];
     const snap = snapshotOf(union, lc(), {});
     expect(snap.items[0].title).toBe('JWT in response');
     expect(snap.items[0].evidence).toBe('eyJ…<redacted>…0');
   });
   it('defaults title/evidence to empty string when absent', () => {
-    const union = [{ engine: 'bola', oracle: 'object-authz', severity: 'high', path: 'GET /o', ref: { testId: 't1', attackerId: 'a', ownerId: 'o' } }];
+    const union = [
+      {
+        engine: 'bola',
+        oracle: 'object-authz',
+        severity: 'high',
+        path: 'GET /o',
+        ref: { testId: 't1', attackerId: 'a', ownerId: 'o' },
+      },
+    ];
     const snap = snapshotOf(union, lc(), {});
     expect(snap.items[0].title).toBe('');
     expect(snap.items[0].evidence).toBe('');
@@ -223,7 +294,7 @@ describe('diffRuns', () => {
     // Even if this fp was resolved against some older baseline, diffing the
     // CURRENT run against a baseline that lacks it yields "new" (live again).
     const d = diffRuns([item('x')], [item('y')]);
-    expect(d.get('x')).toBe('new');      // x is live -> new, never stuck resolved
+    expect(d.get('x')).toBe('new'); // x is live -> new, never stuck resolved
     expect(d.get('y')).toBe('resolved'); // y absent from current
   });
 });
@@ -261,7 +332,10 @@ describe('lifecycle storage', () => {
     expect(back.records.fp1.status).toBe('open'); // default filled by upsert
   });
   it('quarantines records from an older fpVersion as legacy (never dropped)', () => {
-    localStorage.setItem(LIFECYCLE_KEY, JSON.stringify({ fpVersion: 0, records: { oldfp: { note: 'x' } } }));
+    localStorage.setItem(
+      LIFECYCLE_KEY,
+      JSON.stringify({ fpVersion: 0, records: { oldfp: { note: 'x' } } })
+    );
     const s = loadLifecycle();
     expect(s.records).toEqual({});
     expect(s.legacy).toEqual({ fpVersion: 0, records: { oldfp: { note: 'x' } } });

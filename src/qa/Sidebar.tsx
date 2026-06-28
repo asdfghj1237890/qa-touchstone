@@ -21,20 +21,40 @@ function histEntry(h: HistoryEntry) {
   const all = window.QA.COLLECTIONS.flatMap((c: any) => c.folders.flatMap((f: any) => f.requests));
   const meta = all.find((r: any) => r.id === h.id);
   return {
-    name: meta ? meta.name : h.path, method: h.method, path: h.path, at: h.at,
-    status: h.status, statusText: resp ? resp.statusText : '', timeMs: h.time, sizeBytes: resp ? resp.size : 0,
-    responseHeaders: resp ? resp.headers : {}, responseBody: resp ? resp.body : null,
+    name: meta ? meta.name : h.path,
+    method: h.method,
+    path: h.path,
+    at: h.at,
+    status: h.status,
+    statusText: resp ? resp.statusText : '',
+    timeMs: h.time,
+    sizeBytes: resp ? resp.size : 0,
+    responseHeaders: resp ? resp.headers : {},
+    responseBody: resp ? resp.body : null,
   };
 }
 function histEsc(s: unknown) {
   return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 function histReportHtml(data: Array<ReturnType<typeof histEntry>>) {
   const sc = window.QATheme.statusColor;
-  const rows = data.map(d => `<tr><td>${histEsc(d.at)}</td><td class="m">${histEsc(d.method)}</td><td>${histEsc(d.path)}</td><td style="color:${sc(d.status)};font-weight:700">${histEsc(d.status)}</td><td>${histEsc(d.timeMs)}ms</td><td>${histEsc(d.sizeBytes)} B</td></tr>`).join('');
-  const bodies = data.map(d => `<div class="call"><div class="ch"><span class="m">${histEsc(d.method)}</span> ${histEsc(d.path)} <b style="color:${sc(d.status)}">${histEsc(d.status)} ${histEsc(d.statusText)}</b></div>${d.responseBody != null ? `<pre>${window.highlightJson!(JSON.stringify(d.responseBody, null, 2))}</pre>` : '<div class="muted">no body</div>'}</div>`).join('');
+  const rows = data
+    .map(
+      (d) =>
+        `<tr><td>${histEsc(d.at)}</td><td class="m">${histEsc(d.method)}</td><td>${histEsc(d.path)}</td><td style="color:${sc(d.status)};font-weight:700">${histEsc(d.status)}</td><td>${histEsc(d.timeMs)}ms</td><td>${histEsc(d.sizeBytes)} B</td></tr>`
+    )
+    .join('');
+  const bodies = data
+    .map(
+      (d) =>
+        `<div class="call"><div class="ch"><span class="m">${histEsc(d.method)}</span> ${histEsc(d.path)} <b style="color:${sc(d.status)}">${histEsc(d.status)} ${histEsc(d.statusText)}</b></div>${d.responseBody != null ? `<pre>${window.highlightJson!(JSON.stringify(d.responseBody, null, 2))}</pre>` : '<div class="muted">no body</div>'}</div>`
+    )
+    .join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>QA Touchstone — API history (${data.length} calls)</title>
 <style>
   body{margin:0;background:#15181c;color:#e6edf3;font-family:'Google Sans Code',ui-monospace,monospace;font-size:13px;padding:32px}
@@ -56,10 +76,18 @@ function exportHistory(items: HistoryEntry[], fmt: string) {
   if (!items.length) return;
   const data = items.map(histEntry);
   const base = `qa-api-history-${items.length}calls-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}`;
-  if (fmt === 'json') { histDownload(base + '.json', JSON.stringify(data, null, 2), 'application/json'); return; }
-  if (fmt === 'html') { histDownload(base + '.html', histReportHtml(data), 'text/html'); return; }
+  if (fmt === 'json') {
+    histDownload(base + '.json', JSON.stringify(data, null, 2), 'application/json');
+    return;
+  }
+  if (fmt === 'html') {
+    histDownload(base + '.html', histReportHtml(data), 'text/html');
+    return;
+  }
   const lines = ['time,method,path,status,time_ms,size_bytes'];
-  data.forEach(d => lines.push(`${d.at},${d.method},"${d.path}",${d.status},${d.timeMs},${d.sizeBytes}`));
+  data.forEach((d) =>
+    lines.push(`${d.at},${d.method},"${d.path}",${d.status},${d.timeMs},${d.sizeBytes}`)
+  );
   histDownload(base + '.csv', lines.join('\n'), 'text/csv');
 }
 
@@ -91,10 +119,15 @@ function NavRail({ route, setRoute, busy, flashAt, active }: NavRailProps) {
         <PulseLogo busy={busy} flashAt={flashAt} active={active} size={34} />
       </div>
       <div className="qa-rail-items">
-        {items.map(it => (
-          <button key={it.key}
-                  className="qa-rail-btn" data-active={route === it.key ? '1' : '0'}
-                  onClick={() => setRoute(it.key)} title={it.label} aria-label={it.label}>
+        {items.map((it) => (
+          <button
+            key={it.key}
+            className="qa-rail-btn"
+            data-active={route === it.key ? '1' : '0'}
+            onClick={() => setRoute(it.key)}
+            title={it.label}
+            aria-label={it.label}
+          >
             <Icon name={it.icon} size={20} stroke={1.9} />
             <span className="qa-rail-tip">{it.label}</span>
           </button>
@@ -138,33 +171,46 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
   const { COLLECTIONS, ENVIRONMENTS } = window.QA;
   // Default to the first collection open; everything else collapsed. Avoids
   // hard-coding seed IDs that may not exist after the workspace is reshaped.
-  const [open, setOpen] = useState<Record<string, boolean>>(() => COLLECTIONS[0] ? { [COLLECTIONS[0].id]: true } : {});
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    COLLECTIONS[0] ? { [COLLECTIONS[0].id]: true } : {}
+  );
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('collections');
   const [hSel, setHSel] = useState<number[]>([]);
   const [hMenu, setHMenu] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
-  const toggleHSel = (i: number) => setHSel(s => s.includes(i) ? s.filter(x => x !== i) : [...s, i]);
+  const toggleHSel = (i: number) =>
+    setHSel((s) => (s.includes(i) ? s.filter((x) => x !== i) : [...s, i]));
 
-  const toggle = (id: string) => setOpen(o => ({ ...o, [id]: !o[id] }));
+  const toggle = (id: string) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const q = query.trim().toLowerCase();
 
   return (
     <aside className="qa-side">
       {/* Environment selector */}
       <div className="qa-side-env">
-        <label className="qa-side-label"><Icon name="globe" size={12} /> {t('sidebar.environment')}</label>
-        <Dropdown value={env.label} options={ENVIRONMENTS.map((e: any) => e.label)}
-                  onChange={(label: string) => setEnv(ENVIRONMENTS.find((x: any) => x.label === label))} />
-        {env.baseUrl
-          ? <div className="qa-env-url">{env.baseUrl}</div>
-          : <div className="qa-env-url qa-env-url--empty">{t('sidebar.noBaseUrl')}</div>}
+        <label className="qa-side-label">
+          <Icon name="globe" size={12} /> {t('sidebar.environment')}
+        </label>
+        <Dropdown
+          value={env.label}
+          options={ENVIRONMENTS.map((e: any) => e.label)}
+          onChange={(label: string) => setEnv(ENVIRONMENTS.find((x: any) => x.label === label))}
+        />
+        {env.baseUrl ? (
+          <div className="qa-env-url">{env.baseUrl}</div>
+        ) : (
+          <div className="qa-env-url qa-env-url--empty">{t('sidebar.noBaseUrl')}</div>
+        )}
       </div>
 
       {/* Tabs: collections / history */}
       <div className="qa-side-tabs">
-        <button data-active={tab === 'collections' ? '1' : '0'} onClick={() => setTab('collections')}>
+        <button
+          data-active={tab === 'collections' ? '1' : '0'}
+          onClick={() => setTab('collections')}
+        >
           <Icon name="layers" size={13} /> {t('sidebar.collections')}
         </button>
         <button data-active={tab === 'history' ? '1' : '0'} onClick={() => setTab('history')}>
@@ -177,23 +223,47 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
           <div className="qa-side-tools">
             <div className="qa-search">
               <Icon name="search" size={13} />
-              <input placeholder={t('sidebar.searchRequests')} value={query} onChange={e => setQuery(e.target.value)} />
-              {query && <button onClick={() => setQuery('')} aria-label={t('common.clear')}><Icon name="x" size={12} /></button>}
+              <input
+                placeholder={t('sidebar.searchRequests')}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {query && (
+                <button onClick={() => setQuery('')} aria-label={t('common.clear')}>
+                  <Icon name="x" size={12} />
+                </button>
+              )}
             </div>
-            <button className="qa-side-import" title={t('sidebar.importTitle')} onClick={() => setImporting(true)}>
+            <button
+              className="qa-side-import"
+              title={t('sidebar.importTitle')}
+              onClick={() => setImporting(true)}
+            >
               <Icon name="download" size={14} /> {t('sidebar.import')}
             </button>
             <div className="qa-side-exportwrap">
-              <button className="qa-side-import qa-side-iconbtn" title={t('sidebar.exportTitle')} aria-label={t('sidebar.exportTitle')}
-                      aria-expanded={exportMenu} onClick={() => setExportMenu(m => !m)}>
+              <button
+                className="qa-side-import qa-side-iconbtn"
+                title={t('sidebar.exportTitle')}
+                aria-label={t('sidebar.exportTitle')}
+                aria-expanded={exportMenu}
+                onClick={() => setExportMenu((m) => !m)}
+              >
                 <Icon name="upload" size={14} />
               </button>
               {exportMenu && (
                 <div className="qa-export-menu">
                   <div className="qa-export-menu-h">{t('sidebar.exportAsPostman')}</div>
                   {COLLECTIONS.map((c: any) => (
-                    <button key={c.id} onClick={() => { window.exportCollection!(c, env); setExportMenu(false); }}>
-                      <Icon name="folder" size={13} /> <span>{c.name}</span><span className="qa-col-count">{c.count}</span>
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        window.exportCollection!(c, env);
+                        setExportMenu(false);
+                      }}
+                    >
+                      <Icon name="folder" size={13} /> <span>{c.name}</span>
+                      <span className="qa-col-count">{c.count}</span>
                     </button>
                   ))}
                 </div>
@@ -202,14 +272,25 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
           </div>
           <div className="qa-side-scroll">
             {COLLECTIONS.map((col: any) => {
-              const reqs = col.folders.flatMap((f: any) => f.requests)
-                .filter((r: any) => !q || r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q));
+              const reqs = col.folders
+                .flatMap((f: any) => f.requests)
+                .filter(
+                  (r: any) =>
+                    !q || r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)
+                );
               if (q && reqs.length === 0) return null;
-              const isOpen = (open[col.id] !== undefined ? open[col.id] : !!col.source) || (q && reqs.length > 0);
+              const isOpen =
+                (open[col.id] !== undefined ? open[col.id] : !!col.source) ||
+                (q && reqs.length > 0);
               return (
                 <div key={col.id} className="qa-col">
                   <button className="qa-col-head" onClick={() => toggle(col.id)}>
-                    <Icon name="chevron" size={13} className="qa-col-chev" data-open={isOpen ? '1' : '0'} />
+                    <Icon
+                      name="chevron"
+                      size={13}
+                      className="qa-col-chev"
+                      data-open={isOpen ? '1' : '0'}
+                    />
                     <Icon name="folder" size={14} className="qa-col-folder" />
                     <span className="qa-col-name">{col.name}</span>
                     <span className="qa-col-count">{col.count}</span>
@@ -217,8 +298,12 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
                   {isOpen && (
                     <div className="qa-col-body">
                       {reqs.map((r: any) => (
-                        <CollectionRow key={r.id} req={r} active={selectedReq === r.id}
-                                       onClick={() => onSelectRequest(r.id)} />
+                        <CollectionRow
+                          key={r.id}
+                          req={r}
+                          active={selectedReq === r.id}
+                          onClick={() => onSelectRequest(r.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -234,15 +319,37 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
           {history.length === 0 && <div className="qa-empty-mini">{t('sidebar.noRequests')}</div>}
           {history.length > 0 && (
             <div className="qa-hist-bar">
-              <span className="qa-meta">{hSel.length ? t('sidebar.selected', { count: hSel.length }) : t('sidebar.calls', { count: history.length })}</span>
+              <span className="qa-meta">
+                {hSel.length
+                  ? t('sidebar.selected', { count: hSel.length })
+                  : t('sidebar.calls', { count: history.length })}
+              </span>
               <div className="qa-hist-export">
-                <button className="qa-hist-expbtn" disabled={!hSel.length} onClick={() => setHMenu(m => !m)}>
+                <button
+                  className="qa-hist-expbtn"
+                  disabled={!hSel.length}
+                  onClick={() => setHMenu((m) => !m)}
+                >
                   <Icon name="download" size={12} /> {t('sidebar.export')}
                 </button>
                 {hMenu && hSel.length > 0 && (
                   <div className="qa-hist-menu">
-                    {['html', 'json', 'csv'].map(f => (
-                      <button key={f} onClick={() => { exportHistory(hSel.slice().sort((a, b) => a - b).map(i => history[i]), f); setHMenu(false); }}>{t('sidebar.report', { format: f.toUpperCase() })}</button>
+                    {['html', 'json', 'csv'].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => {
+                          exportHistory(
+                            hSel
+                              .slice()
+                              .sort((a, b) => a - b)
+                              .map((i) => history[i]),
+                            f
+                          );
+                          setHMenu(false);
+                        }}
+                      >
+                        {t('sidebar.report', { format: f.toUpperCase() })}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -264,8 +371,15 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
           ))}
         </div>
       )}
-      {/* eslint-disable-next-line @typescript-eslint/no-unused-expressions -- 保留原 JSX 的 short-circuit 寫法（types-only 轉檔，不動行為） */}
-      {importing && <ImportModal onClose={() => setImporting(false)} onImport={(p) => { onImport && onImport(p); setImporting(false); }} />}
+      {importing && (
+        <ImportModal
+          onClose={() => setImporting(false)}
+          onImport={(p) => {
+            if (onImport) onImport(p);
+            setImporting(false);
+          }}
+        />
+      )}
     </aside>
   );
 }

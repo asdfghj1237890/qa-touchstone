@@ -69,7 +69,13 @@
             "method": "GET",
             "name": "Recent Orders",
             "path": "orders/recent?status=open",
-            "params": [],
+            "params": [
+              {
+                "key": "status",
+                "value": "open",
+                "on": true
+              }
+            ],
             "headers": [],
             "body": null,
             "auth": "none"

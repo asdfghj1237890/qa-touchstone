@@ -6,8 +6,18 @@ import './setup';
 import { SEVERITY_ORDER, normalizePath } from './oracles';
 import { loadJSON, saveJSON } from './storage';
 import type {
-  FindingLike, FindingStatus, LegacyLifecycle, LifecycleLike, LifecycleRecord, LifecycleState,
-  Presence, Severity, Snapshot, SnapshotItem, SnapshotsState, UnionFinding,
+  FindingLike,
+  FindingStatus,
+  LegacyLifecycle,
+  LifecycleLike,
+  LifecycleRecord,
+  LifecycleState,
+  Presence,
+  Severity,
+  Snapshot,
+  SnapshotItem,
+  SnapshotsState,
+  UnionFinding,
 } from './types';
 
 export const FP_VERSION = 1;
@@ -18,7 +28,9 @@ export const STATUSES: FindingStatus[] = ['open', 'acknowledged'];
 // Stable machine code. Matrix findings carry an explicit ruleId (oracle alone
 // is too coarse: 7 sensitive rules share oracle 'sensitive-data'). BOLA and
 // rate-limit findings already have a stable, specific `oracle`, so reuse it.
-export function ruleIdOf(f: FindingLike | null | undefined): string { return (f && (f.ruleId || f.oracle)) || 'unknown'; }
+export function ruleIdOf(f: FindingLike | null | undefined): string {
+  return (f && (f.ruleId || f.oracle)) || 'unknown';
+}
 
 // Rule-rename registry. A finding's ruleId is part of its fingerprint, so a bare
 // rename (`jwt-in-response` → `jwt`) used to break baseline tracking — the same
@@ -50,7 +62,7 @@ export function locationLabel(f: FindingLike | null | undefined): string {
   const r = (f && f.ref) || {};
   if (f && f.engine === 'bola') return `BOLA ${r.testId} (${r.attackerId}→${r.ownerId})`;
   if (f && f.engine === 'ratelimit') return `Rate-limit ${r.testId}`;
-  const id = (f && f.identityLabel) ? ` · ${f.identityLabel}` : '';
+  const id = f && f.identityLabel ? ` · ${f.identityLabel}` : '';
   return `${(f && f.method) || ''} ${(f && f.endpoint) || ''}${id}`.trim();
 }
 
@@ -69,7 +81,12 @@ export function fnv1a(str: string): string {
 // the canonical rule id so a documented rename does not fork the finding.
 // fpMaterial is kept beside the hash for audit/migration.
 export function fingerprint(f: FindingLike | null | undefined): { fp: string; fpMaterial: string } {
-  const material = [f && f.engine, canonicalRuleId(ruleIdOf(f)), locationOf(f), normalizePath((f && f.path) || '')].join('|');
+  const material = [
+    f && f.engine,
+    canonicalRuleId(ruleIdOf(f)),
+    locationOf(f),
+    normalizePath((f && f.path) || ''),
+  ].join('|');
   return { fp: fnv1a(material), fpMaterial: material };
 }
 
@@ -86,23 +103,32 @@ export function detailHash(f: FindingLike | null | undefined): string {
 // hash changed between baseline and current — i.e. the underlying evidence drifted.
 export function diffDetail(
   currentItems: Array<Pick<SnapshotItem, 'fp' | 'dfp'>> | null | undefined,
-  baselineItems: Array<Pick<SnapshotItem, 'fp' | 'dfp'>> | null | undefined,
+  baselineItems: Array<Pick<SnapshotItem, 'fp' | 'dfp'>> | null | undefined
 ): Set<string> {
   const baseDfp = new Map<string, string>();
-  for (const it of (baselineItems || [])) baseDfp.set(it.fp, it.dfp);
+  for (const it of baselineItems || []) baseDfp.set(it.fp, it.dfp);
   const changed = new Set<string>();
-  for (const it of (currentItems || [])) {
+  for (const it of currentItems || []) {
     if (baseDfp.has(it.fp) && baseDfp.get(it.fp) !== it.dfp) changed.add(it.fp);
   }
   return changed;
 }
 
 // Override wins only if it's a recognized severity; otherwise the original.
-export function effectiveSeverity(finding: { severity: Severity }, record?: Partial<LifecycleRecord> | null): Severity;
-export function effectiveSeverity(finding: { severity?: Severity } | null | undefined, record?: Partial<LifecycleRecord> | null): Severity | null | undefined;
-export function effectiveSeverity(finding: { severity?: Severity } | null | undefined, record?: Partial<LifecycleRecord> | null): Severity | null | undefined {
+export function effectiveSeverity(
+  finding: { severity: Severity },
+  record?: Partial<LifecycleRecord> | null
+): Severity;
+export function effectiveSeverity(
+  finding: { severity?: Severity } | null | undefined,
+  record?: Partial<LifecycleRecord> | null
+): Severity | null | undefined;
+export function effectiveSeverity(
+  finding: { severity?: Severity } | null | undefined,
+  record?: Partial<LifecycleRecord> | null
+): Severity | null | undefined {
   const ov = record && record.severityOverride;
-  return (ov && SEVERITY_ORDER.includes(ov)) ? ov : (finding && finding.severity);
+  return ov && SEVERITY_ORDER.includes(ov) ? ov : finding && finding.severity;
 }
 
 // Aggregate a finding union into compact snapshot items (identities, NOT
@@ -112,14 +138,17 @@ export function effectiveSeverity(finding: { severity?: Severity } | null | unde
 export function snapshotOf(
   union: UnionFinding[] | null | undefined,
   lifecycle: LifecycleLike,
-  meta: { runId?: string; createdAt?: string; scopeHash?: string } = {},
+  meta: { runId?: string; createdAt?: string; scopeHash?: string } = {}
 ): Snapshot {
   const records = (lifecycle && lifecycle.records) || {};
   const byFp = new Map<string, SnapshotItem>();
-  for (const f of (union || [])) {
+  for (const f of union || []) {
     const { fp } = fingerprint(f);
     const existing = byFp.get(fp);
-    if (existing) { existing.count += 1; continue; }
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
     byFp.set(fp, {
       fp,
       effectiveSeverity: effectiveSeverity(f, records[fp]),
@@ -134,27 +163,31 @@ export function snapshotOf(
     });
   }
   return {
-    runId: meta.runId || '', createdAt: meta.createdAt || '', scopeHash: meta.scopeHash || '',
+    runId: meta.runId || '',
+    createdAt: meta.createdAt || '',
+    scopeHash: meta.scopeHash || '',
     items: [...byFp.values()],
   };
 }
 
 // Stable hash of the scanned surface (NOT the findings), so a diff across a
 // changed test surface can be flagged instead of misread as fixes/regressions.
-export function scopeHashOf(descriptor: unknown): string { return fnv1a(JSON.stringify(descriptor || {})); }
+export function scopeHashOf(descriptor: unknown): string {
+  return fnv1a(JSON.stringify(descriptor || {}));
+}
 
 // Presence map fp -> 'new' | 'carried' | 'resolved', comparing current items
 // against a baseline's items. Presence is always derived fresh (never stored),
 // so a previously-resolved fp reappearing is simply new/carried again.
 export function diffRuns(
   currentItems: Array<Pick<SnapshotItem, 'fp'>> | null | undefined,
-  baselineItems: Array<Pick<SnapshotItem, 'fp'>> | null | undefined,
+  baselineItems: Array<Pick<SnapshotItem, 'fp'>> | null | undefined
 ): Map<string, Presence> {
-  const baseFps = new Set((baselineItems || []).map(i => i.fp));
-  const curFps = new Set((currentItems || []).map(i => i.fp));
+  const baseFps = new Set((baselineItems || []).map((i) => i.fp));
+  const curFps = new Set((currentItems || []).map((i) => i.fp));
   const out = new Map<string, Presence>();
-  for (const it of (currentItems || [])) out.set(it.fp, baseFps.has(it.fp) ? 'carried' : 'new');
-  for (const it of (baselineItems || [])) if (!curFps.has(it.fp)) out.set(it.fp, 'resolved');
+  for (const it of currentItems || []) out.set(it.fp, baseFps.has(it.fp) ? 'carried' : 'new');
+  for (const it of baselineItems || []) if (!curFps.has(it.fp)) out.set(it.fp, 'resolved');
   return out;
 }
 
@@ -164,11 +197,11 @@ export function diffRuns(
 export function gateCount(
   items: SnapshotItem[] | null | undefined,
   lifecycle: LifecycleLike,
-  diff?: Map<string, Presence> | null,
+  diff?: Map<string, Presence> | null
 ): number {
   const records = (lifecycle && lifecycle.records) || {};
   let n = 0;
-  for (const it of (items || [])) {
+  for (const it of items || []) {
     if ((diff ? diff.get(it.fp) : 'new') !== 'new') continue;
     const rec = records[it.fp];
     if (rec && rec.suppressed) continue;
@@ -183,8 +216,16 @@ const readJSON = (key: string): unknown => loadJSON(key, null);
 const writeJSON = (key: string, val: unknown): boolean => saveJSON(key, val);
 
 const BLANK_RECORD = (): LifecycleRecord => ({
-  suppressed: false, suppressReason: '', status: 'open', owner: '', note: '',
-  severityOverride: null, createdAt: '', updatedAt: '', lastSeenAt: '', seenCount: 0,
+  suppressed: false,
+  suppressReason: '',
+  status: 'open',
+  owner: '',
+  note: '',
+  severityOverride: null,
+  createdAt: '',
+  updatedAt: '',
+  lastSeenAt: '',
+  seenCount: 0,
 });
 
 // Load the lifecycle store. Corrupt/missing -> empty versioned store (scanning
@@ -199,14 +240,23 @@ export function loadLifecycle(): LifecycleState {
     return { fpVersion: FP_VERSION, records: {}, legacy: null };
   }
   if (raw.fpVersion !== FP_VERSION) {
-    return { fpVersion: FP_VERSION, records: {}, legacy: { fpVersion: raw.fpVersion, records: raw.records } };
+    return {
+      fpVersion: FP_VERSION,
+      records: {},
+      legacy: { fpVersion: raw.fpVersion, records: raw.records },
+    };
   }
   return { fpVersion: FP_VERSION, records: raw.records, legacy: raw.legacy || null };
 }
 
 export function saveLifecycle(state: LifecycleState | null | undefined): void {
-  const payload: { fpVersion: number; records: Record<string, LifecycleRecord>; legacy?: LegacyLifecycle } = {
-    fpVersion: FP_VERSION, records: (state && state.records) || {},
+  const payload: {
+    fpVersion: number;
+    records: Record<string, LifecycleRecord>;
+    legacy?: LegacyLifecycle;
+  } = {
+    fpVersion: FP_VERSION,
+    records: (state && state.records) || {},
   };
   if (state && state.legacy) payload.legacy = state.legacy;
   writeJSON(LIFECYCLE_KEY, payload);
@@ -214,7 +264,12 @@ export function saveLifecycle(state: LifecycleState | null | undefined): void {
 
 // Merge a patch into a finding's record (created from BLANK_RECORD if absent).
 // `now` is an injected ISO string so this stays pure/testable.
-export function upsertRecord(state: LifecycleState | null | undefined, fp: string, patch: Partial<LifecycleRecord>, now = ''): LifecycleState {
+export function upsertRecord(
+  state: LifecycleState | null | undefined,
+  fp: string,
+  patch: Partial<LifecycleRecord>,
+  now = ''
+): LifecycleState {
   const records = { ...((state && state.records) || {}) };
   const prev = records[fp] || { ...BLANK_RECORD(), createdAt: now };
   records[fp] = { ...prev, ...patch, updatedAt: now };
@@ -234,14 +289,32 @@ export function loadSnapshots(): SnapshotsState {
 }
 
 export function saveSnapshots(s: SnapshotsState | null | undefined): void {
-  writeJSON(SNAPSHOTS_KEY, { fpVersion: FP_VERSION, baseline: (s && s.baseline) || null, lastRun: (s && s.lastRun) || null });
+  writeJSON(SNAPSHOTS_KEY, {
+    fpVersion: FP_VERSION,
+    baseline: (s && s.baseline) || null,
+    lastRun: (s && s.lastRun) || null,
+  });
 }
 
 // Set lastRun (completed-scan boundary); leaves baseline untouched.
-export function recordRun(snapshots: SnapshotsState | null | undefined, snap: Snapshot | null): SnapshotsState {
-  return { fpVersion: FP_VERSION, baseline: (snapshots && snapshots.baseline) || null, lastRun: snap };
+export function recordRun(
+  snapshots: SnapshotsState | null | undefined,
+  snap: Snapshot | null
+): SnapshotsState {
+  return {
+    fpVersion: FP_VERSION,
+    baseline: (snapshots && snapshots.baseline) || null,
+    lastRun: snap,
+  };
 }
 // Pin the given snapshot as the known-good baseline; leaves lastRun untouched.
-export function pinBaseline(snapshots: SnapshotsState | null | undefined, snap: Snapshot | null): SnapshotsState {
-  return { fpVersion: FP_VERSION, baseline: snap, lastRun: (snapshots && snapshots.lastRun) || null };
+export function pinBaseline(
+  snapshots: SnapshotsState | null | undefined,
+  snap: Snapshot | null
+): SnapshotsState {
+  return {
+    fpVersion: FP_VERSION,
+    baseline: snap,
+    lastRun: (snapshots && snapshots.lastRun) || null,
+  };
 }

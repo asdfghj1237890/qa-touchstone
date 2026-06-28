@@ -69,7 +69,11 @@ export type RawStats = {
 /** union item 上掛的 transient 原始證據（buildEvidenceArtifact 的輸入）。 */
 export type RawEvidence = {
   request?: RawRequest | null;
-  response?: { status?: number | null; headers?: Record<string, unknown> | null; body?: unknown } | null;
+  response?: {
+    status?: number | null;
+    headers?: Record<string, unknown> | null;
+    body?: unknown;
+  } | null;
   stats?: RawStats | null;
 };
 
@@ -132,7 +136,10 @@ export type LifecycleState = {
 };
 
 /** 讀取端的寬鬆 lifecycle 輸入：只需要 records（且容許部分欄位）。 */
-export type LifecycleLike = { records?: Record<string, Partial<LifecycleRecord>> | null } | null | undefined;
+export type LifecycleLike =
+  | { records?: Record<string, Partial<LifecycleRecord>> | null }
+  | null
+  | undefined;
 
 /** 壓縮後的 snapshot item（identity，非 finding）。 */
 export type SnapshotItem = {
@@ -267,7 +274,11 @@ export type ContractEntry = { type: string; required: boolean };
 export type Contract = Record<string, ContractEntry>;
 
 /** 注入式 LLM 送出函式（qaAiSend 的最小介面）。 */
-export type AiSendFn = (request: { site: string; kind: string; payload: unknown }) => Promise<unknown>;
+export type AiSendFn = (request: {
+  site: string;
+  kind: string;
+  payload: unknown;
+}) => Promise<unknown>;
 
 // ── BOLA / IDOR engine ───────────────────────────────────────────────────────
 export type BolaIdLocation =
@@ -286,9 +297,18 @@ export type BolaTest = {
 };
 
 /** 跨租戶 preset：identity → id 對照表。 */
-export type BolaPreset = { id?: string; name?: string; values?: Record<string, string | number> | null };
+export type BolaPreset = {
+  id?: string;
+  name?: string;
+  values?: Record<string, string | number> | null;
+};
 
-export type BolaConfig = { tests?: BolaTest[]; identities?: Identity[]; presets?: BolaPreset[]; denySet?: number[] };
+export type BolaConfig = {
+  tests?: BolaTest[];
+  identities?: Identity[];
+  presets?: BolaPreset[];
+  denySet?: number[];
+};
 
 /** detectIdLocation 的排序候選。 */
 export type BolaIdCandidate = {

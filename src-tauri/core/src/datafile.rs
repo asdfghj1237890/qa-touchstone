@@ -19,13 +19,15 @@ pub struct DataFile {
 pub fn parse_data_file(text: &str, filename: Option<&str>) -> DataFile {
     let t = text.trim();
     if t.is_empty() {
-        return DataFile { rows: None, columns: vec![], error: String::new(), format: None };
+        return DataFile {
+            rows: None,
+            columns: vec![],
+            error: String::new(),
+            format: None,
+        };
     }
 
-    let is_json = filename
-        .unwrap_or("")
-        .to_lowercase()
-        .ends_with(".json")
+    let is_json = filename.unwrap_or("").to_lowercase().ends_with(".json")
         || t.starts_with('[')
         || t.starts_with('{');
 
@@ -59,7 +61,13 @@ pub fn parse_data_file(text: &str, filename: Option<&str>) -> DataFile {
                 }
                 let rows: Vec<Map<String, Value>> = arr
                     .into_iter()
-                    .filter_map(|v| if let Value::Object(m) = v { Some(m) } else { None })
+                    .filter_map(|v| {
+                        if let Value::Object(m) = v {
+                            Some(m)
+                        } else {
+                            None
+                        }
+                    })
                     .collect();
                 DataFile {
                     rows: Some(rows),
@@ -77,7 +85,11 @@ pub fn parse_data_file(text: &str, filename: Option<&str>) -> DataFile {
         }
     } else {
         // CSV: split on \r?\n, drop empty lines
-        let lines: Vec<&str> = t.split('\n').map(|l| l.trim_end_matches('\r')).filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = t
+            .split('\n')
+            .map(|l| l.trim_end_matches('\r'))
+            .filter(|l| !l.is_empty())
+            .collect();
         if lines.len() < 2 {
             return DataFile {
                 rows: None,
@@ -86,16 +98,25 @@ pub fn parse_data_file(text: &str, filename: Option<&str>) -> DataFile {
                 format: Some("csv".to_string()),
             };
         }
-        let cols: Vec<String> = parse_csv_line(lines[0]).into_iter().map(|c| c.trim().to_string()).collect();
-        let rows: Vec<Map<String, Value>> = lines[1..].iter().map(|line| {
-            let vals = parse_csv_line(line);
-            let mut obj = Map::new();
-            for (i, col) in cols.iter().enumerate() {
-                let val = vals.get(i).map(|v| v.trim().to_string()).unwrap_or_default();
-                obj.insert(col.clone(), Value::String(val));
-            }
-            obj
-        }).collect();
+        let cols: Vec<String> = parse_csv_line(lines[0])
+            .into_iter()
+            .map(|c| c.trim().to_string())
+            .collect();
+        let rows: Vec<Map<String, Value>> = lines[1..]
+            .iter()
+            .map(|line| {
+                let vals = parse_csv_line(line);
+                let mut obj = Map::new();
+                for (i, col) in cols.iter().enumerate() {
+                    let val = vals
+                        .get(i)
+                        .map(|v| v.trim().to_string())
+                        .unwrap_or_default();
+                    obj.insert(col.clone(), Value::String(val));
+                }
+                obj
+            })
+            .collect();
         DataFile {
             rows: Some(rows),
             columns: cols,
@@ -149,7 +170,13 @@ pub fn js_string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         Value::Null => "null".to_string(),
-        Value::Bool(b) => if *b { "true".to_string() } else { "false".to_string() },
+        Value::Bool(b) => {
+            if *b {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            }
+        }
         Value::Number(n) => n.to_string(),
         Value::Array(arr) => arr.iter().map(js_string).collect::<Vec<_>>().join(","),
         Value::Object(_) => "[object Object]".to_string(),

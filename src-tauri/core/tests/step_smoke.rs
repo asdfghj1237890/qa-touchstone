@@ -12,7 +12,8 @@ async fn run_step_executes_and_asserts() {
         .respond_with(ResponseTemplate::new(200).set_body_string("{\"id\":1}"))
         .mount(&server)
         .await;
-    let rd = json!({ "request": { "method":"GET", "url": format!("{}/x", server.uri()), "header": [] }});
+    let rd =
+        json!({ "request": { "method":"GET", "url": format!("{}/x", server.uri()), "header": [] }});
     let assertions = vec![json!({"type":"status","op":"eq","value":200})];
     let step = run_step(&rd, &assertions, ExecOptions::default()).await;
     assert!(step.success);

@@ -17,7 +17,11 @@ pub fn set_aws_secret(id: String, secret: String) -> CommandResult {
 
 #[tauri::command]
 pub fn has_aws_secret(id: String) -> bool {
-    secrets::get_secret(&id).ok().flatten().map(|s| !s.is_empty()).unwrap_or(false)
+    secrets::get_secret(&id)
+        .ok()
+        .flatten()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
 }
 
 #[tauri::command]

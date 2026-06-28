@@ -6,19 +6,33 @@ import './setup';
 import { SEVERITY_ORDER } from './oracles';
 import { diffRuns, gateCount } from './findings';
 import type {
-  EvidenceArtifact, LifecycleLike, LifecycleRecord, Presence, ReportFinding, ReportMeta,
-  ReportModel, Severity, Snapshot, SnapshotItem,
+  EvidenceArtifact,
+  LifecycleLike,
+  LifecycleRecord,
+  Presence,
+  ReportFinding,
+  ReportMeta,
+  ReportModel,
+  Severity,
+  Snapshot,
+  SnapshotItem,
 } from './types';
 
 export const REPORT_SCHEMA = 'qa-security-report/1';
 const PRESENCE_ORDER: Record<Presence, number> = { new: 0, carried: 1, resolved: 2 };
 
 // Lifecycle annotations for a fp, with safe defaults.
-function annOf(records: Record<string, Partial<LifecycleRecord>>, fp: string): { suppressed: boolean; suppressReason: string; status: string; owner: string; note: string } {
+function annOf(
+  records: Record<string, Partial<LifecycleRecord>>,
+  fp: string
+): { suppressed: boolean; suppressReason: string; status: string; owner: string; note: string } {
   const r = records[fp] || {};
   return {
-    suppressed: !!r.suppressed, suppressReason: r.suppressReason || '',
-    status: r.status || 'open', owner: r.owner || '', note: r.note || '',
+    suppressed: !!r.suppressed,
+    suppressReason: r.suppressReason || '',
+    status: r.status || 'open',
+    owner: r.owner || '',
+    note: r.note || '',
   };
 }
 
@@ -28,10 +42,14 @@ export function buildReport(
   runRecord: Snapshot | null | undefined,
   baselineRecord: Snapshot | null | undefined,
   lifecycle: LifecycleLike,
-  opts: { redaction?: string; evidence?: Map<string, EvidenceArtifact> | null } = {},
+  opts: { redaction?: string; evidence?: Map<string, EvidenceArtifact> | null } = {}
 ): ReportModel {
-  const redaction = opts.redaction === 'strict' ? 'strict'
-    : (opts.redaction === 'evidence' ? 'evidence' : 'redacted');
+  const redaction =
+    opts.redaction === 'strict'
+      ? 'strict'
+      : opts.redaction === 'evidence'
+        ? 'evidence'
+        : 'redacted';
   const evidenceSrc = opts.evidence;
   const records = (lifecycle && lifecycle.records) || {};
   const curItems: SnapshotItem[] = (runRecord && runRecord.items) || [];
@@ -39,99 +57,164 @@ export function buildReport(
   const diff = diffRuns(curItems, baseItems);
 
   const bySeverity: Record<Severity, number> = { info: 0, low: 0, medium: 0, high: 0, critical: 0 };
-  let nNew = 0, nCarried = 0;
+  let nNew = 0,
+    nCarried = 0;
   const findings: ReportFinding[] = [];
 
   for (const it of curItems) {
     const presence = diff.get(it.fp) || 'new';
-    if (presence === 'new') nNew++; else if (presence === 'carried') nCarried++;
+    if (presence === 'new') nNew++;
+    else if (presence === 'carried') nCarried++;
     if (bySeverity[it.effectiveSeverity] !== undefined) bySeverity[it.effectiveSeverity]++;
     const f: ReportFinding = {
-      fp: it.fp, presence, severity: it.effectiveSeverity, engine: it.engine,
-      ruleId: it.ruleId, title: it.title || it.ruleId, location: it.locationLabel || '',
-      path: it.path || '', count: it.count || 1, ...annOf(records, it.fp),
+      fp: it.fp,
+      presence,
+      severity: it.effectiveSeverity,
+      engine: it.engine,
+      ruleId: it.ruleId,
+      title: it.title || it.ruleId,
+      location: it.locationLabel || '',
+      path: it.path || '',
+      count: it.count || 1,
+      ...annOf(records, it.fp),
     };
     if (redaction !== 'strict' && it.evidence) f.evidence = it.evidence;
     if (redaction === 'evidence') {
-      const art = (evidenceSrc && evidenceSrc.get && evidenceSrc.get(it.fp)) || it.evidenceArtifact || null;
+      const art =
+        (evidenceSrc && evidenceSrc.get && evidenceSrc.get(it.fp)) || it.evidenceArtifact || null;
       if (art) f.evidenceArtifact = art;
     }
     findings.push(f);
   }
 
-  const curFps = new Set(curItems.map(i => i.fp));
+  const curFps = new Set(curItems.map((i) => i.fp));
   let nResolved = 0;
   for (const it of baseItems) {
     if (curFps.has(it.fp)) continue;
     nResolved++;
     findings.push({
-      fp: it.fp, presence: 'resolved', severity: it.effectiveSeverity, engine: it.engine,
-      ruleId: it.ruleId, title: it.title || it.ruleId, location: it.locationLabel || '',
-      path: it.path || '', count: it.count || 1, ...annOf(records, it.fp),
+      fp: it.fp,
+      presence: 'resolved',
+      severity: it.effectiveSeverity,
+      engine: it.engine,
+      ruleId: it.ruleId,
+      title: it.title || it.ruleId,
+      location: it.locationLabel || '',
+      path: it.path || '',
+      count: it.count || 1,
+      ...annOf(records, it.fp),
     });
   }
 
-  findings.sort((a, b) =>
-    (PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence]) ||
-    (SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)));
+  findings.sort(
+    (a, b) =>
+      PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence] ||
+      SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity)
+  );
 
   const meta: ReportMeta = {
-    tool: 'QA Touchstone', schema: REPORT_SCHEMA,
-    runId: (runRecord && runRecord.runId) || '', status: (runRecord && runRecord.status) || '',
-    startedAt: (runRecord && runRecord.startedAt) || '', finishedAt: (runRecord && runRecord.finishedAt) || '',
-    durationMs: (runRecord && runRecord.durationMs) || 0, scopeHash: (runRecord && runRecord.scopeHash) || '',
-    baseline: baselineRecord ? { runId: baselineRecord.runId || '', scopeHash: baselineRecord.scopeHash || '' } : null,
-    scopeMismatch: !!(baselineRecord && baselineRecord.scopeHash && runRecord && baselineRecord.scopeHash !== runRecord.scopeHash),
+    tool: 'QA Touchstone',
+    schema: REPORT_SCHEMA,
+    runId: (runRecord && runRecord.runId) || '',
+    status: (runRecord && runRecord.status) || '',
+    startedAt: (runRecord && runRecord.startedAt) || '',
+    finishedAt: (runRecord && runRecord.finishedAt) || '',
+    durationMs: (runRecord && runRecord.durationMs) || 0,
+    scopeHash: (runRecord && runRecord.scopeHash) || '',
+    baseline: baselineRecord
+      ? { runId: baselineRecord.runId || '', scopeHash: baselineRecord.scopeHash || '' }
+      : null,
+    scopeMismatch: !!(
+      baselineRecord &&
+      baselineRecord.scopeHash &&
+      runRecord &&
+      baselineRecord.scopeHash !== runRecord.scopeHash
+    ),
     redaction,
   };
   return {
     meta,
     engines: (runRecord && runRecord.engines) || [],
-    summary: { total: curItems.length, bySeverity, new: nNew, carried: nCarried, resolved: nResolved,
-               newHighCritical: gateCount(curItems, lifecycle, diff) },
+    summary: {
+      total: curItems.length,
+      bySeverity,
+      new: nNew,
+      carried: nCarried,
+      resolved: nResolved,
+      newHighCritical: gateCount(curItems, lifecycle, diff),
+    },
     findings,
   };
 }
 
-export function reportToJson(model: ReportModel): string { return JSON.stringify(model, null, 2); }
+export function reportToJson(model: ReportModel): string {
+  return JSON.stringify(model, null, 2);
+}
 
 export function htmlEscape(s: unknown): string {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
+  return String(s == null ? '' : s).replace(
+    /[&<>"']/g,
+    (c) =>
+      (
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }) as Record<
+          string,
+          string
+        >
+      )[c]
+  );
 }
 
 export function xmlEscape(s: unknown): string {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' } as Record<string, string>)[c]);
+  return String(s == null ? '' : s).replace(
+    /[&<>"']/g,
+    (c) =>
+      (
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }) as Record<
+          string,
+          string
+        >
+      )[c]
+  );
 }
 
 // A finding fails the gate iff it is NEW, effective severity high/critical, not suppressed.
 function isGateFailure(f: ReportFinding): boolean {
-  return f.presence === 'new' && (f.severity === 'high' || f.severity === 'critical') && !f.suppressed;
+  return (
+    f.presence === 'new' && (f.severity === 'high' || f.severity === 'critical') && !f.suppressed
+  );
 }
 
 export function reportToJUnit(model: ReportModel): string {
-  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const current = model.findings.filter((f) => f.presence !== 'resolved');
   const failures = current.filter(isGateFailure).length;
-  const skipped = current.filter(f => f.suppressed).length;
+  const skipped = current.filter((f) => f.suppressed).length;
   const byEngine: Record<string, ReportFinding[]> = {};
   for (const f of current) (byEngine[f.engine] = byEngine[f.engine] || []).push(f);
-  const suites = Object.keys(byEngine).map(engine => {
-    const fs = byEngine[engine];
-    const cases = fs.map(f => {
-      const name = xmlEscape(`${f.ruleId} @ ${f.location}`);
-      const cls = xmlEscape(engine);
-      if (isGateFailure(f)) {
-        const body = `${f.location}${f.evidence ? '\n' + f.evidence : ''}${f.note ? '\n' + f.note : ''}`.replace(/]]>/g, ']]]]><![CDATA[>');
-        return `    <testcase name="${name}" classname="${cls}"><failure message="${xmlEscape(f.title + ' (' + f.severity + ')')}"><![CDATA[${body}]]></failure></testcase>`;
-      }
-      if (f.suppressed) return `    <testcase name="${name}" classname="${cls}"><skipped message="${xmlEscape('suppressed: ' + f.suppressReason)}"/></testcase>`;
-      return `    <testcase name="${name}" classname="${cls}"/>`;
-    }).join('\n');
-    const sFail = fs.filter(isGateFailure).length;
-    const sSkip = fs.filter(f => f.suppressed).length;
-    return `  <testsuite name="${xmlEscape(engine)}" tests="${fs.length}" failures="${sFail}" skipped="${sSkip}">\n${cases}\n  </testsuite>`;
-  }).join('\n');
+  const suites = Object.keys(byEngine)
+    .map((engine) => {
+      const fs = byEngine[engine];
+      const cases = fs
+        .map((f) => {
+          const name = xmlEscape(`${f.ruleId} @ ${f.location}`);
+          const cls = xmlEscape(engine);
+          if (isGateFailure(f)) {
+            const body =
+              `${f.location}${f.evidence ? '\n' + f.evidence : ''}${f.note ? '\n' + f.note : ''}`.replace(
+                /]]>/g,
+                ']]]]><![CDATA[>'
+              );
+            return `    <testcase name="${name}" classname="${cls}"><failure message="${xmlEscape(f.title + ' (' + f.severity + ')')}"><![CDATA[${body}]]></failure></testcase>`;
+          }
+          if (f.suppressed)
+            return `    <testcase name="${name}" classname="${cls}"><skipped message="${xmlEscape('suppressed: ' + f.suppressReason)}"/></testcase>`;
+          return `    <testcase name="${name}" classname="${cls}"/>`;
+        })
+        .join('\n');
+      const sFail = fs.filter(isGateFailure).length;
+      const sSkip = fs.filter((f) => f.suppressed).length;
+      return `  <testsuite name="${xmlEscape(engine)}" tests="${fs.length}" failures="${sFail}" skipped="${sSkip}">\n${cases}\n  </testsuite>`;
+    })
+    .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites name="QA Touchstone Security" tests="${current.length}" failures="${failures}" skipped="${skipped}" time="${((model.meta.durationMs || 0) / 1000).toFixed(3)}">\n${suites}\n</testsuites>\n`;
 }
 
@@ -140,57 +223,152 @@ export function sevToSarifLevel(sev: string | null | undefined): 'error' | 'warn
   if (sev === 'medium') return 'warning';
   return 'note';
 }
-export function sarifBaselineState(presence: string | null | undefined): 'unchanged' | 'new' { return presence === 'carried' ? 'unchanged' : 'new'; }
+export function sarifBaselineState(presence: string | null | undefined): 'unchanged' | 'new' {
+  return presence === 'carried' ? 'unchanged' : 'new';
+}
 
 const SARIF_HELP_BASE = 'https://github.com/asdfghj1237890/qa-touchstone#security-rules';
 
 // Static rule catalog → human name, descriptions, and GitHub/OWASP/CWE tags.
 // Keyed by the finding's ruleId/oracle. Unknown ids are synthesized at runtime
 // from the finding itself so a custom rule still yields a usable rule object.
-const SARIF_RULE_META: Record<string, { name: string; short: string; full?: string; tags: string[] }> = {
-  jwt: { name: 'JwtInResponse', short: 'JWT present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
-  'aws-key': { name: 'AwsAccessKeyId', short: 'AWS access key id present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
-  'private-key': { name: 'PrivateKeyMaterial', short: 'Private key material present in a response body', tags: ['security', 'secret', 'external/cwe/cwe-312'] },
-  'secret-name': { name: 'SecretNamedField', short: 'A secret-named field (password/token/…) is present in a response', tags: ['security', 'secret', 'external/cwe/cwe-200'] },
-  email: { name: 'EmailAddressPii', short: 'Email address (PII) present in a response body', tags: ['security', 'privacy', 'external/cwe/cwe-359'] },
-  card: { name: 'CreditCardNumberPii', short: 'Credit-card-like (Luhn-valid) number present in a response', tags: ['security', 'privacy', 'external/cwe/cwe-359'] },
-  internal: { name: 'InternalDebugField', short: 'Internal/debug field (stack trace, SQL, …) exposed in a response', tags: ['security', 'external/cwe/cwe-200'] },
-  'schema-drift': { name: 'SchemaDrift', short: 'Response shape drifted from the expected schema', tags: ['quality', 'reliability'] },
-  'schema-conformance:type': { name: 'SchemaConformanceType', short: 'Response field has the wrong type for the declared schema', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
-  'schema-conformance:required': { name: 'SchemaConformanceRequired', short: 'Response is missing a required property from the declared schema', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
-  'schema-conformance:enum': { name: 'SchemaConformanceEnum', short: 'Response value is outside the declared enum', tags: ['quality', 'reliability', 'external/cwe/cwe-1287'] },
-  'schema-conformance:format': { name: 'SchemaConformanceFormat', short: 'Response value does not match the declared format', tags: ['quality', 'reliability'] },
-  'object-authz': { name: 'BrokenObjectLevelAuthorization', short: 'BOLA/IDOR: an identity reached another object owner’s data', tags: ['security', 'external/cwe/cwe-639', 'OWASP-API1'] },
-  'rate-limit': { name: 'MissingRateLimit', short: 'No rate limiting / throttling observed under a request burst', tags: ['security', 'external/cwe/cwe-770', 'OWASP-API4'] },
-  'access-control': { name: 'BrokenFunctionLevelAuthorization', short: 'RBAC/BFLA: an unauthorized identity was allowed', tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'] },
-  bfla: { name: 'BrokenFunctionLevelAuthorization', short: 'BFLA: a non-privileged identity invoked a privileged function', tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'] },
-  'fuzz:server-error': { name: 'FuzzServerError', short: 'A boundary/injection payload caused a 5xx server error', tags: ['security', 'reliability', 'external/cwe/cwe-20'] },
-  'fuzz:error-leak': { name: 'FuzzErrorLeak', short: 'A fuzz payload leaked a stack trace / internal error', tags: ['security', 'external/cwe/cwe-209'] },
-  'fuzz:reflected': { name: 'FuzzReflectedInput', short: 'A dangerous fuzz payload was reflected unescaped in the response', tags: ['security', 'external/cwe/cwe-79'] },
+const SARIF_RULE_META: Record<
+  string,
+  { name: string; short: string; full?: string; tags: string[] }
+> = {
+  jwt: {
+    name: 'JwtInResponse',
+    short: 'JWT present in a response body',
+    tags: ['security', 'secret', 'external/cwe/cwe-200'],
+  },
+  'aws-key': {
+    name: 'AwsAccessKeyId',
+    short: 'AWS access key id present in a response body',
+    tags: ['security', 'secret', 'external/cwe/cwe-200'],
+  },
+  'private-key': {
+    name: 'PrivateKeyMaterial',
+    short: 'Private key material present in a response body',
+    tags: ['security', 'secret', 'external/cwe/cwe-312'],
+  },
+  'secret-name': {
+    name: 'SecretNamedField',
+    short: 'A secret-named field (password/token/…) is present in a response',
+    tags: ['security', 'secret', 'external/cwe/cwe-200'],
+  },
+  email: {
+    name: 'EmailAddressPii',
+    short: 'Email address (PII) present in a response body',
+    tags: ['security', 'privacy', 'external/cwe/cwe-359'],
+  },
+  card: {
+    name: 'CreditCardNumberPii',
+    short: 'Credit-card-like (Luhn-valid) number present in a response',
+    tags: ['security', 'privacy', 'external/cwe/cwe-359'],
+  },
+  internal: {
+    name: 'InternalDebugField',
+    short: 'Internal/debug field (stack trace, SQL, …) exposed in a response',
+    tags: ['security', 'external/cwe/cwe-200'],
+  },
+  'schema-drift': {
+    name: 'SchemaDrift',
+    short: 'Response shape drifted from the expected schema',
+    tags: ['quality', 'reliability'],
+  },
+  'schema-conformance:type': {
+    name: 'SchemaConformanceType',
+    short: 'Response field has the wrong type for the declared schema',
+    tags: ['quality', 'reliability', 'external/cwe/cwe-1287'],
+  },
+  'schema-conformance:required': {
+    name: 'SchemaConformanceRequired',
+    short: 'Response is missing a required property from the declared schema',
+    tags: ['quality', 'reliability', 'external/cwe/cwe-1287'],
+  },
+  'schema-conformance:enum': {
+    name: 'SchemaConformanceEnum',
+    short: 'Response value is outside the declared enum',
+    tags: ['quality', 'reliability', 'external/cwe/cwe-1287'],
+  },
+  'schema-conformance:format': {
+    name: 'SchemaConformanceFormat',
+    short: 'Response value does not match the declared format',
+    tags: ['quality', 'reliability'],
+  },
+  'object-authz': {
+    name: 'BrokenObjectLevelAuthorization',
+    short: 'BOLA/IDOR: an identity reached another object owner’s data',
+    tags: ['security', 'external/cwe/cwe-639', 'OWASP-API1'],
+  },
+  'rate-limit': {
+    name: 'MissingRateLimit',
+    short: 'No rate limiting / throttling observed under a request burst',
+    tags: ['security', 'external/cwe/cwe-770', 'OWASP-API4'],
+  },
+  'access-control': {
+    name: 'BrokenFunctionLevelAuthorization',
+    short: 'RBAC/BFLA: an unauthorized identity was allowed',
+    tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'],
+  },
+  bfla: {
+    name: 'BrokenFunctionLevelAuthorization',
+    short: 'BFLA: a non-privileged identity invoked a privileged function',
+    tags: ['security', 'external/cwe/cwe-285', 'OWASP-API5'],
+  },
+  'fuzz:server-error': {
+    name: 'FuzzServerError',
+    short: 'A boundary/injection payload caused a 5xx server error',
+    tags: ['security', 'reliability', 'external/cwe/cwe-20'],
+  },
+  'fuzz:error-leak': {
+    name: 'FuzzErrorLeak',
+    short: 'A fuzz payload leaked a stack trace / internal error',
+    tags: ['security', 'external/cwe/cwe-209'],
+  },
+  'fuzz:reflected': {
+    name: 'FuzzReflectedInput',
+    short: 'A dangerous fuzz payload was reflected unescaped in the response',
+    tags: ['security', 'external/cwe/cwe-79'],
+  },
 };
 
 // GitHub code scanning reads properties['security-severity'] (a "0.0".."10.0"
 // CVSS-ish string) to rank alerts; map our severities onto that band.
 function securitySeverityScore(sev: Severity | string | null | undefined): string {
   switch (sev) {
-    case 'critical': return '9.5';
-    case 'high': return '7.5';
-    case 'medium': return '5.0';
-    case 'low': return '3.0';
-    default: return '1.0';
+    case 'critical':
+      return '9.5';
+    case 'high':
+      return '7.5';
+    case 'medium':
+      return '5.0';
+    case 'low':
+      return '3.0';
+    default:
+      return '1.0';
   }
 }
 
 function pascalCase(id: string): string {
-  return String(id || 'rule').split(/[^a-zA-Z0-9]+/).filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') || 'Rule';
+  return (
+    String(id || 'rule')
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join('') || 'Rule'
+  );
 }
 
 // Turn a finding's human location label into a stable, URI-safe artifact path so
 // SARIF consumers that require a physicalLocation can anchor the result.
 export function locationToUri(location: string | null | undefined): string {
   const raw = String(location || 'finding').trim();
-  const slug = raw.replace(/^([A-Z]+)\s+/, '$1/').replace(/\s*·\s*/g, '/').replace(/[^a-zA-Z0-9/_.{}@:-]+/g, '-').replace(/^-+|-+$/g, '');
+  const slug = raw
+    .replace(/^([A-Z]+)\s+/, '$1/')
+    .replace(/\s*·\s*/g, '/')
+    .replace(/[^a-zA-Z0-9/_.{}@:-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
   return 'security/' + (slug || 'finding');
 }
 
@@ -211,23 +389,24 @@ type SarifResult = {
 };
 
 export function reportToSarif(model: ReportModel): string {
-  const current = model.findings.filter(f => f.presence !== 'resolved');
+  const current = model.findings.filter((f) => f.presence !== 'resolved');
 
   // Build the rule catalog: one entry per distinct ruleId, enriched with metadata
   // and the worst severity seen for that rule (drives level + security-severity).
-  const ruleIds = [...new Set(current.map(f => f.ruleId))];
+  const ruleIds = [...new Set(current.map((f) => f.ruleId))];
   const ruleIndex: Record<string, number> = {};
   const worstSev: Record<string, Severity> = {};
   for (const f of current) {
     const cur = worstSev[f.ruleId];
-    if (!cur || SEVERITY_ORDER.indexOf(f.severity) > SEVERITY_ORDER.indexOf(cur)) worstSev[f.ruleId] = f.severity;
+    if (!cur || SEVERITY_ORDER.indexOf(f.severity) > SEVERITY_ORDER.indexOf(cur))
+      worstSev[f.ruleId] = f.severity;
   }
   const rules = ruleIds.map((id, i) => {
     ruleIndex[id] = i;
     const meta = SARIF_RULE_META[id];
-    const sample = current.find(f => f.ruleId === id);
+    const sample = current.find((f) => f.ruleId === id);
     const name = meta ? meta.name : pascalCase(id);
-    const short = meta ? meta.short : ((sample && sample.title) || id);
+    const short = meta ? meta.short : (sample && sample.title) || id;
     const tags = meta ? meta.tags : ['security'];
     const sev = worstSev[id];
     return {
@@ -236,34 +415,63 @@ export function reportToSarif(model: ReportModel): string {
       shortDescription: { text: short },
       fullDescription: { text: (meta && meta.full) || short },
       helpUri: `${SARIF_HELP_BASE}-${id}`,
-      help: { text: `${short}\n\nDetected by QA Touchstone (engine: ${(sample && sample.engine) || 'security'}).` },
+      help: {
+        text: `${short}\n\nDetected by QA Touchstone (engine: ${(sample && sample.engine) || 'security'}).`,
+      },
       defaultConfiguration: { level: sevToSarifLevel(sev) },
       properties: { tags, 'security-severity': securitySeverityScore(sev) },
     };
   });
 
-  const results = current.map(f => {
+  const results = current.map((f) => {
     const r: SarifResult = {
       ruleId: f.ruleId,
       ruleIndex: ruleIndex[f.ruleId],
       level: sevToSarifLevel(f.severity),
       message: { text: `${f.title}${f.evidence ? ' — ' + f.evidence : ''} at ${f.location}` },
-      locations: [{
-        physicalLocation: { artifactLocation: { uri: locationToUri(f.location) }, region: { startLine: 1 } },
-        logicalLocations: [{ fullyQualifiedName: f.location || f.ruleId, kind: 'member' }],
-      }],
+      locations: [
+        {
+          physicalLocation: {
+            artifactLocation: { uri: locationToUri(f.location) },
+            region: { startLine: 1 },
+          },
+          logicalLocations: [{ fullyQualifiedName: f.location || f.ruleId, kind: 'member' }],
+        },
+      ],
       partialFingerprints: { qaFingerprint: f.fp },
       baselineState: sarifBaselineState(f.presence),
-      properties: { engine: f.engine, severity: f.severity, owner: f.owner, status: f.status, count: f.count },
+      properties: {
+        engine: f.engine,
+        severity: f.severity,
+        owner: f.owner,
+        status: f.status,
+        count: f.count,
+      },
     };
-    if (f.suppressed) r.suppressions = [{ kind: 'external', justification: f.suppressReason || '' }];
+    if (f.suppressed)
+      r.suppressions = [{ kind: 'external', justification: f.suppressReason || '' }];
     return r;
   });
-  return JSON.stringify({
-    version: '2.1.0',
-    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
-    runs: [{ tool: { driver: { name: 'QA Touchstone', informationUri: 'https://github.com/asdfghj1237890/qa-touchstone', rules } }, results }],
-  }, null, 2);
+  return JSON.stringify(
+    {
+      version: '2.1.0',
+      $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+      runs: [
+        {
+          tool: {
+            driver: {
+              name: 'QA Touchstone',
+              informationUri: 'https://github.com/asdfghj1237890/qa-touchstone',
+              rules,
+            },
+          },
+          results,
+        },
+      ],
+    },
+    null,
+    2
+  );
 }
 
 // Render a finding's evidence cell: an expandable <details> when an artifact is
@@ -275,33 +483,56 @@ export function evidenceCellHtml(f: ReportFinding): string {
   if (!a) return plain;
   const req = a.request || {};
   const reqLine = h(`${req.method || ''} ${req.url || ''}`.trim());
-  const hdr = (obj: Record<string, string> | null | undefined) => Object.keys(obj || {}).map(k => `${h(k)}: ${h(obj![k])}`).join('\n');
+  const hdr = (obj: Record<string, string> | null | undefined) =>
+    Object.keys(obj || {})
+      .map((k) => `${h(k)}: ${h(obj![k])}`)
+      .join('\n');
   let resp = '';
   if (a.response) {
     const r = a.response;
-    const snip = r.snippet != null
-      ? JSON.stringify(r.snippet, null, 2)
-      : (r.nonJson ? `(${r.nonJson.contentType || 'non-JSON'}, ${r.nonJson.length} bytes — body omitted)` : '');
-    resp = `<div>status ${h(String(r.status))}${r.truncated ? ' · truncated' : ''}</div>`
-      + (Object.keys(r.headers || {}).length ? `<pre>${hdr(r.headers)}</pre>` : '')
-      + (snip ? `<pre>${h(snip)}</pre>` : '');
+    const snip =
+      r.snippet != null
+        ? JSON.stringify(r.snippet, null, 2)
+        : r.nonJson
+          ? `(${r.nonJson.contentType || 'non-JSON'}, ${r.nonJson.length} bytes — body omitted)`
+          : '';
+    resp =
+      `<div>status ${h(String(r.status))}${r.truncated ? ' · truncated' : ''}</div>` +
+      (Object.keys(r.headers || {}).length ? `<pre>${hdr(r.headers)}</pre>` : '') +
+      (snip ? `<pre>${h(snip)}</pre>` : '');
   } else if (a.stats) {
     resp = `<div>${h(String(a.stats.sent))} sent · throttle seen: ${a.stats.throttleSeen ? 'yes' : 'no'}</div>`;
   }
-  return `<details><summary>${plain || 'evidence'}</summary>`
-    + `<pre>${reqLine}</pre>`
-    + (Object.keys(req.headers || {}).length ? `<pre>${hdr(req.headers)}</pre>` : '')
-    + resp + '</details>';
+  return (
+    `<details><summary>${plain || 'evidence'}</summary>` +
+    `<pre>${reqLine}</pre>` +
+    (Object.keys(req.headers || {}).length ? `<pre>${hdr(req.headers)}</pre>` : '') +
+    resp +
+    '</details>'
+  );
 }
 
 export function reportToHtml(model: ReportModel): string {
-  const m = model.meta, s = model.summary, h = htmlEscape;
-  const sevChips = SEVERITY_ORDER.slice().reverse()
-    .filter(sev => s.bySeverity[sev]).map(sev => `<span class="chip sev-${sev}">${s.bySeverity[sev]} ${sev}</span>`).join('');
-  const engRows = model.engines.map(e =>
-    `<tr><td>${h(e.engine)}</td><td>${e.ran ? e.findingCount : h(e.skipped || 'skipped')}</td><td>${Math.round((e.durationMs || 0) / 1000)}s</td><td>${h(e.error || '')}</td></tr>`).join('');
-  const findRows = model.findings.map(f =>
-    `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${evidenceCellHtml(f)}</td></tr>`).join('');
+  const m = model.meta,
+    s = model.summary,
+    h = htmlEscape;
+  const sevChips = SEVERITY_ORDER.slice()
+    .reverse()
+    .filter((sev) => s.bySeverity[sev])
+    .map((sev) => `<span class="chip sev-${sev}">${s.bySeverity[sev]} ${sev}</span>`)
+    .join('');
+  const engRows = model.engines
+    .map(
+      (e) =>
+        `<tr><td>${h(e.engine)}</td><td>${e.ran ? e.findingCount : h(e.skipped || 'skipped')}</td><td>${Math.round((e.durationMs || 0) / 1000)}s</td><td>${h(e.error || '')}</td></tr>`
+    )
+    .join('');
+  const findRows = model.findings
+    .map(
+      (f) =>
+        `<tr class="p-${f.presence}${f.suppressed ? ' suppressed' : ''}"><td>${f.presence}</td><td class="sev-${f.severity}">${f.severity}</td><td>${h(f.engine)}</td><td>${h(f.title)}${f.count > 1 ? ' ×' + f.count : ''}</td><td><code>${h(f.location)}</code></td><td>${h(f.owner)}</td><td>${h(f.status)}${f.suppressed ? ' (suppressed)' : ''}</td><td>${evidenceCellHtml(f)}</td></tr>`
+    )
+    .join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>QA Touchstone — Security report</title>
 <style>body{font-family:system-ui,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;font-size:13px}.gate{font-size:20px;font-weight:700}.chip{display:inline-block;padding:2px 8px;margin:2px;border-radius:10px;background:#eee}.sev-critical,.sev-high{color:#b91c1c}.sev-medium{color:#b45309}.suppressed,.p-resolved{opacity:.55}</style>
 </head><body>

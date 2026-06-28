@@ -11,17 +11,20 @@ describe('OAuth token helpers', () => {
   });
 
   it('builds a token request with substituted form fields', () => {
-    const req = buildOAuthTokenRequest({
-      grant: 'client_credentials',
-      tokenUrl: '{{authHost}}/oauth/token',
-      clientId: '{{clientId}}',
-      clientSecret: '{{clientSecret}}',
-      scope: 'read write',
-    }, {
-      authHost: 'https://auth.test',
-      clientId: 'abc',
-      clientSecret: 'secret',
-    });
+    const req = buildOAuthTokenRequest(
+      {
+        grant: 'client_credentials',
+        tokenUrl: '{{authHost}}/oauth/token',
+        clientId: '{{clientId}}',
+        clientSecret: '{{clientSecret}}',
+        scope: 'read write',
+      },
+      {
+        authHost: 'https://auth.test',
+        clientId: 'abc',
+        clientSecret: 'secret',
+      }
+    );
 
     expect(req.method).toBe('POST');
     expect(req.url).toBe('https://auth.test/oauth/token');
@@ -43,7 +46,10 @@ describe('OAuth token helpers', () => {
 
   it('parses token responses with expiry and bearer normalization', () => {
     const now = Date.now();
-    const parsed = parseOAuthTokenResponse('{"access_token":"tok","token_type":"bearer","expires_in":10}', { scope: 'read' });
+    const parsed = parseOAuthTokenResponse(
+      '{"access_token":"tok","token_type":"bearer","expires_in":10}',
+      { scope: 'read' }
+    );
     expect(parsed).toMatchObject({ token: 'tok', type: 'Bearer', scope: 'read' });
     expect(parsed.expiresAt).toBeGreaterThanOrEqual(now + 10000);
   });

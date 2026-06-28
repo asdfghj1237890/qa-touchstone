@@ -23,7 +23,7 @@ export function computeWindow(
   rowHeight: number,
   viewportHeight: number,
   scrollTop: number,
-  overscan = 4,
+  overscan = 4
 ): WindowSpec {
   if (total <= 0 || rowHeight <= 0) return { start: 0, end: 0, topPad: 0, bottomPad: 0 };
   const firstVisible = Math.floor(Math.max(0, scrollTop) / rowHeight);
@@ -40,7 +40,10 @@ export function computeWindow(
 
 export interface UseWindowedListResult {
   window: WindowSpec;
-  scrollProps: { ref: React.RefObject<HTMLDivElement | null>; onScroll: (e: React.UIEvent<HTMLDivElement>) => void };
+  scrollProps: {
+    ref: React.RefObject<HTMLDivElement | null>;
+    onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  };
   scrollTop: number;
   viewport: number;
 }
@@ -50,7 +53,7 @@ export interface UseWindowedListResult {
 export function useWindowedList(
   total: number,
   rowHeight: number,
-  opts: { overscan?: number; viewportHeight?: number } = {},
+  opts: { overscan?: number; viewportHeight?: number } = {}
 ): UseWindowedListResult {
   const overscan = opts.overscan ?? 4;
   const ref = React.useRef<HTMLDivElement | null>(null);
@@ -68,7 +71,7 @@ export function useWindowedList(
 
   const window = React.useMemo(
     () => computeWindow(total, rowHeight, viewport, scrollTop, overscan),
-    [total, rowHeight, viewport, scrollTop, overscan],
+    [total, rowHeight, viewport, scrollTop, overscan]
   );
 
   return { window, scrollProps: { ref, onScroll }, scrollTop, viewport };
