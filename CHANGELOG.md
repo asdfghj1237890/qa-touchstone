@@ -8,6 +8,12 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ### Changed
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
+## [0.22.6] — 2026-06-29
+
+### Fixed
+- Windows headless CI now resolves extension-based `k6` shims from `PATH`
+  (`.exe`, `.cmd`, `.bat`) before launching performance tests.
+
 ## [0.22.5] — 2026-06-29
 
 ### Fixed

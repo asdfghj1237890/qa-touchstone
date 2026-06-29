@@ -101,7 +101,7 @@ pub async fn run_perf(
     }
 
     let bin = k6_bin.unwrap_or_else(|| "k6".to_string());
-    let mut cmd = Command::new(&bin);
+    let mut cmd = k6_command(&bin);
     cmd.arg("run");
     if let Some(path) = summary_out.as_deref() {
         cmd.arg("--summary-export").arg(path);
@@ -357,6 +357,60 @@ fn cleanup_temp_script(script_out: Option<&str>, script_path: &Path) {
     if script_out.is_none() {
         let _ = std::fs::remove_file(script_path);
     }
+}
+
+fn k6_command(bin: &str) -> Command {
+    #[cfg(windows)]
+    if let Some(path) = resolve_windows_path_command(bin) {
+        return Command::new(path);
+    }
+
+    Command::new(bin)
+}
+
+#[cfg(windows)]
+fn resolve_windows_path_command(bin: &str) -> Option<PathBuf> {
+    let path = Path::new(bin);
+    if path.is_absolute() || path.components().count() > 1 || path.extension().is_some() {
+        return None;
+    }
+
+    let path_var = std::env::var_os("PATH")?;
+    let extensions = std::env::var_os("PATHEXT")
+        .map(|value| {
+            value
+                .to_string_lossy()
+                .split(';')
+                .filter_map(|ext| {
+                    let ext = ext.trim();
+                    if ext.is_empty() {
+                        None
+                    } else if ext.starts_with('.') {
+                        Some(ext.to_string())
+                    } else {
+                        Some(format!(".{ext}"))
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|extensions| !extensions.is_empty())
+        .unwrap_or_else(|| {
+            [".COM", ".EXE", ".BAT", ".CMD"]
+                .into_iter()
+                .map(str::to_string)
+                .collect()
+        });
+
+    for dir in std::env::split_paths(&path_var) {
+        for ext in &extensions {
+            let candidate = dir.join(format!("{bin}{ext}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 fn k6_spawn_error(bin: &str, e: std::io::Error) -> String {
