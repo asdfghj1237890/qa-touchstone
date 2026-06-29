@@ -89,6 +89,8 @@ function runRaw(name, command, args, options = {}) {
     maxBuffer: 20 * 1024 * 1024,
     timeout: options.timeout ?? commandTimeoutMs,
     killSignal: 'SIGTERM',
+    shell: options.shell ?? (process.platform === 'win32' && command === 'npx'),
+    windowsHide: true,
   });
   if (options.stdout) fs.writeFileSync(options.stdout, result.stdout || '');
   if (options.stderr) fs.writeFileSync(options.stderr, result.stderr || '');

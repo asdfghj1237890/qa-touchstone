@@ -8,6 +8,12 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ### Changed
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
+## [0.22.7] — 2026-06-29
+
+### Fixed
+- Release workflow's Windows `npx` smoke test now runs the npm launcher through
+  shell resolution so `npx.cmd` is found correctly.
+
 ## [0.22.6] — 2026-06-29
 
 ### Fixed
