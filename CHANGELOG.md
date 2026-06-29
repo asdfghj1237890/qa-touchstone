@@ -8,6 +8,12 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ### Changed
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
+## [0.22.5] — 2026-06-29
+
+### Fixed
+- Release workflow's Windows headless functional test now writes the fake k6
+  `--summary-export` artifact to the expected path, unblocking release builds.
+
 ## [0.22.4] — 2026-06-29
 
 ### Fixed
