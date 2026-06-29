@@ -258,6 +258,7 @@ const EN_DICT = {
   'perf.exportSelected': 'Export ({count})',
   'perf.report': '{format} report',
   'perf.clear': 'Clear',
+  'perf.clearSelected': 'Clear ({count})',
   'perf.errShort': 'err',
 
   'runner.title': 'Collection Runner',
@@ -707,6 +708,7 @@ const dict: Record<string, Record<string, string>> = {
     'perf.exportSelected': '匯出（{count}）',
     'perf.report': '{format} 報告',
     'perf.clear': '清除',
+    'perf.clearSelected': '清除選取（{count}）',
     'perf.errShort': 'err',
 
     'runner.title': 'Collection Runner',

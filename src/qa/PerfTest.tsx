@@ -547,10 +547,30 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
   };
 
   const clearHistory = () => {
-    // If a run is in flight, ask it to stop but DO NOT race it: let the
-    // session finalizer transition phase + clear acc.current itself. Wiping
-    // phase to 'idle' here would let the user kick off a new run before the
-    // old one resolves (the old finalizer would then clobber UI / state).
+    // With rows checked, "Clear" acts on the selection only (mirrors Export):
+    // drop the selected runs, keep the rest, and leave any in-flight run alone.
+    if (selected.length) {
+      const drop = new Set(selected);
+      const remaining = runs.filter((_, i) => !drop.has(i));
+      setRuns(remaining);
+      if (remaining.length) saveJSON(PERF_KEY, remaining);
+      else removeStorageKey(PERF_KEY);
+      // Keep viewing the same run if it survived; otherwise show the newest.
+      setViewIdx((idx) => {
+        if (drop.has(idx)) return 0;
+        let shift = 0;
+        for (const s of selected) if (s < idx) shift += 1;
+        return Math.max(0, idx - shift);
+      });
+      setSelected([]);
+      setHMenu(false);
+      return;
+    }
+    // Nothing selected → wipe the whole history. If a run is in flight, ask it
+    // to stop but DO NOT race it: let the session finalizer transition phase +
+    // clear acc.current itself. Wiping phase to 'idle' here would let the user
+    // kick off a new run before the old one resolves (the old finalizer would
+    // then clobber UI / state).
     stop();
     setRuns([]);
     setSelected([]);
@@ -1213,7 +1233,10 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
                       )}
                     </div>
                     <button className="pf-hbtn pf-hbtn--danger" onClick={clearHistory}>
-                      <Icon name="trash" size={13} /> {t('perf.clear')}
+                      <Icon name="trash" size={13} />{' '}
+                      {selected.length
+                        ? t('perf.clearSelected', { count: selected.length })
+                        : t('perf.clear')}
                     </button>
                   </div>
                 </div>
