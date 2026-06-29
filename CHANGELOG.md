@@ -8,6 +8,13 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ### Changed
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
+## [0.22.4] — 2026-06-29
+
+### Fixed
+- Performance run history **Clear** now respects row selection: with rows
+  checked it removes only the selected runs (matching Export); with nothing
+  selected it still clears the entire history (`src/qa/PerfTest.tsx`).
+
 ## [0.22.1] — 2026-06-28
 
 ### Fixed
