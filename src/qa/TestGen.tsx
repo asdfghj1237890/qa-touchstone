@@ -114,7 +114,7 @@ function inferStatus(text: string): number {
   const m =
     text.match(/status (?:code )?(?:should be |is |= ?)?(\d{3})/i) ||
     text.match(/\b(2\d\d|4\d\d|5\d\d)\b/);
-  const code = m && m[1];
+  const code = m?.[1];
   if (code) return +code;
   const t = text.toLowerCase();
   if (/unauthor|expired token|invalid_token/.test(t)) return 401;
@@ -131,7 +131,7 @@ function inferMethodPath(steps: string[], title: string): { method: string; path
   const joined = steps.join(' ') + ' ' + title;
   const mm = joined.match(METHODS_RE);
   const pm = joined.match(/\s(\/[\w/{}\-?=&.]+)/);
-  const mg = mm && mm[1];
+  const mg = mm?.[1];
   let method: string | null = mg ? mg.toUpperCase() : null;
   if (!method) {
     const t = (title + ' ' + joined).toLowerCase();
