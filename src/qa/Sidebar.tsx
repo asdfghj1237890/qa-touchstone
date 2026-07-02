@@ -123,6 +123,7 @@ function NavRail({ route, setRoute, busy, flashAt, active }: NavRailProps) {
           <button
             key={it.key}
             className="qa-rail-btn"
+            data-testid={'nav-' + it.key}
             data-active={route === it.key ? '1' : '0'}
             onClick={() => setRoute(it.key)}
             title={it.label}
@@ -236,6 +237,7 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
             </div>
             <button
               className="qa-side-import"
+              data-testid="import-open"
               title={t('sidebar.importTitle')}
               onClick={() => setImporting(true)}
             >

@@ -105,7 +105,7 @@ function SuiteRunBar({
         </>
       ) : (
         <>
-          <button className="qa-btn qa-btn--primary" onClick={onRun}>
+          <button className="qa-btn qa-btn--primary" data-testid="suite-run" onClick={onRun}>
             <Icon name="play" size={14} /> {t('suite.run')}
           </button>
           {rec && rec.status === 'aborted' ? (
@@ -165,7 +165,11 @@ function SuiteRunBar({
           </span>
           {canExport && onExport && (
             <span className="qa-report-export">
-              <button className="qa-btn qa-btn--sm" onClick={() => setExpOpen((v) => !v)}>
+              <button
+                className="qa-btn qa-btn--sm"
+                data-testid="report-export"
+                onClick={() => setExpOpen((v) => !v)}
+              >
                 {t('report.export')} ▾
               </button>
               {expOpen && (
@@ -198,6 +202,7 @@ function SuiteRunBar({
                     <button
                       key={fmt}
                       className="qa-report-fmt"
+                      data-testid={'report-export-' + fmt}
                       onClick={() => {
                         onExport(fmt, redaction);
                         setExpOpen(false);
