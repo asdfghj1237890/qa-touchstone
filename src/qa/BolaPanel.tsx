@@ -277,10 +277,7 @@ function BolaPanel({
     (drawer.attackerId == null
       ? results[drawer.testId].reference[drawer.ownerId]
       : (results[drawer.testId].attacks[drawer.attackerId] || {})[drawer.ownerId])) as
-    | BolaDrawerCell
-    | null
-    | undefined
-    | false;
+    BolaDrawerCell | null | undefined | false;
 
   const owned = (test: BolaUiTest) =>
     identities.filter((i) => (test.idValues || {})[i.id] != null && test.idValues![i.id] !== '');

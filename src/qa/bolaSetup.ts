@@ -101,14 +101,12 @@ export function detectIdLocation(req: DetectableRequest | null | undefined): Bol
     /* non-JSON body — skip */
   }
   cands.sort((a, b) => b.score - a.score);
-  return cands.map(
-    (c): BolaIdCandidate => ({
-      idLocation: c.idLocation,
-      value: c.value,
-      confidence: c.score >= 75 ? 'high' : c.score >= 50 ? 'medium' : 'low',
-      why: c.why,
-    })
-  );
+  return cands.map((c): BolaIdCandidate => ({
+    idLocation: c.idLocation,
+    value: c.value,
+    confidence: c.score >= 75 ? 'high' : c.score >= 50 ? 'medium' : 'low',
+    why: c.why,
+  }));
 }
 
 // Literal id values present in the request, for one-click fill suggestions.

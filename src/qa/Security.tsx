@@ -720,10 +720,7 @@ function SecurityPage({
 
   const editing = identities.find((i) => i.id === editId);
   const drawerCell = (drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId]) as
-    | (MatrixCell & { request?: CellRequestMeta | null })
-    | null
-    | undefined
-    | false;
+    (MatrixCell & { request?: CellRequestMeta | null }) | null | undefined | false;
 
   const scanWithAI = async () => {
     if (!drawer || !drawerCell || !drawerCell.response) return;

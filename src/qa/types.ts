@@ -138,9 +138,7 @@ export type LifecycleState = {
 
 /** 讀取端的寬鬆 lifecycle 輸入：只需要 records（且容許部分欄位）。 */
 export type LifecycleLike =
-  | { records?: Record<string, Partial<LifecycleRecord>> | null }
-  | null
-  | undefined;
+  { records?: Record<string, Partial<LifecycleRecord>> | null } | null | undefined;
 
 /** 壓縮後的 snapshot item（identity，非 finding）。 */
 export type SnapshotItem = {
@@ -283,9 +281,7 @@ export type AiSendFn = (request: {
 
 // ── BOLA / IDOR engine ───────────────────────────────────────────────────────
 export type BolaIdLocation =
-  | { kind: 'path'; index: number }
-  | { kind: 'query'; key: string }
-  | { kind: 'body'; path: string };
+  { kind: 'path'; index: number } | { kind: 'query'; key: string } | { kind: 'body'; path: string };
 
 export type BolaTest = {
   id: string;
@@ -443,9 +439,7 @@ export type BflaResult = {
 };
 
 export type FuzzLocation =
-  | { kind: 'path'; index: number }
-  | { kind: 'query'; key: string }
-  | { kind: 'body'; path: string };
+  { kind: 'path'; index: number } | { kind: 'query'; key: string } | { kind: 'body'; path: string };
 
 export type FuzzSeed = {
   name: string;

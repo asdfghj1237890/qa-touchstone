@@ -363,15 +363,13 @@ export async function scanSensitiveLLM(
   if (!Array.isArray(arr)) return [];
   return arr
     .filter((x) => x && x.path)
-    .map(
-      (x): Finding => ({
-        ruleId: 'llm-flagged',
-        oracle: 'sensitive-data',
-        severity: SEVERITY_ORDER.includes(x.severity) ? x.severity : 'medium',
-        title: x.title || 'AI-flagged exposure',
-        path: String(x.path),
-        evidence: '',
-        source: 'llm',
-      })
-    );
+    .map((x): Finding => ({
+      ruleId: 'llm-flagged',
+      oracle: 'sensitive-data',
+      severity: SEVERITY_ORDER.includes(x.severity) ? x.severity : 'medium',
+      title: x.title || 'AI-flagged exposure',
+      path: String(x.path),
+      evidence: '',
+      source: 'llm',
+    }));
 }
