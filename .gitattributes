@@ -1,0 +1,10 @@
+# Normalize all text files to LF in the repository (binaries are auto-detected).
+* text=auto
+
+# Golden fixtures are byte-compared by the CI staleness gate (git diff after
+# `node scripts/gen-fixtures.mjs`), so they must round-trip byte-exact: no eol
+# conversion in either direction (-text). Windows checkouts then materialize
+# the committed LF bytes verbatim, matching what the generator writes, so
+# regenerating cannot leave phantom CRLF/LF modifications (autocrlf) and a
+# CRLF variant can never be committed to break the gate in CI.
+src-tauri/core/tests/fixtures/*.json -text

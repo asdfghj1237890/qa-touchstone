@@ -5,6 +5,10 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+// Each _*-bridge.mjs registers a process 'exit' listener for tmpdir cleanup;
+// with 11+ bridges that trips Node's default max of 10 (MaxListenersExceededWarning).
+process.setMaxListeners(32);
+
 const FIXED_NOW = 1_700_000_000_000;
 const FLOATS = [0.0, 0.5, 0.999, 0.123456, 0.7];
 let _i = 0;
