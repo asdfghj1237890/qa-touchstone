@@ -14,5 +14,8 @@
     "@wdio/local-runner": "^9.29.1",
     "@wdio/mocha-framework": "^9.29.1",
     "@wdio/spec-reporter": "^9.29.1"
+  },
+  "overrides": {
+    "serialize-javascript": ">=7.0.5"
   }
 }
