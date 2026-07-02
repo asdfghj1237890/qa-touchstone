@@ -35,6 +35,10 @@
     "src/qa/triage.ts",
     "src/qa/batchReview.ts",
     "src/qa/oauth.ts",
-    "src/qa/updateCheck.ts"
+    "src/qa/updateCheck.ts",
+
+    "src/qa/i18n.tsx",
+    "src/qa/components.tsx",
+    "src/qa/state/RequestContext.tsx"
   ]
 }
