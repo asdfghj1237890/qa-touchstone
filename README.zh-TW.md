@@ -71,10 +71,12 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   none / weak / strong。
   單一 **執行完整安全掃描（Run full security suite）** 會把三個引擎當成一次已記錄的
   執行依序跑完——速率限制放最後，避免其 bursts 影響矩陣與 BOLA 的結果。
-  另有三個新引擎——JSON-Schema/OpenAPI **conformance** 驗證、輸入 **fuzzing**
-  （偵測 5xx、stack-trace 洩漏、payload 反射）與自動推導的 **BFLA**（OWASP API5）
-  掃描——以純函式、完整單元測試的模組形式出貨，SARIF 規則中繼資料已備妥於報告層；
-  UI 整合是下一步。
+  另有三個新引擎——輸入 **fuzzing**（偵測 5xx、stack-trace 洩漏、payload 反射）、
+  自動推導的 **BFLA**（OWASP API5）掃描，與 JSON-Schema/OpenAPI **conformance**
+  驗證——以純函式、完整單元測試的模組形式出貨，SARIF 規則中繼資料已備妥於報告層。
+  fuzzing 與 BFLA 已同時接入桌面版安全套件與 headless `scan` 指令；conformance
+  目前僅在桌面版執行（尚無 Rust port，故 CLI 不會跑它）。各表面的支援範圍見
+  [docs/capability-matrix.md](docs/capability-matrix.md)。
 - **AI 安全分流（AI security triage）**：把整批掃描（矩陣 + 物件授權 + 速率限制）
   濃縮成一份簡短、依優先序分類的清單——先看哪幾個、哪些像真的問題、哪些可能是誤判
   ——僅供參考，不會更動底層 findings。

@@ -37,6 +37,15 @@ docs in one app.
 
 <sub>Regenerate with `node scripts/capture-screenshots.mjs` while the dev server is running (drives your system Chrome over the DevTools Protocol; set `LOCALE=zh-TW` for a Chinese UI).</sub>
 
+## Documentation
+
+- [Getting Started](docs/getting-started.md) — clone → first request → first scan
+- [Capability Matrix](docs/capability-matrix.md) — what runs on desktop vs the headless CLI
+- [Security Workflow](docs/security-workflow.md) — the RBAC / BOLA / rate-limit journey end to end
+- [Design System](docs/design-system.md) — theming, tokens, and UI primitives
+- [AI-era API Testing Assessment](docs/ai-era-api-testing-assessment.md) — the product thesis
+- [CHANGELOG](CHANGELOG.md) · [Architecture diagram](docs/architecture.svg)
+
 ## Current Scope
 
 The current public-facing scope is API testing only:
@@ -75,11 +84,14 @@ The current public-facing scope is API testing only:
   strong by how many requests slip through before the first 429.
   A single **Run full security suite** executes all three engines as one recorded
   run — rate-limit last, so its bursts don't skew the matrix and BOLA results.
-  Three further engines — JSON-Schema/OpenAPI **conformance** validation, input
-  **fuzzing** (5xx, stack-trace-leak, and reflected-payload detection), and an
-  auto-derived **BFLA** (OWASP API5) scan — ship as pure, fully unit-tested
-  modules with SARIF rule metadata already in the report layer; UI integration
-  is the next step.
+  Three further engines — input **fuzzing** (5xx, stack-trace-leak, and
+  reflected-payload detection), an auto-derived **BFLA** (OWASP API5) scan, and
+  JSON-Schema/OpenAPI **conformance** validation — are pure, fully unit-tested
+  modules with SARIF rule metadata in the report layer. Fuzzing and BFLA run on
+  both surfaces (desktop Security suite and the headless `scan` command);
+  conformance currently runs in the desktop suite only (no Rust port yet, so the
+  CLI does not run it). See [docs/capability-matrix.md](docs/capability-matrix.md)
+  for exactly what runs where.
 - **AI security triage**: condense a whole scan (matrix + object-authz + rate-limit)
   into a short, prioritized, categorized shortlist — what to look at first, what
   looks like a real issue, and what's likely a false positive — advisory only,
