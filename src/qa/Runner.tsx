@@ -139,7 +139,9 @@ function Runner({
       try {
         for (let k = 0; k < queue.length; k++) {
           if (cancelled) break;
-          const { iter, r, data } = queue[k];
+          const item = queue[k];
+          if (!item) continue;
+          const { iter, r, data } = item;
           const map = window.qaVarMap!(vars, env.label, colId, data || undefined);
           let resp;
           try {

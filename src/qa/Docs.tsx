@@ -234,7 +234,7 @@ function buildDocsHtml(col: any, env: QaEnv, t: I18nValue['t'] = (key) => key): 
   const esc = (s: unknown) =>
     String(s).replace(
       /[&<>]/g,
-      (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }) as Record<string, string>)[c]
+      (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }) as Record<string, string>)[c] ?? c
     );
   const sections = reqs
     .map((r: any) => {

@@ -48,6 +48,13 @@
 
     "src/qa/PerfTest.tsx",
     "src/qa/CodeGen.tsx",
-    "src/qa/TestGen.tsx"
+    "src/qa/TestGen.tsx",
+
+    "src/qa/Monitors.tsx",
+    "src/qa/Runner.tsx",
+    "src/qa/Sidebar.tsx",
+    "src/qa/ExportData.tsx",
+    "src/qa/Docs.tsx",
+    "src/App.tsx"
   ]
 }
