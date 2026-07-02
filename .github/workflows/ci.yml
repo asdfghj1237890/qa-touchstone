@@ -121,3 +121,74 @@ jobs:
       - name: Audit Rust dependencies (RustSec)
         working-directory: src-tauri
         run: cargo audit
+
+  # Desktop E2E smoke：build 真正的 release binary，用 tauri-driver +
+  # WebdriverIO 在 Xvfb 下驅動整個 app shell。唯一路徑：launch → import demo
+  # collection → send → security suite → export 報告並斷言檔案落地（守
+  # v0.21.1「打包版匯出全滅」的 bug class）。詳見 e2e/README.md。
+  # Linux 不需要 k6：無 tauri.linux.conf.json → 無 bundle resources 宣告
+  # （Windows 本機跑法見 e2e/README.md —— 那邊需要先 setup-k6）。
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # webkit2gtk 在 Xvfb / software GL 下的已知渲染 workaround。
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Tauri system dependencies (+ WebDriver + Xvfb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev pkg-config webkit2gtk-driver xvfb
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            e2e/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci --ignore-scripts
+
+      # rust-cache 會快取 ~/.cargo/bin，第二次起這步是 no-op。
+      - name: Install tauri-driver
+        run: command -v tauri-driver >/dev/null || cargo install tauri-driver --locked
+
+      # npx 直接呼叫 tauri CLI binary，不經 npm script —— 所以 pretauri:build
+      # （k6 下載）不會跑；冒煙路徑不碰 perf。--no-bundle：只要 raw binary，
+      # 不打 deb/appimage。beforeBuildCommand（npm run build / vite）照跑。
+      - name: Build desktop app (release, no bundle)
+        run: npx tauri build --no-bundle
+
+      - name: Run E2E smoke (xvfb)
+        working-directory: e2e
+        run: xvfb-run --auto-servernum npm test
+
+      - name: Upload failure diagnostics (screenshots)
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-logs
+          path: e2e/logs/
+          if-no-files-found: ignore
+          retention-days: 7
