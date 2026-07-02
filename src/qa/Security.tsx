@@ -500,8 +500,7 @@ function SecurityPage({
     const out: Array<Finding & { endpoint: string; method: string; identity: string }> = [];
     for (const ep of endpoints) {
       for (const id of identities) {
-        const row = results[ep.reqId];
-        const cell = row && row[id.id];
+        const cell = results[ep.reqId]?.[id.id];
         for (const f of (cell && cell.findings) || []) {
           out.push({
             ...f,
@@ -539,11 +538,9 @@ function SecurityPage({
     const out: ReviewSource[] = [];
     for (const ep of endpoints) {
       for (const id of identities) {
-        const row = results[ep.reqId];
-        const cell = row && row[id.id];
+        const cell = results[ep.reqId]?.[id.id];
         if (!cell || !cell.response) continue;
-        const expectRow = state.expect[ep.reqId];
-        const expectation = expectRow && expectRow[id.id];
+        const expectation = state.expect[ep.reqId]?.[id.id];
         out.push({
           engine: 'matrix',
           method: ep.method,
@@ -724,9 +721,11 @@ function SecurityPage({
   };
 
   const editing = identities.find((i) => i.id === editId);
-  const drawerRow = drawer && results[drawer.reqId];
-  const drawerCell = (drawer && drawerRow && drawerRow[drawer.idId]) as
-    (MatrixCell & { request?: CellRequestMeta | null }) | null | undefined | false;
+  const drawerCell =
+    drawer &&
+    (results[drawer.reqId]?.[drawer.idId] as
+      | (MatrixCell & { request?: CellRequestMeta | null })
+      | undefined);
 
   const scanWithAI = async () => {
     if (!drawer || !drawerCell || !drawerCell.response) return;
@@ -1452,8 +1451,7 @@ function SecurityPage({
                       </th>
                       {identities.map((id) => {
                         const exp = state.expect[ep.reqId]?.[id.id];
-                        const row = results[ep.reqId];
-                        const cell = row && row[id.id];
+                        const cell = results[ep.reqId]?.[id.id];
                         const v = cell && cell.verdict;
                         return (
                           <td
