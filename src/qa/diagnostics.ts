@@ -1,6 +1,6 @@
 // ── QA Touchstone — 匯出診斷資料（純組裝層）───────────────────────────────────
 // 輸入一律由呼叫端（SettingsPage）蒐集後傳入；本模組刻意零 import，
-// 保持純函式可測，也讓 tsconfig.strict.json 的 include 閉包只有這一支檔案。
+// 保持純函式可測、不把 UI 模組拖進依賴。
 //
 // 隱私邊界（by construction）：輸入形狀只有版本/平台/外觀設定/儲存 key+位元組數/
 // log 尾段 —— 沒有任何欄位能攜帶變數值、token、請求/回應內容或 LLM key。
