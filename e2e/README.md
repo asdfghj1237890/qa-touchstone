@@ -58,7 +58,10 @@ xvfb-run --auto-servernum npm test               # headless; omit xvfb-run on a 
 > `%LOCALAPPDATA%\com.qatouchstone.desktop` if present); the run may add a
 > demo collection and a security-run snapshot to your workspace.
 
-1. `npm ci --ignore-scripts && npx tauri build --no-bundle` (repo root)
+1. `npm ci --ignore-scripts && node scripts/setup-k6.mjs --release && npx tauri build --no-bundle`
+   (repo root — Windows needs k6 materialized first: `tauri.windows.conf.json`
+   declares `resources/k6.exe` and tauri-build validates it at compile time
+   even with `--no-bundle`; Linux declares no bundle resources)
 2. `cargo install tauri-driver --locked`
 3. Download the **msedgedriver matching your WebView2 version**
    (version: `(Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}').pv`,
@@ -76,6 +79,8 @@ seam, fs polling.
   and `WEBKIT_DISABLE_DMABUF_RENDERER=1` (CI sets both).
 - "app binary not found": build it first — `npx tauri build --no-bundle` from
   the repo root (the preflight in `wdio.conf.mjs` checks this before starting).
+- `resource path 'resources\k6.exe' doesn't exist` (Windows build): run
+  `node scripts/setup-k6.mjs --release` first — see the Windows steps above.
 - `tauri-driver` not found: `cargo install tauri-driver --locked` and ensure
   `~/.cargo/bin` is on PATH.
 - Failure screenshots land in `e2e/logs/` (uploaded as a CI artifact).
@@ -83,6 +88,7 @@ seam, fs polling.
 ## Deliberately out of scope
 
 Local stub server (send/scan offline determinism), driving the endpoint picker
-so engines truly run, macOS, more export formats, visual regression. See
+so engines truly run, macOS, more export formats, visual regression, gating
+`release.yml` on E2E. See
 `docs/superpowers/specs/2026-07-02-desktop-e2e-smoke-design.md` (untracked
 planning artifact) for the full design rationale.
