@@ -81,7 +81,7 @@ interface PerfSession {
 // Computed per render (not cached at module load) so imported collections,
 // which are pushed into window.QA.COLLECTIONS at runtime, show up here too.
 function compactUrlLabel(raw: unknown): string {
-  const url = String(raw || '').split('?')[0];
+  const url = String(raw || '').split('?')[0] ?? '';
   try {
     const u = new URL(url);
     return `${u.hostname}${u.pathname}`;
@@ -295,12 +295,13 @@ function Chart({ pts, max, color, label, unit, dur, emptyLabel = 'No data yet' }
     v: number;
   } | null>(null); // { i, leftPct, topPct, t, v } | null
   const n = pts.length;
-  const coords = pts.map((v, i) => [
+  const coords = pts.map((v, i): [number, number] => [
     (i / Math.max(1, N_POINTS - 1)) * 100,
     100 - (Math.min(v, max) / max) * 100,
   ]);
   const line = coords.map((c) => `${c[0].toFixed(2)},${c[1].toFixed(2)}`).join(' ');
-  const area = n >= 2 ? `0,100 ${line} ${coords[n - 1][0].toFixed(2)},100` : '';
+  const last = coords[n - 1];
+  const area = n >= 2 && last ? `0,100 ${line} ${last[0].toFixed(2)},100` : '';
 
   // Y-axis tick values, top (max) -> bottom (0), aligned with the 25/50/75 grid.
   const yTicks = [1, 0.75, 0.5, 0.25, 0].map((f) => Math.round(max * f));
@@ -492,8 +493,9 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
       setTargetCollection(activeCollection);
       return;
     }
-    if (flat.length && !flat.some((r) => r.value === target)) {
-      setTarget(flat[0].value);
+    const firstFlat = flat[0];
+    if (firstFlat && !flat.some((r) => r.value === target)) {
+      setTarget(firstFlat.value);
     }
   }, [activeCollection, targetCollection, target, targetIds]);
 
@@ -1038,7 +1040,11 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
             </div>
             <div className="pf-empty-title">{t('perf.emptyTitle')}</div>
             <div className="pf-empty-sub">
-              <MethodBadge method={tgt.method} size="sm" /> {tgt.name} · {maxVus} VUs · {total}s
+              {tgt && (
+                <>
+                  <MethodBadge method={tgt.method} size="sm" /> {tgt.name} · {maxVus} VUs · {total}s
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -1220,7 +1226,8 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
                                   selected
                                     .slice()
                                     .sort((a, b) => a - b)
-                                    .map((i) => runs[i]),
+                                    .map((i) => runs[i])
+                                    .filter((r): r is PerfRun => r != null),
                                   f
                                 );
                                 setHMenu(false);

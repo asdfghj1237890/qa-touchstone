@@ -35,7 +35,9 @@ function qaEffectiveRequest(
   let url = isAbsolute ? reqUrlSub : sub((env && env.baseUrl) || '') + reqUrlSub;
 
   // Query params (+ apiKey-in-query)
-  const qp = (req.params || []).filter((p) => p.on && p.key).map((p) => [sub(p.key), sub(p.value)]);
+  const qp = (req.params || [])
+    .filter((p) => p.on && p.key)
+    .map((p): [string, string] => [sub(p.key), sub(p.value)]);
   if (req.auth && req.auth.type === 'apiKey' && req.auth.apiKey.placement === 'query') {
     qp.push([sub(req.auth.apiKey.key), sub(req.auth.apiKey.value)]);
   }
@@ -83,7 +85,9 @@ function qaEffectiveRequest(
     );
     ctype = 'application/json';
   } else if (req.bodyMode === 'form') {
-    const f = (req.form || []).filter((x) => x.on && x.key).map((x) => [sub(x.key), sub(x.value)]);
+    const f = (req.form || [])
+      .filter((x) => x.on && x.key)
+      .map((x): [string, string] => [sub(x.key), sub(x.value)]);
     body = f.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
     ctype = 'application/x-www-form-urlencoded';
   }
@@ -221,7 +225,8 @@ function CodeModal({ req, env, varMap, cookies, onClose }: CodeModalProps) {
   const [resolve, setResolve] = useStateCG(true);
   const [copied, setCopied] = useStateCG(false);
   const e = qaEffectiveRequest(req, env, varMap, cookies, resolve);
-  const code = (QA_LANGS.find((l) => l.key === lang) || QA_LANGS[0]).gen(e);
+  const chosen = QA_LANGS.find((l) => l.key === lang) || QA_LANGS[0];
+  const code = chosen ? chosen.gen(e) : '';
   const copy = () => {
     try {
       navigator.clipboard.writeText(code);
