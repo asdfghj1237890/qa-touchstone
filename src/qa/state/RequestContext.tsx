@@ -52,10 +52,9 @@ function hostOf(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
-    return (url || '')
-      .replace(/^https?:\/\//, '')
-      .split('/')[0]
-      .split(':')[0];
+    const noProto = (url || '').replace(/^https?:\/\//, '');
+    const host = noProto.split('/')[0] ?? '';
+    return host.split(':')[0] ?? '';
   }
 }
 

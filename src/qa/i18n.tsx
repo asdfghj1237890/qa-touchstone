@@ -466,7 +466,10 @@ const EN_DICT = {
   'toast.dismiss': 'Dismiss',
 };
 
-const dict: Record<string, Record<string, string>> = {
+const dict: Record<string, Record<string, string>> & {
+  'en-US': Record<string, string>;
+  'zh-TW': Record<string, string>;
+} = {
   'en-US': EN_DICT,
   'zh-TW': {
     'route.home': '首頁',

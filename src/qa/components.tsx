@@ -365,17 +365,19 @@ function Dropdown({
       closeAndRefocus();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (items[idx + 1] || items[0]) (items[idx + 1] || items[0]).focus();
+      const next = items[idx + 1] || items[0];
+      if (next) next.focus();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (items[idx - 1] || items[items.length - 1])
-        (items[idx - 1] || items[items.length - 1]).focus();
+      const prev = items[idx - 1] || items[items.length - 1];
+      if (prev) prev.focus();
     } else if (e.key === 'Home') {
       e.preventDefault();
       if (items[0]) items[0].focus();
     } else if (e.key === 'End') {
       e.preventDefault();
-      if (items[items.length - 1]) items[items.length - 1].focus();
+      const last = items[items.length - 1];
+      if (last) last.focus();
     } else if (e.key === 'Tab') {
       setOpen(false);
     }
