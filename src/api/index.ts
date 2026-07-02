@@ -66,7 +66,19 @@ export const api = {
   saveFileDialog: (opts: {
     defaultPath?: string;
     filters?: Array<{ name: string; extensions: string[] }>;
-  }): Promise<string | null> => saveDialog(opts),
+  }): Promise<string | null> => {
+    // E2E seam（比照 App.tsx 的 __QA_ENABLE_UPDATE_CHECK__）：harness 設定
+    // __QA_E2E_SAVE_DIR__ 時跳過原生存檔對話框、直接回傳目的路徑；後續
+    // saveTextFile 的 Rust 寫檔照跑（0.21.1 的磁碟落檔行為仍被完整驗證）。
+    // 一般執行時此全域不存在，行為不變。詳見 e2e/README.md。
+    const e2eDir = window.__QA_E2E_SAVE_DIR__;
+    if (typeof e2eDir === 'string' && e2eDir) {
+      return Promise.resolve(
+        e2eDir.replace(/[\\/]+$/, '') + '/' + (opts.defaultPath || 'export.txt')
+      );
+    }
+    return saveDialog(opts);
+  },
   saveTextFile: (path: string, contents: string): Promise<void> =>
     invoke('save_text_file', { path, contents }),
   downloadUpdateAsset: (url: string, path: string): Promise<void> =>
