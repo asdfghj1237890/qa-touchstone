@@ -88,12 +88,14 @@ export function parseTriage(raw: unknown, kept: TriageFinding[]): TriageResult {
     const findings: TriageFinding[] = [];
     for (const n of idxs) {
       if (!Number.isInteger(n) || n < 0 || n >= kept.length || seen.has(n)) continue;
+      const finding = kept[n];
+      if (!finding) continue;
       seen.add(n);
-      findings.push(kept[n]);
+      findings.push(finding);
     }
     if (!findings.length) continue; // drop invented / zero-ref items
     items.push({
-      title: String(it.title || findings[0].title || 'Finding cluster'),
+      title: String(it.title || findings[0]?.title || 'Finding cluster'),
       category: TRIAGE_CATEGORIES.includes(it.category) ? it.category : 'other',
       priority: PRIORITIES.includes(it.priority) ? it.priority : 'p3',
       rationale: String(it.rationale || ''),

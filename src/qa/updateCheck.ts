@@ -51,7 +51,9 @@ export function compareVersions(a: string, b: string): number {
   const bp = partsOf(b);
   if (!ap || !bp) return 0;
   for (let i = 0; i < 3; i += 1) {
-    if (ap[i] !== bp[i]) return ap[i] > bp[i] ? 1 : -1;
+    const av = ap[i] ?? 0;
+    const bv = bp[i] ?? 0;
+    if (av !== bv) return av > bv ? 1 : -1;
   }
   return 0;
 }
