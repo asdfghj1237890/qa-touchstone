@@ -82,7 +82,12 @@ export function detectUpdatePlatform(platform = ''): UpdatePlatform {
   const source =
     platform ||
     (typeof navigator !== 'undefined'
-      ? String((navigator as any).userAgentData?.platform || navigator.platform || navigator.userAgent || '')
+      ? String(
+          (navigator as any).userAgentData?.platform ||
+            navigator.platform ||
+            navigator.userAgent ||
+            ''
+        )
       : '');
   if (/windows|win32|win64/i.test(source)) return 'windows';
   if (/mac|darwin/i.test(source)) return 'macos';
@@ -184,7 +189,8 @@ export async function checkForUpdate(
   const checkedAt = new Date().toISOString();
   try {
     const latest = await fetchGitHubLatestVersion(repo, fetcher);
-    if (!latest) return { status: 'unknown', currentVersion, checkedAt, error: 'No version tag found' };
+    if (!latest)
+      return { status: 'unknown', currentVersion, checkedAt, error: 'No version tag found' };
     return compareVersions(latest.version, currentVersion) > 0
       ? {
           status: 'update',

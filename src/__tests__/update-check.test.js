@@ -31,7 +31,8 @@ describe('GitHub update check', () => {
         assets: [
           {
             name: 'QA.Touchstone_0.23.0_x64-setup.exe',
-            browser_download_url: 'https://github.com/owner/repo/releases/download/v0.23.0/setup.exe',
+            browser_download_url:
+              'https://github.com/owner/repo/releases/download/v0.23.0/setup.exe',
             size: 123,
             content_type: 'application/octet-stream',
           },

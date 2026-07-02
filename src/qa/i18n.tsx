@@ -30,13 +30,17 @@ const EN_DICT = {
   'update.dismiss': 'Dismiss update reminder',
   'pageHelp.label': 'Help for {page}',
   'pageHelp.home.title': 'Home guide',
-  'pageHelp.home.intro': 'Start here when you want to jump into a QA workflow or reopen recent work.',
+  'pageHelp.home.intro':
+    'Start here when you want to jump into a QA workflow or reopen recent work.',
   'pageHelp.home.tip1': 'Use the tiles to open Test Gen, API Client, Performance, or Settings.',
   'pageHelp.home.tip2': 'Recent requests reopen the exact request you sent earlier.',
-  'pageHelp.home.tip3': 'Workspace shows the active environment, collections, requests, and credentials.',
+  'pageHelp.home.tip3':
+    'Workspace shows the active environment, collections, requests, and credentials.',
   'pageHelp.testgen.title': 'Test Generation guide',
-  'pageHelp.testgen.intro': 'Turn requirements into runnable test cases before adding them to requests.',
-  'pageHelp.testgen.tip1': 'Paste BDD, OpenAPI, or product notes, then choose AI or heuristic generation.',
+  'pageHelp.testgen.intro':
+    'Turn requirements into runnable test cases before adding them to requests.',
+  'pageHelp.testgen.tip1':
+    'Paste BDD, OpenAPI, or product notes, then choose AI or heuristic generation.',
   'pageHelp.testgen.tip2': 'Review generated happy, edge, and negative cases before adding them.',
   'pageHelp.testgen.tip3': 'Use Settings -> AI / LLM if AI generation is unavailable.',
   'pageHelp.api.title': 'API Client guide',
@@ -57,8 +61,10 @@ const EN_DICT = {
   'pageHelp.security.title': 'Security guide',
   'pageHelp.security.intro': 'Configure security checks, run the suite, then triage findings.',
   'pageHelp.security.tip1': 'Add endpoints and identities for RBAC Matrix and BFLA coverage.',
-  'pageHelp.security.tip2': 'Configure BOLA object ids, rate-limit bursts, schemas, and fuzzable fields.',
-  'pageHelp.security.tip3': 'Use Coverage and Findings to see gaps, suppressions, owners, and exports.',
+  'pageHelp.security.tip2':
+    'Configure BOLA object ids, rate-limit bursts, schemas, and fuzzable fields.',
+  'pageHelp.security.tip3':
+    'Use Coverage and Findings to see gaps, suppressions, owners, and exports.',
   'pageHelp.monitors.title': 'Monitors guide',
   'pageHelp.monitors.intro': 'Schedule saved requests so regressions are caught automatically.',
   'pageHelp.monitors.tip1': 'Create a monitor from a collection or request set.',
@@ -71,9 +77,12 @@ const EN_DICT = {
   'pageHelp.docs.tip3': 'Export docs when you need a static reference for teammates.',
   'pageHelp.perf.title': 'Performance guide',
   'pageHelp.perf.intro': 'Run k6-backed performance, load, and stress checks from saved requests.',
-  'pageHelp.perf.tip1': 'Select target requests or a collection and confirm active environment values.',
-  'pageHelp.perf.tip2': 'Pick test type, stages, VUs, duration, thresholds, and connection options.',
-  'pageHelp.perf.tip3': 'Watch live latency, status, throughput, and error charts while the run executes.',
+  'pageHelp.perf.tip1':
+    'Select target requests or a collection and confirm active environment values.',
+  'pageHelp.perf.tip2':
+    'Pick test type, stages, VUs, duration, thresholds, and connection options.',
+  'pageHelp.perf.tip3':
+    'Watch live latency, status, throughput, and error charts while the run executes.',
   'pageHelp.settings.title': 'Settings guide',
   'pageHelp.settings.intro': 'Configure the local workspace behavior that every run depends on.',
   'pageHelp.settings.tip1': 'Use Environment for base URLs, variables, and TLS verification.',
