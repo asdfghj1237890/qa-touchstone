@@ -71,6 +71,8 @@ export const api = {
     // __QA_E2E_SAVE_DIR__ 時跳過原生存檔對話框、直接回傳目的路徑；後續
     // saveTextFile 的 Rust 寫檔照跑（0.21.1 的磁碟落檔行為仍被完整驗證）。
     // 一般執行時此全域不存在，行為不變。詳見 e2e/README.md。
+    // 不加 build-mode gate（import.meta.env.PROD）：E2E 驅動的正是 release
+    // build；且能設此全域者本就能直接 invoke save_text_file，無新增攻擊面。
     const e2eDir = window.__QA_E2E_SAVE_DIR__;
     if (typeof e2eDir === 'string' && e2eDir) {
       return Promise.resolve(
