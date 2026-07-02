@@ -34,6 +34,10 @@ describe('saveFileDialog — E2E seam', () => {
     await expect(api.saveFileDialog({ defaultPath: 'r.json' })).resolves.toBe(
       'C:/tmp/qa-e2e/r.json'
     );
+    window.__QA_E2E_SAVE_DIR__ = 'C:\\tmp\\qa-e2e\\';
+    await expect(api.saveFileDialog({ defaultPath: 'r.json' })).resolves.toBe(
+      'C:\\tmp\\qa-e2e/r.json'
+    );
   });
 
   it('stays inert (calls the real dialog, passes its result through) without the global', async () => {
