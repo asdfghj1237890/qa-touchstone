@@ -3,6 +3,7 @@
 // Normalize findings across engines, cap by severity, build/parse a single
 // advisory LLM pass. Never mutates the real findings. UI in TriagePanel.jsx.
 import './setup';
+import { isDefined } from './isDefined';
 import { qaAiSend } from './llm';
 import { SEVERITY_ORDER } from './oracles';
 import { TRIAGE_CATEGORIES } from './triageConstants';
@@ -89,7 +90,7 @@ export function parseTriage(raw: unknown, kept: TriageFinding[]): TriageResult {
     for (const n of idxs) {
       if (!Number.isInteger(n) || n < 0 || n >= kept.length || seen.has(n)) continue;
       const finding = kept[n];
-      if (!finding) continue;
+      if (!isDefined(finding)) continue;
       seen.add(n);
       findings.push(finding);
     }

@@ -2,6 +2,7 @@ import React from 'react';
 import './setup';
 import { Dropdown, Icon, MethodBadge, MiniCheck, PulseLogo } from './components';
 import { downloadFile } from './download';
+import { isDefined } from './isDefined';
 import './ExportData';
 import { ImportModal } from './ImportData';
 import { useI18n } from './useI18n';
@@ -343,7 +344,7 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
                               .slice()
                               .sort((a, b) => a - b)
                               .map((i) => history[i])
-                              .filter((h): h is HistoryEntry => h != null),
+                              .filter(isDefined),
                             f
                           );
                           setHMenu(false);

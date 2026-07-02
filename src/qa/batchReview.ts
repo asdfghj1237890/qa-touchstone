@@ -2,6 +2,7 @@
 // Advisory only: reviews captured responses in bulk, maps model indexes back to
 // the source responses, and never mutates findings or release gates.
 import './setup';
+import { isDefined } from './isDefined';
 import { qaAiSend } from './llm';
 
 export const RESPONSE_REVIEW_CAP = 80;
@@ -104,7 +105,7 @@ export function parseBatchReview(raw: unknown, kept: ReviewSource[]): BatchRevie
     for (const n of idxs) {
       if (!Number.isInteger(n) || n < 0 || n >= kept.length || seen.has(n)) continue;
       const source = kept[n];
-      if (!source) continue;
+      if (!isDefined(source)) continue;
       seen.add(n);
       responses.push(source);
     }
