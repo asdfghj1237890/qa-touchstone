@@ -36,7 +36,7 @@ function pmUrlObject(
     host = u.hostname === 'placeholder' ? [] : u.hostname.split('.');
     segs = u.pathname.split('/').filter(Boolean);
   } catch {
-    segs = path.split('?')[0].split('/').filter(Boolean);
+    segs = (path.split('?')[0] ?? '').split('/').filter(Boolean);
   }
   const query = (params || [])
     .filter((p) => p.key)

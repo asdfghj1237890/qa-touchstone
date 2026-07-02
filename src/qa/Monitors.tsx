@@ -60,7 +60,8 @@ type MonitorUi = {
 } & Monitor;
 
 function cadenceLabel(cadence: string | undefined, t: I18nValue['t']): string {
-  return CADENCE_KEYS[cadence as string] ? t(CADENCE_KEYS[cadence as string]) : (cadence as string);
+  const key = CADENCE_KEYS[cadence as string];
+  return key ? t(key) : (cadence as string);
 }
 export function nextMonitorDueAt(cadence: string | undefined, from = Date.now()): number {
   if (cadence === 'Daily at 02:00') {
@@ -70,7 +71,7 @@ export function nextMonitorDueAt(cadence: string | undefined, from = Date.now())
     return d.getTime();
   }
   if (cadence === 'Weekly') return from + 7 * DAY_MS;
-  return from + (FIXED_CADENCE_MS[cadence as string] || FIXED_CADENCE_MS['Every 15 minutes']);
+  return from + (FIXED_CADENCE_MS[cadence as string] || 15 * MINUTE_MS);
 }
 
 export function normalizeMonitor(mon: Partial<Monitor>, now = Date.now()): Monitor {
@@ -506,12 +507,12 @@ function NewMonitorModal({ env, onClose, onCreate }: NewMonitorModalProps) {
               <Dropdown value={menv} options={envs} onChange={setMenv} />
             </FieldRow>
             <FieldRow label={t('monitors.modal.region')}>
-              <Dropdown value={region} options={REGIONS} onChange={setRegion} />
+              <Dropdown value={region ?? ''} options={REGIONS} onChange={setRegion} />
             </FieldRow>
           </div>
           <FieldRow label={t('monitors.modal.schedule')}>
             <Dropdown
-              value={cadence}
+              value={cadence ?? ''}
               options={CADENCES.map((c) => ({ value: c, label: cadenceLabel(c, t) }))}
               onChange={setCadence}
             />

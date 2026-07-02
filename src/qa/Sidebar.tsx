@@ -342,7 +342,8 @@ function CollectionsPanel({ onSelectHistory, onImport }: CollectionsPanelProps) 
                             hSel
                               .slice()
                               .sort((a, b) => a - b)
-                              .map((i) => history[i]),
+                              .map((i) => history[i])
+                              .filter((h): h is HistoryEntry => h != null),
                             f
                           );
                           setHMenu(false);

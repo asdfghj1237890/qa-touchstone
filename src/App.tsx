@@ -228,7 +228,7 @@ function PageHelpButton({ route, routeLabel }: { route: string; routeLabel: stri
       >
         <Icon name="circleHelp" size={15} />
       </button>
-      {open && (
+      {open && help && (
         <div id={dialogId} className="qa-page-help-pop" role="dialog" aria-label={label}>
           <div className="qa-page-help-head">
             <strong>{t(help.title)}</strong>
