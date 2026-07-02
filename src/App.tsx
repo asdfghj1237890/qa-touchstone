@@ -151,7 +151,9 @@ const ROUTE_KEYS: Record<string, string> = {
   security: 'route.security',
 };
 
-const PAGE_HELP: Record<string, { title: string; intro: string; tips: string[] }> = {
+type PageHelp = { title: string; intro: string; tips: string[] };
+
+const PAGE_HELP = {
   home: {
     title: 'pageHelp.home.title',
     intro: 'pageHelp.home.intro',
@@ -202,12 +204,15 @@ const PAGE_HELP: Record<string, { title: string; intro: string; tips: string[] }
     intro: 'pageHelp.settings.intro',
     tips: ['pageHelp.settings.tip1', 'pageHelp.settings.tip2', 'pageHelp.settings.tip3'],
   },
-};
+} satisfies Record<string, PageHelp>;
+// String-indexed view for the dynamic route read below — PAGE_HELP itself keeps
+// literal keys (so PAGE_HELP.home is defined), which forbids PAGE_HELP[route].
+const PAGE_HELP_LOOKUP: Record<string, PageHelp> = PAGE_HELP;
 
 function PageHelpButton({ route, routeLabel }: { route: string; routeLabel: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useStateApp(false);
-  const help = PAGE_HELP[route] || PAGE_HELP.home;
+  const help = PAGE_HELP_LOOKUP[route] || PAGE_HELP.home;
   const dialogId = `qa-page-help-${route}`;
   const label = t('pageHelp.label', { page: routeLabel });
 
@@ -228,7 +233,7 @@ function PageHelpButton({ route, routeLabel }: { route: string; routeLabel: stri
       >
         <Icon name="circleHelp" size={15} />
       </button>
-      {open && help && (
+      {open && (
         <div id={dialogId} className="qa-page-help-pop" role="dialog" aria-label={label}>
           <div className="qa-page-help-head">
             <strong>{t(help.title)}</strong>

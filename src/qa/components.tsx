@@ -310,7 +310,7 @@ export interface DropdownOption {
 
 export interface DropdownProps {
   value: string;
-  options: Array<string | DropdownOption>;
+  options: ReadonlyArray<string | DropdownOption>;
   onChange: (value: string) => void;
   className?: string;
   renderOption?: (option: DropdownOption) => React.ReactNode;

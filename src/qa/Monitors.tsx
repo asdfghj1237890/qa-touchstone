@@ -20,7 +20,7 @@ export const CADENCES = [
   'Every 6 hours',
   'Daily at 02:00',
   'Weekly',
-];
+] as const;
 const CADENCE_KEYS: Record<string, string> = {
   'Every 5 minutes': 'monitors.cadence.5m',
   'Every 15 minutes': 'monitors.cadence.15m',
@@ -29,7 +29,7 @@ const CADENCE_KEYS: Record<string, string> = {
   'Daily at 02:00': 'monitors.cadence.daily',
   Weekly: 'monitors.cadence.weekly',
 };
-const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
+const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'] as const;
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
@@ -473,8 +473,8 @@ function NewMonitorModal({ env, onClose, onCreate }: NewMonitorModalProps) {
   const envs = realEnvs.length ? realEnvs : [env.label];
   const [name, setName] = useStateMON('');
   const [collectionId, setCollectionId] = useStateMON<string>(cols[0] ? cols[0].id : '');
-  const [cadence, setCadence] = useStateMON(CADENCES[1]);
-  const [region, setRegion] = useStateMON(REGIONS[0]);
+  const [cadence, setCadence] = useStateMON<string>(CADENCES[1]);
+  const [region, setRegion] = useStateMON<string>(REGIONS[0]);
   const [menv, setMenv] = useStateMON(env.label !== 'None' ? env.label : realEnvs[0] || env.label);
   return (
     <div className="qa-modal-scrim" onMouseDown={onClose}>
@@ -508,12 +508,12 @@ function NewMonitorModal({ env, onClose, onCreate }: NewMonitorModalProps) {
               <Dropdown value={menv} options={envs} onChange={setMenv} />
             </FieldRow>
             <FieldRow label={t('monitors.modal.region')}>
-              <Dropdown value={region ?? ''} options={REGIONS} onChange={setRegion} />
+              <Dropdown value={region} options={REGIONS} onChange={setRegion} />
             </FieldRow>
           </div>
           <FieldRow label={t('monitors.modal.schedule')}>
             <Dropdown
-              value={cadence ?? ''}
+              value={cadence}
               options={CADENCES.map((c) => ({ value: c, label: cadenceLabel(c, t) }))}
               onChange={setCadence}
             />
