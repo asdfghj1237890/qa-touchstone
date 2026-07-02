@@ -8,6 +8,9 @@ export default [
   {
     ignores: [
       'node_modules/**',
+      // Claude Code 本機目錄（.claude/worktrees/ 內有整份 repo 複本）；
+      // 已列於 .gitignore，但 eslint 不讀 .gitignore，須在此明確忽略。
+      '.claude/**',
       'build/**',
       'src-tauri/target/**',
       'src-tauri/gen/**',
