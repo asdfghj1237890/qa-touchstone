@@ -41,6 +41,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::system::get_platform,
             commands::system::get_process_env,
+            commands::diagnostics::read_app_logs,
             commands::ai_policy::get_ai_policy,
             commands::window::quit_app,
             commands::config::load_config,
