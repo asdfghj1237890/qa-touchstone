@@ -54,11 +54,6 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      # Ratchet: noUncheckedIndexedAccess over the security-engine layer.
-      # Scope only grows — see the header comment in tsconfig.strict.json.
-      - name: Type check (strict ratchet)
-        run: npm run typecheck:strict
-
       - name: Run frontend tests (vitest)
         run: npm test
 

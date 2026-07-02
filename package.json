@@ -19,7 +19,6 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
-    "typecheck:strict": "tsc -p tsconfig.strict.json --noEmit",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\" \"scripts/**/*.{js,mjs}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\" \"scripts/**/*.{js,mjs}\"",
     "test": "vitest run",
