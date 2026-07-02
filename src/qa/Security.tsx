@@ -724,8 +724,7 @@ function SecurityPage({
   const drawerCell =
     drawer &&
     (results[drawer.reqId]?.[drawer.idId] as
-      | (MatrixCell & { request?: CellRequestMeta | null })
-      | undefined);
+      (MatrixCell & { request?: CellRequestMeta | null }) | undefined);
 
   const scanWithAI = async () => {
     if (!drawer || !drawerCell || !drawerCell.response) return;

@@ -21,7 +21,6 @@ import {
 } from './ratelimit';
 import { normalizeRateLimit } from './securitySuite';
 import type {
-  Finding,
   Identity,
   RateLimitConfig,
   RateLimitResult,
