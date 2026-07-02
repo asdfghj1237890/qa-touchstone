@@ -1,0 +1,18 @@
+{
+  "name": "qa-touchstone-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Desktop E2E smoke harness (WebdriverIO + tauri-driver). Isolated from the root package so the heavy WDIO tree stays out of the app lockfile and audit surface. See README.md.",
+  "scripts": {
+    "test": "wdio run ./wdio.conf.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@wdio/cli": "^9.29.1",
+    "@wdio/local-runner": "^9.29.1",
+    "@wdio/mocha-framework": "^9.29.1",
+    "@wdio/spec-reporter": "^9.29.1"
+  }
+}
