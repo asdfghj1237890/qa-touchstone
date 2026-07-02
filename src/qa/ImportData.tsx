@@ -86,6 +86,7 @@ function ImportModal({ onClose, onImport }: ImportModalProps) {
           <div className="qa-import-or">{t('import.orPaste')}</div>
           <textarea
             className="qa-code-input qa-import-text"
+            data-testid="import-text"
             spellCheck="false"
             placeholder='{ "info": { … }, "item": [ … ] }'
             value={text}
@@ -127,6 +128,7 @@ function ImportModal({ onClose, onImport }: ImportModalProps) {
           </button>
           <button
             className="qa-send"
+            data-testid="import-submit"
             disabled={!ok}
             onClick={() => {
               onImport(parsed!);

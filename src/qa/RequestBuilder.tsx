@@ -489,7 +489,12 @@ function RequestBuilder({ onOpenSettings }: RequestBuilderProps) {
             spellCheck="false"
           />
         </div>
-        <button className="qa-send" onClick={onSend} disabled={isLoading}>
+        <button
+          className="qa-send"
+          data-testid="send-request"
+          onClick={onSend}
+          disabled={isLoading}
+        >
           {isLoading ? <Spinner size={14} /> : <Icon name="send" size={15} />}
           <span>{isLoading ? t('common.sending') : t('common.send')}</span>
         </button>
