@@ -105,7 +105,7 @@ import type {
 import type { ReviewSource } from './batchReview';
 
 const { useState: useS, useEffect: useE, useMemo, useRef, useCallback } = React;
-const EXPECTS: Expectation[] = ['allow', 'deny', 'skip'];
+const EXPECTS = ['allow', 'deny', 'skip'] as const satisfies readonly Expectation[];
 const VERDICT_LABEL: Record<Verdict, string> = {
   pass: 'security.verdict.pass',
   fail: 'security.verdict.fail',
@@ -615,7 +615,7 @@ function SecurityPage({
   const cycleCell = (reqId: string, idId: string) => {
     const cur = state.expect[reqId]?.[idId];
     const idx = cur ? EXPECTS.indexOf(cur) : -1;
-    const next = EXPECTS[(idx + 1) % EXPECTS.length] ?? 'allow';
+    const next = EXPECTS[(idx + 1) % EXPECTS.length] ?? EXPECTS[0];
     setExpect((e) => ({ ...e, [reqId]: { ...(e[reqId] || state.expect[reqId]), [idId]: next } }));
   };
   const bulkCol = (idId: string, val: Expectation) => setExpect(setColumn(state, idId, val).expect);
