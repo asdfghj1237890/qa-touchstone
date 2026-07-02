@@ -57,8 +57,10 @@ describe('desktop smoke', () => {
 
   it('sends a request from the imported collection (tolerant)', async () => {
     // 匯入的 collection 預設展開（Sidebar isOpen fallback 到 !!col.source）；
-    // 顯式點第一條 request，不依賴匯入時的 auto-select。
-    await $('//button[contains(@class,"qa-req")][contains(.,"TC1")]').click();
+    // 顯式點一條「葉節點 request」，不依賴匯入時的 auto-select。
+    // 注意：TC1/TC2/TC3 是 Postman 資料夾名，.qa-req 只渲染葉節點名 ——
+    // 用真實 request 名（Search name: japan …）才點得到（review 攔到的 bug）。
+    await $('//button[contains(@class,"qa-req")][contains(.,"Search name: japan")]').click();
     const send = $('[data-testid="send-request"]');
     await send.click();
     // 寬鬆斷言：流程完成（按鈕解除 disabled）即可，不驗 HTTP 成敗 ——
