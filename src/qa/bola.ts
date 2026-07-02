@@ -14,6 +14,7 @@ import type {
   BolaRequestMeta,
   BolaResults,
   BolaTest,
+  BolaTestResult,
   BolaVerdict,
   Finding,
   Identity,
@@ -50,7 +51,7 @@ export function applyIdLocation(
     // Expects the RELATIVE built-request URL (as produced by buildReq, which
     // strips the query and does not prepend baseUrl); an absolute
     // `https://host/...` URL would treat the scheme as a path segment.
-    const [pathPart, queryPart] = String(out.url || '').split('?');
+    const [pathPart = '', queryPart] = String(out.url || '').split('?');
     const segs = pathPart.split('/');
     let seen = -1,
       applied = false;
@@ -100,11 +101,12 @@ function setAtPath(obj: any, path: string, value: unknown): boolean {
   if (!keys.length) return false;
   let cur = obj;
   for (let i = 0; i < keys.length - 1; i++) {
-    if (cur == null || typeof cur !== 'object' || !(keys[i] in cur)) return false;
-    cur = cur[keys[i]];
+    const k = keys[i];
+    if (k === undefined || cur == null || typeof cur !== 'object' || !(k in cur)) return false;
+    cur = cur[k];
   }
   const last = keys[keys.length - 1];
-  if (cur == null || typeof cur !== 'object' || !(last in cur)) return false;
+  if (last === undefined || cur == null || typeof cur !== 'object' || !(last in cur)) return false;
   cur[last] = value;
   return true;
 }
@@ -336,7 +338,8 @@ export async function runBola(
       (i) => idVals[i.id] != null && idVals[i.id] !== ''
     );
     const reference: Record<string, BolaRefCell> = {};
-    results[test.id] = { reference, attacks: {} };
+    const tr: BolaTestResult = { reference, attacks: {} };
+    results[test.id] = tr;
 
     for (const O of owners) {
       if (signal && signal.aborted) return results;
@@ -362,8 +365,8 @@ export async function runBola(
     // is answered 2xx, the endpoint isn't object-scoped, so every attack verdict
     // for this test is unreliable and gets demoted to inconclusive below.
     let controlFailed = false;
-    if (opts.negativeControl && owners.length) {
-      const controlOwner = owners[0];
+    const controlOwner = owners[0];
+    if (opts.negativeControl && controlOwner) {
       const sampleVal = idVals[controlOwner.id];
       const synthetic = syntheticIdFor(test.idLocation, sampleVal);
       let control: BolaControl;
@@ -398,12 +401,13 @@ export async function runBola(
       }
       controlFailed = negativeControlFailed(control.status, denySet, control.matched);
       control.failed = controlFailed;
-      results[test.id].control = control;
+      tr.control = control;
       if (opts.onControl) opts.onControl(test.id, control);
     }
 
     for (const A of owners) {
-      results[test.id].attacks[A.id] = {};
+      const aRow: Record<string, BolaAttackCell> = {};
+      tr.attacks[A.id] = aRow;
       for (const O of owners) {
         if (A.id === O.id) continue;
         if (signal && signal.aborted) return results;
@@ -461,7 +465,7 @@ export async function runBola(
             error: errStr(e),
           };
         }
-        results[test.id].attacks[A.id][O.id] = cell;
+        aRow[O.id] = cell;
         if (onCell) onCell(test.id, A.id, O.id, cell);
       }
     }

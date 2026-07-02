@@ -102,12 +102,8 @@ export function validateAgainstSchema(
     });
   }
 
-  if (
-    schema.format &&
-    typeof value === 'string' &&
-    FORMAT_RE[schema.format] &&
-    !FORMAT_RE[schema.format].test(value)
-  ) {
+  const fmtRe = schema.format ? FORMAT_RE[schema.format] : undefined;
+  if (schema.format && typeof value === 'string' && fmtRe && !fmtRe.test(value)) {
     out.push({
       kind: 'format',
       path,

@@ -20,7 +20,10 @@ interface ThemeOptions {
   uiFont: string;
 }
 
-const DIRECTIONS: Record<string, ThemeDirection> = {
+// The intersection pins `graphite` as a guaranteed key so it stays a valid
+// fallback under noUncheckedIndexedAccess (dynamic `DIRECTIONS[direction]`
+// lookups remain possibly-undefined via the index signature).
+const DIRECTIONS: Record<string, ThemeDirection> & { graphite: ThemeDirection } = {
   graphite: {
     name: 'Graphite',
     blurb: 'Cool slate · electric blue · crisp IDE',
@@ -91,13 +94,15 @@ const ACCENTS: Record<string, string> = {
   cyan: '#3ed0d0',
 };
 
-const FONTS: Record<string, string> = {
+const FONTS: Record<string, string> & { sans: string; mono: string } = {
   sans: "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif",
   mono: "'Google Sans Code', ui-monospace, 'SF Mono', monospace",
 };
 
 // Density → row heights + base spacing scale.
-const DENSITY: Record<string, Record<string, string>> = {
+const DENSITY: Record<string, Record<string, string>> & {
+  comfortable: Record<string, string>;
+} = {
   compact: { '--row': '30px', '--gap': '8px', '--pad': '12px', '--fs': '13px', '--ctrl': '32px' },
   comfortable: {
     '--row': '38px',

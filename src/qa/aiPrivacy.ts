@@ -243,7 +243,7 @@ function luhnValid(s: unknown): boolean {
   let sum = 0,
     alt = false;
   for (let i = d.length - 1; i >= 0; i--) {
-    let n = +d[i];
+    let n = d.charCodeAt(i) - 48; // d is /^\d+$/, so this is the digit value
     if (alt) {
       n *= 2;
       if (n > 9) n -= 9;
@@ -388,7 +388,7 @@ const SECRET_SEG =
   /@|^eyJ[\w-]+\.[\w-]+\.[\w-]+$|^AKIA[0-9A-Z]{16}$|^gh[pousr]_[A-Za-z0-9]{20,}$|^[A-Za-z0-9_-]{40,}$/;
 export function redactUrlForAI(url: unknown): string {
   try {
-    const s = String(url == null ? '' : url).split('#')[0];
+    const s = String(url == null ? '' : url).split('#')[0] ?? '';
     let pathQuery = s;
     const m = s.match(/^[a-z][a-z0-9+.-]*:\/\/[^/]*(\/.*)?$/i);
     if (m) pathQuery = m[1] || '/';

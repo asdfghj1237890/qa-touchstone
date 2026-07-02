@@ -136,7 +136,7 @@ function luhnValid(s: string): boolean {
   let sum = 0,
     alt = false;
   for (let i = d.length - 1; i >= 0; i--) {
-    let n = +d[i];
+    let n = d.charCodeAt(i) - 48; // d is /^\d+$/, so this is the digit value
     if (alt) {
       n *= 2;
       if (n > 9) n -= 9;
@@ -239,7 +239,8 @@ export function checkSchema(
     });
   }
   for (const p of Object.keys(present)) {
-    if (!(p in contract)) {
+    const decl = contract[p];
+    if (decl === undefined) {
       findings.push({
         ruleId: 'schema:undeclared',
         oracle: 'schema',
@@ -252,24 +253,20 @@ export function checkSchema(
       // Nullable tolerance (deliberate): skip the type-mismatch check whenever
       // either side is 'null'. A field that was null in the baseline, or that
       // becomes null now, should not report a spurious type mismatch.
-    } else if (
-      present[p] !== contract[p].type &&
-      contract[p].type !== 'null' &&
-      present[p] !== 'null'
-    ) {
+    } else if (present[p] !== decl.type && decl.type !== 'null' && present[p] !== 'null') {
       findings.push({
         ruleId: 'schema:type-mismatch',
         oracle: 'schema',
         severity: 'medium',
         title: 'Type mismatch',
         path: p,
-        evidence: `${contract[p].type} → ${present[p]}`,
+        evidence: `${decl.type} → ${present[p]}`,
         source: 'rule',
       });
     }
   }
   for (const p of Object.keys(contract)) {
-    if (contract[p].required && !(p in present)) {
+    if (contract[p]?.required && !(p in present)) {
       findings.push({
         ruleId: 'schema:missing',
         oracle: 'schema',

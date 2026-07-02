@@ -1,0 +1,33 @@
+{
+  // Strict-typecheck RATCHET (`npm run typecheck:strict`, gated in CI).
+  //
+  // Turns on noUncheckedIndexedAccess for the security-engine layer and its
+  // import closure (engine/theme/data/setup/llm/types come in transitively).
+  // The base tsconfig stays as-is; this config only ever GROWS:
+  //   - add files to `include` as they are made strict (never remove any)
+  //   - when everything under src/ is listed, delete this file and flip
+  //     noUncheckedIndexedAccess in tsconfig.json instead.
+  //
+  // Fix errors with real narrowing (hoisted consts, `?? fallback` with the
+  // fallback the code already implied, destructuring defaults) — not with `!`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
+  "include": [
+    "src/global.d.ts",
+    "src/qa/authz.ts",
+    "src/qa/bola.ts",
+    "src/qa/bolaSetup.ts",
+    "src/qa/oracles.ts",
+    "src/qa/ratelimit.ts",
+    "src/qa/fuzz.ts",
+    "src/qa/bfla.ts",
+    "src/qa/schemaConformance.ts",
+    "src/qa/findings.ts",
+    "src/qa/securitySuite.ts",
+    "src/qa/securityReport.ts",
+    "src/qa/evidence.ts",
+    "src/qa/aiPrivacy.ts"
+  ]
+}

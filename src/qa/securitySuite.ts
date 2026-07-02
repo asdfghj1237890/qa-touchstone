@@ -40,7 +40,7 @@ export function normalizeMatrix(
   const out: UnionFinding[] = [];
   for (const ep of endpoints || []) {
     for (const id of identities || []) {
-      const cell = results && results[ep.reqId] && results[ep.reqId][id.id];
+      const cell = results?.[ep.reqId]?.[id.id];
       const identityLabel = id.id === 'anon' ? 'anon' : id.name || id.id;
       const resp = cell && cell.response;
       for (const f of (cell && cell.findings) || []) {
@@ -74,10 +74,10 @@ export function normalizeBola(
 ): UnionFinding[] {
   const out: UnionFinding[] = [];
   for (const test of tests || []) {
-    const atk = (results && results[test.id] && results[test.id].attacks) || {};
+    const atk = results?.[test.id]?.attacks || {};
     for (const a in atk)
       for (const o in atk[a]) {
-        const cell = atk[a][o];
+        const cell = atk[a]?.[o];
         const f = cell && cell.finding;
         const rq = cell && cell.request;
         const resp = cell && cell.response;
