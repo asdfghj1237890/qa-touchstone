@@ -101,11 +101,12 @@ export function snippetAround(
     const tokens = tokenizePath(findingPath);
     let node: unknown = body;
     for (let i = 0; i < tokens.length - 1; i++) {
-      if (node === null || typeof node !== 'object') return null;
-      node = (node as Record<string, unknown>)[tokens[i]];
+      const tk = tokens[i];
+      if (tk === undefined || node === null || typeof node !== 'object') return null;
+      node = (node as Record<string, unknown>)[tk];
     }
     if (node === null || typeof node !== 'object') return null;
-    const markKey = tokens[tokens.length - 1];
+    const markKey = tokens[tokens.length - 1] ?? null;
     return {
       snippetPath: findingPath,
       tree: scrub(node, markKey, 0, caps),
@@ -122,7 +123,7 @@ export function redactUrl(url: unknown): string {
     // Drop any #fragment first — it can carry secrets (e.g. OAuth implicit #access_token=…).
     // Note: only the first '?' starts the query; any later '?' lands inside a query value,
     // which is masked anyway.
-    const s = String(url == null ? '' : url).split('#')[0];
+    const s = String(url == null ? '' : url).split('#')[0] ?? '';
     const qIdx = s.indexOf('?');
     const pathPart = qIdx < 0 ? s : s.slice(0, qIdx);
     const queryPart = qIdx < 0 ? null : s.slice(qIdx + 1);

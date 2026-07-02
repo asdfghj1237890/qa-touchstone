@@ -106,7 +106,7 @@ function qaSubstitute(
       const d = qaDynamic(name);
       return d == null ? m : String(d);
     }
-    return map && name in map ? map[name] : m;
+    return map && name in map ? (map[name] ?? m) : m;
   });
 }
 function qaHasVars(text: unknown): boolean {
@@ -228,15 +228,15 @@ function qaParseAssertion(str: string): {
   if ((m = s.match(/status\s*(==|=|!=|<=|>=|<|>)?\s*(\d{3})/i))) {
     const op =
       ({ '!=': 'neq', '<': 'lt', '<=': 'lt', '>': 'gt', '>=': 'gt' } as Record<string, string>)[
-        m[1]
+        m[1] ?? ''
       ] || 'eq';
-    return { type: 'status', op, value: +m[2], on: true };
+    return { type: 'status', op, value: +(m[2] ?? NaN), on: true };
   }
   if (/is\s+(an?\s+)?array/i.test(s)) return { type: 'bodyArray', on: true };
   if ((m = s.match(/(?:has|includes?|contains?)\s*"([^"]+)"/i)))
     return { type: 'bodyHas', path: m[1], on: true };
   if ((m = s.match(/time\s*(<=|<)\s*(\d+)/i)))
-    return { type: 'time', op: 'lt', value: +m[2], on: true };
+    return { type: 'time', op: 'lt', value: +(m[2] ?? NaN), on: true };
   if ((m = s.match(/header\s*"([^"]+)"/i)))
     return { type: 'header', name: m[1], op: 'exists', on: true };
   return { type: 'info', text: s, on: true };
@@ -264,7 +264,7 @@ function qaParseSetCookie(
 ): QaCapturedCookie | null {
   if (!headerValue) return null;
   const parts = headerValue.split(';').map((s) => s.trim());
-  const [nameVal, ...attrs] = parts;
+  const [nameVal = '', ...attrs] = parts;
   const eq = nameVal.indexOf('=');
   if (eq < 0) return null;
   const name = nameVal.slice(0, eq).trim();
@@ -285,7 +285,7 @@ function qaParseSetCookie(
     on: true,
   };
   for (const a of attrs) {
-    const [k, v] = a.split('=');
+    const [k = '', v] = a.split('=');
     const key = k.toLowerCase();
     if (key === 'domain') {
       const dom = (v || '').replace(/^\./, '').toLowerCase();
@@ -333,16 +333,19 @@ function qaMergeCookie(
   );
   if (i >= 0) {
     const next = jar.slice();
-    next[i] = {
-      ...next[i],
-      value: ck.value,
-      expires: ck.expires || next[i].expires,
-      secure: ck.secure,
-      httpOnly: ck.httpOnly,
-      sameSite: ck.sameSite,
-      hostOnly: ck.hostOnly,
-      on: true,
-    };
+    const cur = next[i];
+    if (cur) {
+      next[i] = {
+        ...cur,
+        value: ck.value,
+        expires: ck.expires || cur.expires,
+        secure: ck.secure,
+        httpOnly: ck.httpOnly,
+        sameSite: ck.sameSite,
+        hostOnly: ck.hostOnly,
+        on: true,
+      };
+    }
     return next;
   }
   return [...jar, ck];
@@ -401,7 +404,7 @@ function qaParseDataFile(
     out.push(cur);
     return out;
   };
-  const cols = parseLine(lines[0]).map((c) => c.trim());
+  const cols = parseLine(lines[0] ?? '').map((c) => c.trim());
   const rows = lines.slice(1).map((line) => {
     const vals = parseLine(line);
     const o: Record<string, string> = {};

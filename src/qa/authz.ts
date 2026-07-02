@@ -275,7 +275,8 @@ export async function runMatrix(
   const denySet = state.denySet || DEFAULT_DENY_SET;
   const results: MatrixResults = {};
   for (const ep of state.endpoints) {
-    results[ep.reqId] = results[ep.reqId] || {};
+    const row: Record<string, MatrixCell> = results[ep.reqId] ?? {};
+    results[ep.reqId] = row;
     for (const id of state.identities) {
       if (signal && signal.aborted) return results;
       const expectation =
@@ -312,7 +313,7 @@ export async function runMatrix(
           error: String((e && e.message) || e),
         };
       }
-      results[ep.reqId][id.id] = cell;
+      row[id.id] = cell;
       if (onCell) onCell(ep.reqId, id.id, cell);
     }
   }

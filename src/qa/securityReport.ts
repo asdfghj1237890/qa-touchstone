@@ -160,7 +160,7 @@ export function htmlEscape(s: unknown): string {
           string,
           string
         >
-      )[c]
+      )[c] ?? c
   );
 }
 
@@ -173,7 +173,7 @@ export function xmlEscape(s: unknown): string {
           string,
           string
         >
-      )[c]
+      )[c] ?? c
   );
 }
 
@@ -192,7 +192,7 @@ export function reportToJUnit(model: ReportModel): string {
   for (const f of current) (byEngine[f.engine] = byEngine[f.engine] || []).push(f);
   const suites = Object.keys(byEngine)
     .map((engine) => {
-      const fs = byEngine[engine];
+      const fs = byEngine[engine] ?? [];
       const cases = fs
         .map((f) => {
           const name = xmlEscape(`${f.ruleId} @ ${f.location}`);
@@ -431,7 +431,9 @@ export function reportToSarif(model: ReportModel): string {
   const results = current.map((f) => {
     const r: SarifResult = {
       ruleId: f.ruleId,
-      ruleIndex: ruleIndex[f.ruleId],
+      // -1 is SARIF's explicit "no index" value; unreachable since rules are
+      // derived from these same findings, but safer than pointing at rule 0.
+      ruleIndex: ruleIndex[f.ruleId] ?? -1,
       level: sevToSarifLevel(f.severity),
       message: { text: `${f.title}${f.evidence ? ' — ' + f.evidence : ''} at ${f.location}` },
       locations: [

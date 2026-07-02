@@ -53,18 +53,20 @@ type DetectableRequest = {
 export function detectIdLocation(req: DetectableRequest | null | undefined): BolaIdCandidate[] {
   const cands: Array<{ idLocation: BolaIdLocation; value: string; score: number; why: string }> =
     [];
-  const pathPart = String((req && req.url) || '').split('?')[0];
+  const pathPart = String((req && req.url) || '').split('?')[0] ?? '';
   const segs = pathPart.split('/').filter(Boolean);
   for (let i = 0; i < segs.length; i++) {
-    const sh = shapeScore(segs[i]);
+    const seg = segs[i];
+    if (seg === undefined) continue;
+    const sh = shapeScore(seg);
     if (!sh) continue;
-    const prev = i > 0 ? segs[i - 1] : '';
+    const prev = i > 0 ? (segs[i - 1] ?? '') : '';
     const plural = /^[a-z].*(s|es)$/i.test(prev);
     let score = sh.score;
     if (plural) score += sh.shape === 'numeric' ? 25 : 5; // numeric needs the plural-noun boost to reach 'high'
     cands.push({
       idLocation: { kind: 'path', index: i },
-      value: segs[i],
+      value: seg,
       score,
       why: `path segment ${i} (${sh.shape}${plural ? ', after /' + prev : ''})`,
     });
