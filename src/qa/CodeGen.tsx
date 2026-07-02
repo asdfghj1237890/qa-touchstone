@@ -209,7 +209,7 @@ const QA_LANGS = [
   { key: 'python', label: 'Python', gen: genPython },
   { key: 'js', label: 'JS · fetch', gen: genFetch },
   { key: 'httpie', label: 'HTTPie', gen: genHttpie },
-];
+] as const;
 
 export interface CodeModalProps {
   req: QaRequest;
@@ -226,7 +226,7 @@ function CodeModal({ req, env, varMap, cookies, onClose }: CodeModalProps) {
   const [copied, setCopied] = useStateCG(false);
   const e = qaEffectiveRequest(req, env, varMap, cookies, resolve);
   const chosen = QA_LANGS.find((l) => l.key === lang) || QA_LANGS[0];
-  const code = chosen ? chosen.gen(e) : '';
+  const code = chosen.gen(e);
   const copy = () => {
     try {
       navigator.clipboard.writeText(code);
