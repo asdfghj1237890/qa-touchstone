@@ -142,9 +142,10 @@ function BolaPanel({
       let top: BolaIdCandidate | null = null;
       try {
         const cands = detectIdLocation(buildReq(r.reqId));
-        if (cands.length && cands[0].confidence !== 'low') {
-          idLocation = cands[0].idLocation;
-          top = cands[0];
+        const first = cands[0];
+        if (first && first.confidence !== 'low') {
+          idLocation = first.idLocation;
+          top = first;
         }
       } catch {
         /* detection is best-effort */
@@ -158,9 +159,10 @@ function BolaPanel({
   const detectFor = (testId: string, reqId: string) => {
     try {
       const cands = detectIdLocation(buildReq(reqId));
-      if (cands.length) {
-        patchTest(testId, { idLocation: cands[0].idLocation });
-        setSuggestions((s) => ({ ...s, [testId]: cands[0] }));
+      const first = cands[0];
+      if (first) {
+        patchTest(testId, { idLocation: first.idLocation });
+        setSuggestions((s) => ({ ...s, [testId]: first }));
       }
     } catch {
       /* ignore */
@@ -252,7 +254,8 @@ function BolaPanel({
   const allFindings = useMemo(() => {
     const out: Finding[] = [];
     for (const test of tests) {
-      const atk = (results[test.id] && results[test.id].attacks) || {};
+      const res = results[test.id];
+      const atk = (res && res.attacks) || {};
       for (const a in atk)
         for (const o in atk[a]) {
           const f = atk[a][o] && atk[a][o].finding;
@@ -272,11 +275,12 @@ function BolaPanel({
   }, [results, tests, onFindings]);
 
   const reqs = allRequests();
+  const drawerRes = drawer && results[drawer.testId];
   const drawerCell = (drawer &&
-    results[drawer.testId] &&
+    drawerRes &&
     (drawer.attackerId == null
-      ? results[drawer.testId].reference[drawer.ownerId]
-      : (results[drawer.testId].attacks[drawer.attackerId] || {})[drawer.ownerId])) as
+      ? drawerRes.reference[drawer.ownerId]
+      : (drawerRes.attacks[drawer.attackerId] || {})[drawer.ownerId])) as
     BolaDrawerCell | null | undefined | false;
 
   const owned = (test: BolaUiTest) =>
@@ -340,6 +344,7 @@ function BolaPanel({
 
       {tests.map((test) => {
         const ow = owned(test);
+        const suggestion = suggestions[test.id];
         const tr = results[test.id] || ({ reference: {}, attacks: {} } as BolaTestResult);
         // Probe whether the marked id location actually resolves against the built
         // request (e.g. a body path whose parent is missing won't apply, so the
@@ -363,18 +368,16 @@ function BolaPanel({
               </button>
             </div>
 
-            {suggestions[test.id] && (
+            {suggestion && (
               <div className="qa-bola-suggest">
                 {t('security.bola.setup.detected', {
-                  where: suggestions[test.id].why,
-                  confidence: t(
-                    'security.bola.setup.confidence.' + suggestions[test.id].confidence
-                  ),
+                  where: suggestion.why,
+                  confidence: t('security.bola.setup.confidence.' + suggestion.confidence),
                 })}
                 <button
                   className="qa-link"
                   onClick={() => {
-                    patchTest(test.id, { idLocation: suggestions[test.id].idLocation });
+                    patchTest(test.id, { idLocation: suggestion.idLocation });
                     dismissSuggestion(test.id);
                   }}
                 >
@@ -515,8 +518,8 @@ function BolaPanel({
               } catch {
                 cands = [];
               }
-              if (!cands.length) return null;
               const first = cands[0];
+              if (!first) return null;
               return (
                 <div className="qa-bola-cand qa-meta">
                   {t('security.bola.setup.foundInReq', { value: first.value })}

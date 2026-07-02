@@ -204,7 +204,7 @@ function RateLimitPanel({
 
   const summary = useMemo(() => summarizeRateLimit(results), [results]);
   const allFindings = useMemo(
-    () => tests.map((t0) => results[t0.id] && results[t0.id].finding).filter(Boolean) as Finding[],
+    () => tests.map((t0) => results[t0.id]?.finding).filter(Boolean) as Finding[],
     [results, tests]
   );
 
