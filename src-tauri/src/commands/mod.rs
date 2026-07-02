@@ -1,6 +1,7 @@
 pub mod ai_policy;
 pub mod api;
 pub mod config;
+pub mod diagnostics;
 pub mod fsops;
 pub mod postman;
 pub mod process;

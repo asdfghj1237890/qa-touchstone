@@ -8,6 +8,9 @@ import { loadPrivacyCfg, savePrivacyCfg, resolvePolicy, classifyDestination } fr
 import type { PrivacyCfg } from './aiPrivacy';
 import { getCachedAiPolicy } from './aiPolicy';
 import type { QaCookie } from './state/WorkspaceContext';
+import { buildDiagnosticsReport, collectStorageHealth } from './diagnostics';
+import { downloadFile } from './download';
+import api from '../api/index';
 
 // ── QA Touchstone — Settings (Environment + API credentials) ───────────────
 const { useState: useStateST } = React;
@@ -474,6 +477,56 @@ function ApiSettings() {
   );
 }
 
+// ── Diagnostics（本機優先的觀測性）──────────────────────────────────────────
+// 匯出一份 PII-free 純文字報告：版本/平台/外觀設定/storage key+大小/log 尾段。
+// 蒐集在這裡做、組裝交給純函式 diagnostics.ts（隱私邊界見該檔與其 canary 測試）。
+function DiagnosticsSettings({ accent }: { accent: string }) {
+  const { locale, t } = useI18n();
+  const exportDiagnostics = async () => {
+    try {
+      // 非 Tauri（vite dev / 純瀏覽器）時 invoke 會 reject：平台退回 'web'，
+      // log 尾段放說明文字，報告其餘部分照樣可出。
+      const platform = await api.getPlatform().catch(() => 'web');
+      let logTail = '';
+      try {
+        logTail = await api.readAppLogs();
+      } catch (e) {
+        logTail = `(app log unavailable: ${String(e)})`;
+      }
+      const report = buildDiagnosticsReport({
+        appVersion: __APP_VERSION__,
+        platform,
+        // density 跟著 App.tsx applyTheme 目前的固定值走。
+        settings: { locale, accent, density: 'comfortable' },
+        storage: collectStorageHealth(window.localStorage),
+        logTail,
+      });
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      downloadFile(`qa-touchstone-diagnostics-${stamp}.txt`, report, 'text/plain');
+    } catch (e) {
+      console.error('exportDiagnostics failed', e);
+    }
+  };
+  return (
+    <section className="qa-panel">
+      <div className="qa-panel-head">
+        <span>
+          <Icon name="fileText" size={14} /> {t('settings.diagnostics.title')}
+        </span>
+      </div>
+      <div className="qa-set-body">
+        <p className="qa-set-copy">{t('settings.diagnostics.desc')}</p>
+        <button className="qa-pathbtn" onClick={exportDiagnostics}>
+          <Icon name="fileText" size={14} /> {t('settings.diagnostics.export')}
+        </button>
+        <div className="qa-auth-note">
+          <Icon name="shield" size={13} /> {t('settings.diagnostics.note')}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 interface AppearanceSettingsProps {
   accent: string;
   setAccent: (accent: string) => void;
@@ -533,6 +586,7 @@ function AppearanceSettings({ accent, setAccent }: AppearanceSettingsProps) {
           </div>
         </div>
       </section>
+      <DiagnosticsSettings accent={accent} />
     </div>
   );
 }

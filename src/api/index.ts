@@ -30,6 +30,8 @@ export const api = {
   // --- 系統 / 視窗 ---
   getPlatform: (): Promise<string> => invoke('get_platform'),
   getAiPolicy: (): Promise<unknown> => invoke('get_ai_policy'),
+  /** 診斷匯出：app log dir 最新 .log 檔的尾段（後端上限 256 KiB）。 */
+  readAppLogs: (): Promise<string> => invoke('read_app_logs'),
   // Custom-titlebar X for the main window: quit the whole app deterministically
   // via a Rust command instead of relying on close() → CloseRequested → exit.
   quitApp: (): Promise<void> => invoke('quit_app'),

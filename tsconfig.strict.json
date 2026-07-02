@@ -28,6 +28,7 @@
     "src/qa/securitySuite.ts",
     "src/qa/securityReport.ts",
     "src/qa/evidence.ts",
-    "src/qa/aiPrivacy.ts"
+    "src/qa/aiPrivacy.ts",
+    "src/qa/diagnostics.ts"
   ]
 }

@@ -1850,6 +1850,12 @@ const EN_DICT_3 = {
   'ai.preview.mode.redacted': 'redacted',
   'ai.preview.mode.local': 'local only',
   'ai.gate.localBlocked': 'Blocked: local-only mode allows self-managed endpoints only.',
+  'settings.diagnostics.title': 'Diagnostics',
+  'settings.diagnostics.desc':
+    'Bundle the app version, platform, appearance settings, storage sizes, and the recent app log into a text report for bug reports.',
+  'settings.diagnostics.export': 'Export diagnostics',
+  'settings.diagnostics.note':
+    'PII-free: no variable values, tokens, request/response bodies, or LLM keys.',
 };
 Object.assign(dict['en-US'], EN_DICT_3);
 
@@ -1887,6 +1893,11 @@ Object.assign(dict['zh-TW'], {
   'ai.preview.mode.redacted': '遮蔽',
   'ai.preview.mode.local': '僅本機',
   'ai.gate.localBlocked': '已封鎖：僅本機模式只允許自管端點。',
+  'settings.diagnostics.title': '診斷',
+  'settings.diagnostics.desc':
+    '把 App 版本、平台、外觀設定、儲存空間大小與最近的 App log 打包成純文字報告，方便回報問題。',
+  'settings.diagnostics.export': '匯出診斷資料',
+  'settings.diagnostics.note': '不含個資：沒有變數值、token、請求/回應內容或 LLM key。',
 });
 
 function normalizeLocale(value: unknown): string {
