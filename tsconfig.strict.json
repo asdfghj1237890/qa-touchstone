@@ -42,6 +42,8 @@
     "src/qa/state/RequestContext.tsx",
 
     "src/qa/BolaPanel.tsx",
-    "src/qa/RateLimitPanel.tsx"
+    "src/qa/RateLimitPanel.tsx",
+
+    "src/qa/Security.tsx"
   ]
 }
