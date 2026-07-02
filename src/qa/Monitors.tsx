@@ -33,9 +33,10 @@ const REGIONS = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
+const DEFAULT_CADENCE_MS = 15 * MINUTE_MS;
 const FIXED_CADENCE_MS: Record<string, number> = {
   'Every 5 minutes': 5 * MINUTE_MS,
-  'Every 15 minutes': 15 * MINUTE_MS,
+  'Every 15 minutes': DEFAULT_CADENCE_MS,
   'Every hour': HOUR_MS,
   'Every 6 hours': 6 * HOUR_MS,
 };
@@ -71,7 +72,7 @@ export function nextMonitorDueAt(cadence: string | undefined, from = Date.now())
     return d.getTime();
   }
   if (cadence === 'Weekly') return from + 7 * DAY_MS;
-  return from + (FIXED_CADENCE_MS[cadence as string] || 15 * MINUTE_MS);
+  return from + (FIXED_CADENCE_MS[cadence as string] || DEFAULT_CADENCE_MS);
 }
 
 export function normalizeMonitor(mon: Partial<Monitor>, now = Date.now()): Monitor {
