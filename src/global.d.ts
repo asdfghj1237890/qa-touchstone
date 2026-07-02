@@ -90,3 +90,12 @@ declare global {
     LLM_PROVIDERS?: any;
   }
 }
+
+// ── 追加宣告（append-only）：desktop E2E 的 save-dialog seam ─────────────────
+// src/api/index.ts 的 saveFileDialog 讀取；只有 e2e harness（e2e/specs/）會
+// 設定，一般執行時不存在。詳見 e2e/README.md 與 docs/superpowers/specs/。
+declare global {
+  interface Window {
+    __QA_E2E_SAVE_DIR__?: string;
+  }
+}
