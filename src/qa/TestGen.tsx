@@ -114,7 +114,8 @@ function inferStatus(text: string): number {
   const m =
     text.match(/status (?:code )?(?:should be |is |= ?)?(\d{3})/i) ||
     text.match(/\b(2\d\d|4\d\d|5\d\d)\b/);
-  if (m) return +m[1];
+  const code = m && m[1];
+  if (code) return +code;
   const t = text.toLowerCase();
   if (/unauthor|expired token|invalid_token/.test(t)) return 401;
   if (/forbidden/.test(t)) return 403;
@@ -130,7 +131,8 @@ function inferMethodPath(steps: string[], title: string): { method: string; path
   const joined = steps.join(' ') + ' ' + title;
   const mm = joined.match(METHODS_RE);
   const pm = joined.match(/\s(\/[\w/{}\-?=&.]+)/);
-  let method: string | null = mm ? mm[1].toUpperCase() : null;
+  const mg = mm && mm[1];
+  let method: string | null = mg ? mg.toUpperCase() : null;
   if (!method) {
     const t = (title + ' ' + joined).toLowerCase();
     if (/creat|add |regist|issue|submit|sign[ -]?up|upload/.test(t)) method = 'POST';
@@ -138,7 +140,7 @@ function inferMethodPath(steps: string[], title: string): { method: string; path
     else if (/updat|edit|modif|chang|patch|renam/.test(t)) method = 'PATCH';
     else method = 'GET';
   }
-  const path = pm ? pm[1] : '/';
+  const path = pm?.[1] ?? '/';
   return { method, path };
 }
 
@@ -151,7 +153,7 @@ function parseBDD(src: string): TestCase[] {
     const sc = line.match(/^Scenario(?: Outline)?:\s*(.+)$/i);
     if (sc) {
       if (cur) cases.push(cur);
-      cur = { title: sc[1].trim(), steps: [] };
+      cur = { title: sc[1]?.trim() ?? '', steps: [] };
       continue;
     }
     if (cur && /^(Given|When|Then|And|But)\b/i.test(line)) cur.steps.push(line);
@@ -250,7 +252,7 @@ function splitReqWhenThen(s: string): string[] {
   const m = s.match(
     /^(.*?)\bwhen\b\s+(.+?)[,;]?\s*(?:then\s+)?(should|must|will|returns?|receives?|reject|cannot)\b(.*)$/i
   );
-  if (m) return ['When ' + m[2].trim(), 'Then it ' + (m[3] + m[4]).trim()];
+  if (m) return ['When ' + (m[2] ?? '').trim(), 'Then it ' + ((m[3] ?? '') + (m[4] ?? '')).trim()];
   return ['Then ' + s.trim()];
 }
 
@@ -298,7 +300,7 @@ const TYPE_CHIP: Record<CaseType, { labelKey: string; color: string }> = {
 function extractCases(raw: unknown): TestCase[] | null {
   let txt = String(raw).trim();
   const fence = txt.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) txt = fence[1].trim();
+  if (fence) txt = fence[1]?.trim() ?? txt;
   const a = txt.indexOf('[');
   if (a < 0) return null;
   txt = txt.slice(a);
