@@ -499,7 +499,8 @@ function SecurityPage({
     const out: Array<Finding & { endpoint: string; method: string; identity: string }> = [];
     for (const ep of endpoints) {
       for (const id of identities) {
-        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        const row = results[ep.reqId];
+        const cell = row && row[id.id];
         for (const f of (cell && cell.findings) || []) {
           out.push({
             ...f,
@@ -537,9 +538,11 @@ function SecurityPage({
     const out: ReviewSource[] = [];
     for (const ep of endpoints) {
       for (const id of identities) {
-        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+        const row = results[ep.reqId];
+        const cell = row && row[id.id];
         if (!cell || !cell.response) continue;
-        const expectation = state.expect[ep.reqId] && state.expect[ep.reqId][id.id];
+        const expectRow = state.expect[ep.reqId];
+        const expectation = expectRow && expectRow[id.id];
         out.push({
           engine: 'matrix',
           method: ep.method,
@@ -609,8 +612,9 @@ function SecurityPage({
   );
 
   const cycleCell = (reqId: string, idId: string) => {
-    const cur = state.expect[reqId][idId];
-    const next = EXPECTS[(EXPECTS.indexOf(cur) + 1) % EXPECTS.length];
+    const cur = state.expect[reqId]?.[idId];
+    const idx = cur ? EXPECTS.indexOf(cur) : -1;
+    const next = EXPECTS[(idx + 1) % EXPECTS.length] ?? 'allow';
     setExpect((e) => ({ ...e, [reqId]: { ...(e[reqId] || state.expect[reqId]), [idId]: next } }));
   };
   const bulkCol = (idId: string, val: Expectation) => setExpect(setColumn(state, idId, val).expect);
@@ -719,7 +723,8 @@ function SecurityPage({
   };
 
   const editing = identities.find((i) => i.id === editId);
-  const drawerCell = (drawer && results[drawer.reqId] && results[drawer.reqId][drawer.idId]) as
+  const drawerRow = drawer && results[drawer.reqId];
+  const drawerCell = (drawer && drawerRow && drawerRow[drawer.idId]) as
     (MatrixCell & { request?: CellRequestMeta | null }) | null | undefined | false;
 
   const scanWithAI = async () => {
@@ -907,6 +912,7 @@ function SecurityPage({
       for (let i = 0; i < tests.length; i++) {
         if (signal && signal.aborted) break;
         const test = tests[i];
+        if (!test) continue;
         const identity = identities.find((x) => x.id === test.identityId) || identities[0] || null;
         let response: any = null;
         let findings: Finding[] = [];
@@ -1444,8 +1450,9 @@ function SecurityPage({
                         </span>
                       </th>
                       {identities.map((id) => {
-                        const exp = state.expect[ep.reqId][id.id];
-                        const cell = results[ep.reqId] && results[ep.reqId][id.id];
+                        const exp = state.expect[ep.reqId]?.[id.id];
+                        const row = results[ep.reqId];
+                        const cell = row && row[id.id];
                         const v = cell && cell.verdict;
                         return (
                           <td
