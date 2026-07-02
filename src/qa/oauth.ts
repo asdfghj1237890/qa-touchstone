@@ -67,9 +67,7 @@ function sub(value: unknown, map?: Record<string, string>): string {
   const text = String(value == null ? '' : value);
   if (typeof window !== 'undefined' && window.qaSubstitute)
     return window.qaSubstitute(text, map || {});
-  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) =>
-    map && name in map ? (map[name] ?? m) : m
-  );
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, name) => map?.[name] ?? m);
 }
 
 function required(value: unknown, label: string): void {
