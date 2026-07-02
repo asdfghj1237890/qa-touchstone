@@ -57,6 +57,12 @@ jobs:
       - name: Run frontend tests (vitest)
         run: npm test
 
+      # Coverage gate: fails if coverage drops below the ratchet floor set in
+      # vite.config.mjs (test.coverage.thresholds). Runs the suite a second time
+      # with v8 instrumentation; keep the plain run above as the clean signal.
+      - name: Coverage gate
+        run: npm run test:coverage:ci
+
       - name: Audit production dependencies
         run: npm audit --audit-level=high
 

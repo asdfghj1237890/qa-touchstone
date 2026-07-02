@@ -25,6 +25,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text --coverage.reportOnFailure",
+    "test:coverage:ci": "vitest run --coverage --coverage.reporter=text --coverage.reporter=text-summary",
     "test:html": "vitest run --reporter=html",
     "test:html-view": "(npm run test:html || true) && node scripts/generate-test-index.js && npx vite preview --outDir src/__tests__/test-report --open",
     "test:coverage-view": "(npm run test:coverage || true) && npx vite preview --outDir src/__tests__/test-report/coverage --open",

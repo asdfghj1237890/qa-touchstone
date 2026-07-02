@@ -67,7 +67,17 @@ export default defineConfig({
       reportsDirectory: './src/__tests__/test-report/coverage',
       reportOnFailure: true,
       include: ['src/**/*.{js,jsx,ts,tsx}'],
-      exclude: ['src/__tests__/**', 'src/setupTests.js']
+      exclude: ['src/__tests__/**', 'src/setupTests.js'],
+      // Ratchet floor: set below the current measured coverage
+      // (≈S68 / B58 / F56 / L71 as of 2026-07-02) so CI fails on a *regression*
+      // below this line without flaking on minor churn. Raise these as coverage
+      // improves; never lower them to make a red build pass.
+      thresholds: {
+        statements: 62,
+        branches: 52,
+        functions: 50,
+        lines: 65
+      }
     },
     // Handle CSS modules properly
     css: true,
