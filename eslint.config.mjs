@@ -71,6 +71,13 @@ export default [
       globals: { ...globals.node },
     },
   },
+  {
+    // E2E harness：mocha 全域 + Node；browser/$/expect 由 @wdio/globals 匯入。
+    files: ['e2e/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.mocha },
+    },
+  },
   // 放在最後：ts/tsx 用 @typescript-eslint 版 unused-vars，關掉 core 版
   // （否則上方 js block 的 core 規則會打在型別宣告上）。
   {

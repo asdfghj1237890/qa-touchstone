@@ -1,3 +1,4 @@
+/* global document, window -- browser.execute 回呼被序列化後在 app 的 WebView 內執行，不在 Node */
 // e2e/specs/smoke.e2e.mjs
 // 唯一冒煙路徑：launch → import demo collection → send → security suite →
 // export 報告並斷言檔案真的落地（v0.21.1「打包版匯出全滅」bug class 的回歸
@@ -35,7 +36,7 @@ describe('desktop smoke', () => {
     await $('[data-testid="import-open"]').waitForClickable();
     await $('[data-testid="import-open"]').click();
     await $('[data-testid="import-text"]').waitForExist();
-    // React 受控 textarea：setValue 會逐鍵打 14KB、又慢又脆；改用 native
+    // React 受控 textarea：setValue 會逐鍵慢速打完整份 collection、又慢又脆；
     // value setter + input 事件（WebDriver execute 在自動化 session 執行，
     // 不受頁面 CSP script-src 'self' 限制）。
     await browser.execute((text) => {

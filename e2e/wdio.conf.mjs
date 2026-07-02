@@ -1,10 +1,11 @@
+/* global browser */
 // e2e/wdio.conf.mjs
 // Desktop E2E smoke harness: WebdriverIO ⇄ tauri-driver ⇄ 原生 WebDriver
 // （Linux: WebKitWebDriver / Windows: msedgedriver）⇄ release binary。
 // 完整驗證需要 built app + WebDriver + display server —— 亦即 CI 的
 // e2e-smoke job；本機能驗的只有「設定可解析」。詳見 README.md。
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +53,15 @@ export const config = {
   },
 
   onPrepare() {
+    // Preflight：binary 沒 build 就直接把原因講清楚，別讓錯誤埋在
+    // WebDriver 連線失敗底下（這個 harness 首跑就在 CI，除錯預算珍貴）。
+    if (!existsSync(appBinary)) {
+      console.error(
+        `[e2e] app binary not found: ${appBinary}\n` +
+          '[e2e] build it first: npx tauri build --no-bundle (repo root)'
+      );
+      process.exit(1);
+    }
     mkdirSync(logsDir, { recursive: true });
     const env = { ...process.env };
     if (!isWindows) {
