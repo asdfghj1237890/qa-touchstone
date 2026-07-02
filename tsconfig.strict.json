@@ -39,6 +39,9 @@
 
     "src/qa/i18n.tsx",
     "src/qa/components.tsx",
-    "src/qa/state/RequestContext.tsx"
+    "src/qa/state/RequestContext.tsx",
+
+    "src/qa/BolaPanel.tsx",
+    "src/qa/RateLimitPanel.tsx"
   ]
 }
