@@ -73,6 +73,7 @@ import {
 import { buildEvidenceMap, embedEvidence } from './evidence';
 import { buildCoverageModel } from './coverage';
 import { downloadFile } from './download';
+import { isDefined } from './isDefined';
 import { buildReq } from './buildReq';
 import type { QaRequest } from './buildReq';
 import type { QaCookie, QaEnv } from './state/WorkspaceContext';
@@ -312,7 +313,7 @@ function buildConformanceTests(
         identityId: identity ? identity.id : undefined,
       };
     })
-    .filter(Boolean) as ConformanceTest[];
+    .filter(isDefined);
 }
 
 function scalarBodySeeds(req: QaRequest, limit: number): FuzzSeed[] {
@@ -390,7 +391,7 @@ function buildFuzzPlans(endpoints: SecEndpoint[]): FuzzSuitePlan[] {
         seeds,
       };
     })
-    .filter(Boolean) as FuzzSuitePlan[];
+    .filter(isDefined);
 }
 
 export interface SecurityPageProps {

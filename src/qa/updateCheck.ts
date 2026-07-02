@@ -1,5 +1,6 @@
 // ── QA Touchstone — GitHub version update checks ────────────────────────────
 // Browser-safe: uses public GitHub release/tag endpoints and fails silently.
+import { isDefined } from './isDefined';
 
 export interface GitHubLatestVersion {
   version: string;
@@ -77,7 +78,7 @@ function releaseAssets(value: unknown): GitHubUpdateAsset[] {
         contentType: String((asset as any).content_type || ''),
       };
     })
-    .filter(Boolean) as GitHubUpdateAsset[];
+    .filter(isDefined);
 }
 
 export function detectUpdatePlatform(platform = ''): UpdatePlatform {
@@ -170,7 +171,7 @@ export async function fetchGitHubLatestVersion(
       const version = normalizeVersion(rawTag);
       return version ? { rawTag, version } : null;
     })
-    .filter(Boolean) as Array<{ rawTag: string; version: string }>;
+    .filter(isDefined);
   candidates.sort((a, b) => compareVersions(b.version, a.version));
   const latest = candidates[0];
   return latest

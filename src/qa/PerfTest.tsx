@@ -8,6 +8,7 @@ import { makeState, feed, snapshot } from './k6parse';
 import type { K6Metrics, K6ParseState, K6Slo, K6Snapshot } from './k6parse';
 import { useI18n } from './useI18n';
 import { downloadFile } from './download';
+import { isDefined } from './isDefined';
 import { loadJSON, removeStorageKey, saveJSON } from './storage';
 import type { QaEnv } from './state/WorkspaceContext';
 
@@ -1227,7 +1228,7 @@ function PerfTest({ env, vars, onRunningChange }: PerfTestProps) {
                                     .slice()
                                     .sort((a, b) => a - b)
                                     .map((i) => runs[i])
-                                    .filter((r): r is PerfRun => r != null),
+                                    .filter(isDefined),
                                   f
                                 );
                                 setHMenu(false);

@@ -9,6 +9,7 @@ import { Icon, MethodBadge } from './components';
 import { useI18n } from './useI18n';
 import { qaRunSavedRequest } from './sendRequest';
 import type { QaRunCookie } from './sendRequest';
+import { isDefined } from './isDefined';
 import {
   runBurst,
   detectThrottleSignal,
@@ -204,7 +205,7 @@ function RateLimitPanel({
 
   const summary = useMemo(() => summarizeRateLimit(results), [results]);
   const allFindings = useMemo(
-    () => tests.map((t0) => results[t0.id]?.finding).filter(Boolean) as Finding[],
+    () => tests.map((t0) => results[t0.id]?.finding).filter(isDefined),
     [results, tests]
   );
 
