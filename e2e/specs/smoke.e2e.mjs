@@ -23,8 +23,7 @@ const COLLECTION_NAME = 'OpenNet REST Countries — QA Touchstone Collection';
 // seam 只做字串串接，Rust 端兩種分隔符都接受。
 const saveDir = mkdtempSync(join(tmpdir(), 'qa-e2e-exports-')).replace(/\\/g, '/');
 
-const exportedReports = () =>
-  readdirSync(saveDir).filter((f) => /^qa-security-.*\.json$/.test(f));
+const exportedReports = () => readdirSync(saveDir).filter((f) => /^qa-security-.*\.json$/.test(f));
 
 describe('desktop smoke', () => {
   it('launches to the app shell', async () => {
