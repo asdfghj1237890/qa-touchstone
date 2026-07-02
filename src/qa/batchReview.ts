@@ -103,13 +103,15 @@ export function parseBatchReview(raw: unknown, kept: ReviewSource[]): BatchRevie
     const responses: ReviewSource[] = [];
     for (const n of idxs) {
       if (!Number.isInteger(n) || n < 0 || n >= kept.length || seen.has(n)) continue;
+      const source = kept[n];
+      if (!source) continue;
       seen.add(n);
-      responses.push(kept[n]);
+      responses.push(source);
     }
     if (!responses.length) continue;
     const priority = PRIORITIES.includes(it.priority) ? it.priority : 'p3';
     items.push({
-      title: String(it.title || responses[0].path || 'Response issue'),
+      title: String(it.title || responses[0]?.path || 'Response issue'),
       priority,
       rationale: String(it.rationale || ''),
       likelyBug: it.likelyBug === true,

@@ -78,12 +78,14 @@ export function makeState(dtMs: number, nPoints: number): K6ParseState {
 // 小 N 下與 floor(n*q) 不同（例如 10 筆的 p80 = 82，不是 90）。
 function quantile(sorted: number[], q: number): number {
   if (!sorted.length) return 0;
-  if (sorted.length === 1) return sorted[0];
+  if (sorted.length === 1) return sorted[0] ?? 0;
   const pos = q * (sorted.length - 1);
   const lo = Math.floor(pos);
   const hi = Math.min(sorted.length - 1, lo + 1);
   const frac = pos - lo;
-  return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+  const loVal = sorted[lo] ?? 0;
+  const hiVal = sorted[hi] ?? 0;
+  return loVal + frac * (hiVal - loVal);
 }
 
 export function feed(state: K6ParseState, line: string): void {
@@ -110,7 +112,7 @@ export function feed(state: K6ParseState, line: string): void {
   if (state.runStartMs == null) state.runStartMs = startMs;
   const rawIdx = Math.floor((startMs - state.runStartMs) / state.dtMs);
   const binIdx = rawIdx < 0 ? 0 : rawIdx;
-  if (binIdx < state.nPoints) state.bins[binIdx].lat.push(value);
+  if (binIdx < state.nPoints) state.bins[binIdx]?.lat.push(value);
   state.allLat.push(value);
   const status = parseInt((data.tags && data.tags.status) || '0', 10);
   if (status >= 200 && status < 300) state.ok += 1;
