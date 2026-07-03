@@ -6,6 +6,7 @@ pub mod fsops;
 pub mod postman;
 pub mod process;
 pub mod secrets;
+pub mod security;
 pub mod store;
 pub mod system;
 pub mod window;

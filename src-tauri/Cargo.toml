@@ -36,3 +36,6 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 [features]
 default = []
+
+[dev-dependencies]
+wiremock = "0.6"
