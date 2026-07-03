@@ -1229,30 +1229,35 @@ function SecurityPage({
       <div className="qa-sec-tabs">
         <button
           className={`qa-seg ${mode === 'matrix' ? 'qa-seg--on' : ''}`}
+          data-testid="sec-mode-matrix"
           onClick={() => setMode('matrix')}
         >
           {t('security.mode.matrix')}
         </button>
         <button
           className={`qa-seg ${mode === 'bola' ? 'qa-seg--on' : ''}`}
+          data-testid="sec-mode-bola"
           onClick={() => setMode('bola')}
         >
           {t('security.mode.bola')}
         </button>
         <button
           className={`qa-seg ${mode === 'ratelimit' ? 'qa-seg--on' : ''}`}
+          data-testid="sec-mode-ratelimit"
           onClick={() => setMode('ratelimit')}
         >
           {t('security.mode.ratelimit')}
         </button>
         <button
           className={`qa-seg ${mode === 'coverage' ? 'qa-seg--on' : ''}`}
+          data-testid="sec-mode-coverage"
           onClick={() => setMode('coverage')}
         >
           {t('security.mode.coverage')}
         </button>
         <button
           className={`qa-seg ${mode === 'findings' ? 'qa-seg--on' : ''}`}
+          data-testid="sec-mode-findings"
           onClick={() => setMode('findings')}
         >
           {t('findings.tab')}
