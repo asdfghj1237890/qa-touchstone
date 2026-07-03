@@ -58,9 +58,9 @@ The current public-facing scope is API testing only:
 
 ## Capabilities
 
-- **API client**: build HTTP and GraphQL requests (with a schema explorer),
-  switch environments, inspect responses, view call history, and export
-  responses and history as HTML, JSON, or CSV reports.
+- **API client**: build HTTP and GraphQL requests, switch environments,
+  inspect responses, view call history, and export responses and history as
+  HTML, JSON, or CSV reports.
 - **Import/export**: import Postman v2.1 collections and OpenAPI/Swagger JSON;
   export collections back to Postman JSON.
 - **Authentication**: No Auth, Bearer Token, OAuth 2.0 (authorization-code,
@@ -82,9 +82,11 @@ The current public-facing scope is API testing only:
   independent structural oracle). Rate-limit / abuse testing fires bounded
   request bursts behind a confirm gate and grades protection none / weak /
   strong by how many requests slip through before the first 429.
-  A single **Run full security suite** executes all three engines as one recorded
-  run — rate-limit last, so its bursts don't skew the matrix and BOLA results.
-  Three further engines — input **fuzzing** (5xx, stack-trace-leak, and
+  A single **Run full security suite** executes all six engines as one
+  recorded run. Rate-limit goes last on purpose: its whole method is flooding
+  the API with requests, and letting the noisiest tester go first would skew
+  what the matrix and BOLA engines measure.
+  Three of the six — input **fuzzing** (5xx, stack-trace-leak, and
   reflected-payload detection), an auto-derived **BFLA** (OWASP API5) scan, and
   JSON-Schema/OpenAPI **conformance** validation — are pure, fully unit-tested
   modules with SARIF rule metadata in the report layer. Fuzzing and BFLA run on
@@ -143,7 +145,7 @@ The current public-facing scope is API testing only:
 - **Realtime testing**: test WebSocket and Server-Sent Events streams.
 - **Bilingual, themeable UI**: complete English and Traditional Chinese (繁體中文)
   interface, switchable in Settings, with a themeable dark UI (multiple accent
-  palettes and density options).
+  palettes).
 
 ## Architecture
 
@@ -293,10 +295,11 @@ light.
 Actively maintained. The frontend is fully strict TypeScript; every push runs
 ESLint, `tsc --noEmit`, the Vitest suite, `npm audit`, and Rust unit tests, and
 the release pipeline refuses to build installers unless those pass. See
-[CHANGELOG.md](CHANGELOG.md) for the per-release history (recent work:
-OS-keychain credential storage, hardened RBAC/BOLA/rate-limit oracles, three
-new security engines — conformance, fuzzing, BFLA — richer SARIF, and the
-React 19 upgrade).
+[CHANGELOG.md](CHANGELOG.md) for the per-release history (recent work: the
+security matrix engine now running on the Rust core over IPC, OS-keychain
+credential storage, hardened RBAC/BOLA/rate-limit oracles, three new security
+engines — conformance, fuzzing, BFLA — richer SARIF, and the React 19
+upgrade).
 
 ## Requirements
 
@@ -535,7 +538,7 @@ jobs:
       contents: read
       security-events: write
     env:
-      QA_TOUCHSTONE_VERSION: v0.22.1
+      QA_TOUCHSTONE_VERSION: v0.22.7
       API_TOKEN: ${{ secrets.API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -647,7 +650,6 @@ checksum is missing or mismatched.
 Runtime configuration is stored locally. Common generated files include:
 
 - `config.json` for application settings
-- `postman_collections_cache.json` for cached collection metadata
 - `user_data.json` — disk mirror of critical workspace data (security findings
   lifecycle, baselines, perf history, monitors). The app reads/writes these via
   a single versioned storage layer (`src/qa/storage.ts`) that survives a cleared
