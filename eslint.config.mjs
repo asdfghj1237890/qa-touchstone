@@ -16,6 +16,11 @@ export default [
       'src-tauri/gen/**',
       'src/__tests__/test-report/**',
       'public/**',
+      // uitests 產物（Playwright HTML report 內含 vendored JS）；同上，
+      // gitignored 但 eslint 不讀 .gitignore，跑過測試後就會存在於磁碟。
+      'uitests/test-results/**',
+      'uitests/playwright-report/**',
+      'uitests/artifacts/**',
     ],
   },
   js.configs.recommended,
