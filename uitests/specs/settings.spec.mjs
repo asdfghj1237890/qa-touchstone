@@ -41,6 +41,10 @@ test('privacy mode switches and language round-trips', async ({ page }) => {
   await expect(local).toBeDisabled();
   await expect(page.getByTestId('privacy-mode-redacted')).toHaveCount(0);
   await expect(page.getByTestId('privacy-mode-full')).toHaveCount(0);
+  // Exact-copy asserts (deviation from the class-based convention used in
+  // findings.spec): the lock banner and mode-description elements carry no
+  // distinguishing class/testid today, so pinned en-US copy is the only
+  // stable hook. Accepted trade-off: a copy tweak breaks this test loudly.
   await expect(
     page.getByText('External AI disabled by CI / organization policy.')
   ).toBeVisible();
@@ -64,11 +68,13 @@ test('privacy mode switches and language round-trips', async ({ page }) => {
   await lang.scrollIntoViewIfNeeded();
   await lang.locator('.qa-dd-btn').click();
   await lang.getByRole('option', { name: '繁體中文' }).click();
+  await expect(lang.locator('.qa-dd-btn')).toContainText('繁體中文');
   // Live translation: the settings nav aria-label flips to Chinese.
   await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-label', '設定');
 
   await lang.locator('.qa-dd-btn').click();
   await lang.getByRole('option', { name: 'English (US)' }).click();
+  await expect(lang.locator('.qa-dd-btn')).toContainText('English (US)');
   await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-label', 'Settings');
 
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
