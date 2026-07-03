@@ -200,8 +200,8 @@ the pinned `baseline` (the state you approved) and `lastRun` (the newest run).
 Comparing fingerprints yields the new / carried / resolved badges. Each
 snapshot also stores a hash of _what was tested_ (`scopeHash`); if this run
 covered a different set of endpoints or identities than the baseline, the
-report says "scope changed" instead of pretending the missing findings were
-fixed.
+report flags "scope changed" right next to the resolved badges, so a shrunk
+test surface is never mistaken for a real fix.
 
 **Human judgment is never lost.** Triage decisions — suppress, severity
 override, owner, notes — live in their own table keyed by fingerprint, outside
@@ -211,12 +211,13 @@ which a re-scan can regenerate, are simply reset.
 
 **Two engines, one truth.** The matrix engine exists twice — in the Rust core
 (`src-tauri/core`, the source of truth used by desktop IPC and the headless
-CLI) and in TypeScript (the browser fallback). Two mechanisms stop them from
-drifting apart: the Rust side rejects any config JSON containing a field it
-doesn't recognize, and a CI _parity gate_ runs the TypeScript engine with a
-frozen clock and fixed random numbers to produce committed "answer sheets"
-(`scripts/gen-fixtures.mjs` → `src-tauri/core/tests/fixtures/`) that the Rust
-tests must reproduce exactly — CI fails if the answers go stale. Secrets enter
+CLI) and in TypeScript (the fallback: it runs the scan in the browser, and
+still covers a few desktop pieces the core doesn't handle yet). Two mechanisms
+stop them from drifting apart: the Rust side rejects any config JSON
+containing a field it doesn't recognize, and a CI _parity gate_ runs the
+TypeScript engine with a frozen clock and fixed random numbers to produce
+committed "answer sheets" that the Rust tests must reproduce exactly — CI
+fails if the answers go stale. Secrets enter
 configs only as env-var references (a missing variable is a hard error, not an
 empty string), and everything the core returns over IPC — findings _and_ error
 messages — passes one shared redaction step, because even a connection-refused
@@ -274,10 +275,11 @@ gatekeeper (CI) turns red and blocks the code change.
 
 **Demo story, day 3 — no fooling yourself.** To turn the light green, a
 teammate simply removes "view all orders" from the checklist. On the next scan
-the orders finding is gone, of course — but the app refuses to badge it
-**resolved**: this run's scope code no longer matches the baseline's, so the
-report is flagged "**scope changed**", making it clear the problem vanished
-because it was not checked, not because it was fixed. Finally you export the
+the orders finding is gone, and it even shows up badged **resolved** — its
+fingerprint really is absent now. But the app doesn't let that pass as a win:
+this run's scope code no longer matches the baseline's, so the report is
+flagged "**scope changed**" right alongside, making it clear the problem
+vanished because it was not checked, not because it was fixed. Finally you export the
 results as a standard security report (SARIF, which GitHub can display on its
 security page): the report layer merges the snapshot with the notebook of
 human decisions and prints evidence at the masking level you chose. That is
