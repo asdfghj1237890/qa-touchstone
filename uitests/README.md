@@ -61,7 +61,9 @@ nav usable, content width) at 1920×1080 / 1366×768 / 1280×720 / 900×600
   (a shared `NAV_KEYS` constant extraction is a welcome follow-up).
 - Specs share a common prologue (`installMockNet` + `collectPageErrors` +
   `gotoApp`) and trailing gates; promoting these to a Playwright
-  `test.extend` fixture is deliberately deferred until the suite stops
-  growing (see the Task 8 review verdict in the plan).
+  `test.extend` fixture is a deliberate deferral — the fixture's shape
+  (what it must expose: the `blocked` list, `pageErrors`, seed hooks) is
+  best designed against all call sites at once, after the suite stops
+  growing.
 - `specs/findings.spec.mjs` seeds a baseline snapshot to render rows;
   see the WHY comment in `helpers/session.mjs` before changing the seed.
