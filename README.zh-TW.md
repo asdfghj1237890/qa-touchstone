@@ -35,6 +35,15 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
 
 <sub>重生指令：開著 dev server 時執行 `node scripts/capture-screenshots.mjs`（用系統 Chrome 透過 DevTools Protocol 驅動；介面截圖預設英文，要中文介面設 `LOCALE=zh-TW`）。</sub>
 
+## 文件
+
+- [Getting Started](docs/getting-started.md) — 從 clone 專案到發出第一個 request、跑完第一次掃描
+- [Capability Matrix](docs/capability-matrix.md) — 桌面版與 headless CLI 各自能跑什麼
+- [Security Workflow](docs/security-workflow.md) — RBAC／BOLA／速率限制的端到端流程
+- [Design System](docs/design-system.md) — 主題、tokens 與 UI 基礎元件
+- [AI 時代 API 測試評估](docs/ai-era-api-testing-assessment.md) — 產品命題
+- [CHANGELOG](CHANGELOG.md) · [架構圖](docs/architecture.svg)
+
 ## 目前範圍
 
 目前公開版聚焦在 API 測試：
@@ -47,7 +56,7 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
 
 ## 功能
 
-- **API client**：建立 HTTP 與 GraphQL requests（內含 schema explorer）、切換
+- **API client**：建立 HTTP 與 GraphQL requests、切換
   environments、檢視 responses、查看 call history，並把 responses 與 history
   匯出成 HTML、JSON 或 CSV 報告。
 - **Import/export**：匯入 Postman v2.1 collections 與 OpenAPI/Swagger JSON；
@@ -69,9 +78,10 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   control 改用獨立的結構 oracle 評分）。速率限制 / 濫用測試在確認關卡後送出有上限的
   request bursts，並依「第一個 429 出現前放行了幾個 request」把防護分級為
   none / weak / strong。
-  單一 **執行完整安全掃描（Run full security suite）** 會把三個引擎當成一次已記錄的
-  執行依序跑完——速率限制放最後，避免其 bursts 影響矩陣與 BOLA 的結果。
-  另有三個新引擎——輸入 **fuzzing**（偵測 5xx、stack-trace 洩漏、payload 反射）、
+  單一 **執行完整安全掃描（Run full security suite）** 會把六個引擎當成一次已記錄的
+  執行依序跑完。速率限制刻意排最後一個上場：它的測法就是對 API 狂發請求，
+  讓最吵的測試先跑，會弄髒矩陣與 BOLA 引擎的量測結果。
+  其中三個引擎——輸入 **fuzzing**（偵測 5xx、stack-trace 洩漏、payload 反射）、
   自動推導的 **BFLA**（OWASP API5）掃描，與 JSON-Schema/OpenAPI **conformance**
   驗證——以純函式、完整單元測試的模組形式出貨，SARIF 規則中繼資料已備妥於報告層。
   fuzzing 與 BFLA 已同時接入桌面版安全套件與 headless `scan` 指令；conformance
@@ -117,7 +127,7 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   snippets（cURL、Python、JavaScript、HTTPie）。
 - **Realtime testing**：測試 WebSocket 與 Server-Sent Events streams。
 - **雙語、可換主題的介面（Bilingual, themeable UI）**：完整的英文與繁體中文
-  介面，可在設定切換；深色 UI 提供多組 accent 配色與密度選項。
+  介面，可在設定切換；深色 UI 提供多組 accent 配色。
 
 ## 架構
 
@@ -239,9 +249,10 @@ app 還能告訴你「同一個問題，只是長相變了」。email 那張又�
 持續維護中。前端已全面 strict TypeScript；每次 push 都會跑 ESLint、
 `tsc --noEmit`、Vitest 測試、`npm audit` 與 Rust unit tests，且 release
 流程在這些未通過前不會 build 安裝檔。逐版歷史見
-[CHANGELOG.md](CHANGELOG.md)（近期工作：OS keychain 憑證儲存、強化
-RBAC/BOLA/rate-limit oracles、三個新安全引擎——conformance、fuzzing、
-BFLA——更完整的 SARIF，以及 React 19 升級）。
+[CHANGELOG.md](CHANGELOG.md)（近期工作：安全矩陣引擎改由 Rust core 透過
+IPC 執行、OS keychain 憑證儲存、強化 RBAC/BOLA/rate-limit oracles、三個新
+安全引擎——conformance、fuzzing、BFLA——更完整的 SARIF，以及 React 19
+升級）。
 
 ## 需求
 
@@ -473,7 +484,7 @@ jobs:
       contents: read
       security-events: write
     env:
-      QA_TOUCHSTONE_VERSION: v0.22.1
+      QA_TOUCHSTONE_VERSION: v0.22.7
       API_TOKEN: ${{ secrets.API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -584,7 +595,6 @@ npm run setup:k6:release
 Runtime configuration 儲存在本機。常見產生檔案包含：
 
 - `config.json`：application settings
-- `postman_collections_cache.json`：cached collection metadata
 - `user_data.json`：關鍵工作區資料的磁碟鏡像（安全 findings 生命週期、
   baseline、效能歷史、monitors）。所有讀寫經過單一版本化儲存層
   （`src/qa/storage.ts`），webview 快取被清掉也能還原，舊資料形狀會在讀取時
