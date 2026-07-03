@@ -133,6 +133,11 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
   （`keyring`），以及由原生儲存對話框餵路徑的文字檔儲存指令。暴露給 renderer
   的指令面刻意維持最小（無 shell、無任意網路存取）；停用 TLS 驗證需要 renderer
   明確確認，且會留下稽核紀錄。
+- **Security engine（單一事實來源）**：RBAC 矩陣掃描在共用的 Rust core
+  （`src-tauri/core`）中透過 IPC 執行（`run_security_matrix`）——與 headless CLI
+  同一套引擎；TypeScript 引擎（`src/qa/*.ts`）則作為經 parity gate 把關的瀏覽器
+  fallback。其餘引擎（BOLA、rate-limit、BFLA、fuzz）目前在桌面版仍以 TypeScript
+  執行。
 - **Storage**：單一版本化儲存層（`src/qa/storage.ts`，讀取時自動 migrate 舊資料
   形狀）透過 Rust 後端把關鍵
   工作區資料鏡像到磁碟；cookie jar 套用完整 Public Suffix List（`src/qa/psl.ts`）。

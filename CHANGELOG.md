@@ -6,6 +6,11 @@ All notable changes to QA Touchstone are documented here. Versions follow
 ## [Unreleased]
 
 ### Changed
+- **Desktop RBAC-matrix security scan now runs on the Rust core over Tauri IPC**
+  (`run_security_matrix` → `qa_touchstone_core`), with the TypeScript engine kept
+  as a parity-gated browser fallback — the desktop app and the headless CLI now
+  share one Rust analysis path for the matrix engine (first slice of making the
+  Rust core the single source of truth for security analysis).
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
 
 ## [0.22.7] — 2026-06-29

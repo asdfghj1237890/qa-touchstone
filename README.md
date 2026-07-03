@@ -161,6 +161,11 @@ The current public-facing scope is API testing only:
   surface is intentionally minimal (no shell, no arbitrary network access), and
   disabling TLS verification requires an explicit renderer confirmation and is
   audit-logged.
+- **Security engine (source of truth)**: the RBAC-matrix scan runs in the shared
+  Rust core (`src-tauri/core`) over IPC (`run_security_matrix`) — the same engine
+  the headless CLI uses — with the TypeScript engine (`src/qa/*.ts`) as a
+  parity-gated browser fallback. Other engines (BOLA, rate-limit, BFLA, fuzz) still
+  run in TypeScript on the desktop for now.
 - **Storage**: a single versioned layer (`src/qa/storage.ts`) with on-read
   migrations mirrors critical workspace data to disk via the Rust backend; the
   cookie jar enforces the full Public Suffix List (`src/qa/psl.ts`).
