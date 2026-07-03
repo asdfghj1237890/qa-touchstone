@@ -129,6 +129,38 @@ describe('FindingsPanel (resolved rows)', () => {
     expect(screen.getAllByText('GET /old · admin').length).toBeGreaterThan(0);
   });
 
+  it('applies a lifecycle severity override to a resolved row', () => {
+    const snapshots = {
+      fpVersion: 1,
+      lastRun: null,
+      baseline: {
+        scopeHash: 'sh',
+        items: [
+          {
+            fp: 'gone1',
+            effectiveSeverity: 'high',
+            engine: 'matrix',
+            ruleId: 'jwt',
+            path: 'data.token',
+            locationLabel: 'GET /old · admin',
+            count: 1,
+          },
+        ],
+      },
+    };
+    const lifecycle = {
+      fpVersion: 1,
+      records: { gone1: { severityOverride: 'low' } },
+      legacy: null,
+    };
+    wrap(<FindingsPanel union={[]} snapshots={snapshots} lifecycle={lifecycle} />);
+    const row = document.querySelector('tr.qa-find-row');
+    // effective severity is the override, with the original annotated beside it
+    expect(row.querySelector('.qa-sev--low')).toBeTruthy();
+    expect(row.querySelector('.qa-find-orig')).toBeTruthy();
+    expect(row.querySelector('.qa-sev--high')).toBeNull();
+  });
+
   it('does not show a resolved row for a baseline finding still present in the union', () => {
     const fpNow = fingerprint(union[0]).fp;
     const snapshots = {

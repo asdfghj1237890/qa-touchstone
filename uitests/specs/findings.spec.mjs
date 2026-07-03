@@ -52,19 +52,15 @@ test('suppress, override severity, and annotate a seeded finding', async ({ page
   // row (status, then severity override, in DOM order) — target by
   // aria-label rather than a bare `select` locator, which would be ambiguous
   // (strict-mode violation) across both.
-  //
-  // NOT asserted here: the row's severity cell reflecting the override via
-  // `.qa-find-orig`. For 'resolved' (snapshot-reconstructed) rows,
-  // FindingsPanel.buildRows() (src/qa/FindingsPanel.tsx:90-106) sets both
-  // `severity` and `effectiveSeverity` verbatim from the baseline snapshot
-  // item (`bi.effectiveSeverity`) and never calls the `effectiveSeverity()`
-  // helper (src/qa/findings.ts:118) the way the live-union branch does
-  // (line 83) — so a severityOverride in the lifecycle record has no visual
-  // effect on this row type. That's a real product gap (out of scope here:
-  // the only src/ change this spec is allowed is the sec-mode-* testids),
-  // flagged separately rather than asserted against.
   await detail.getByLabel('Severity override').selectOption('low');
   await expect(detail.getByLabel('Severity override')).toHaveValue('low');
+  // The row's severity cell reflects the override immediately — including on
+  // 'resolved' (snapshot-reconstructed) rows: buildRows() applies the
+  // lifecycle record's severityOverride on top of the snapshot severity, so
+  // the effective severity swaps to the override and the original is
+  // annotated via `.qa-find-orig`.
+  await expect(row1.locator('.qa-sev--low')).toBeVisible();
+  await expect(row1.locator('.qa-find-orig')).toBeVisible();
 
   // Owner + note controls accept input (aria-labels from i18n en dict).
   await detail.getByLabel('Owner').fill('qa-team');
@@ -81,6 +77,7 @@ test('suppress, override severity, and annotate a seeded finding', async ({ page
   await page.getByLabel('Show suppressed').check();
   const row1Again = page.locator('.qa-find-row', { hasText: SEED_LOCATION_1 });
   await expect(row1Again.locator('.qa-find-suppressed')).toBeVisible();
+  await expect(row1Again.locator('.qa-find-orig')).toBeVisible(); // severity-override display persists too
 
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });

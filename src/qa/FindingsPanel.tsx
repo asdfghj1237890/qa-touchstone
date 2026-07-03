@@ -87,8 +87,11 @@ function buildRows(
   }
   // Resolved findings live only in the pinned baseline snapshot (absent from the
   // current union). Reconstruct a muted row from the snapshot's stored fields.
+  // The snapshot's severity is frozen at pin time; the lifecycle record's
+  // severityOverride still applies live, same as the union branch above.
   for (const bi of baselineItems || []) {
     if (diff.get(bi.fp) !== 'resolved' || byFp.has(bi.fp)) continue;
+    const rec = (lifecycle.records && lifecycle.records[bi.fp]) || null;
     byFp.set(bi.fp, {
       fp: bi.fp,
       count: bi.count || 1,
@@ -99,9 +102,9 @@ function buildRows(
       endpoint: undefined,
       locationLabel: bi.locationLabel || '',
       severity: bi.effectiveSeverity,
-      effectiveSeverity: bi.effectiveSeverity,
+      effectiveSeverity: effectiveSeverity({ severity: bi.effectiveSeverity }, rec),
       presence: 'resolved',
-      record: (lifecycle.records && lifecycle.records[bi.fp]) || null,
+      record: rec,
     });
   }
   return [...byFp.values()].sort(
