@@ -13,6 +13,24 @@ everyone else?** Everything below is in service of that. The unit of truth is an
 **expectation** — "identity X should be *allowed* / *denied* on endpoint Y" — and
 a finding is raised when the live API disagrees with an expectation.
 
+## Engines: the Rust core is the source of truth
+
+The security analysis lives in the Rust core (`src-tauri/core`). The headless CLI
+calls it directly; the desktop app is migrating to call it over Tauri IPC
+(`run_security_matrix` → `core::security::runner::run_matrix`). The TypeScript
+engine (`src/qa/*.ts`) is the **browser/dev fallback**, used only when the core is
+not reachable (`isCoreAvailable()` is false). TS↔Rust parity is enforced by the
+golden-fixture gate (`scripts/gen-fixtures.mjs`, diff-checked in CI).
+
+Each run records which engine produced it — shown as an `engine: Rust core` /
+`TS fallback` badge on the security page.
+
+**Current scope (Slice 1):** only the RBAC matrix (+ inline response oracles) runs
+over IPC today. On the desktop core path the **findings list is authoritative**;
+the per-cell status grid is populated by the TS engine (browser), and `aws`-auth
+identities are covered only by the TS fallback. The other engines (BOLA,
+rate-limit, BFLA, fuzz) still run as TypeScript on the desktop pending later slices.
+
 ## The seven steps
 
 ### 1. Define environments and identities

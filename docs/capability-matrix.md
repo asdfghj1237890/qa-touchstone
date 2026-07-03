@@ -6,11 +6,15 @@ QA Touchstone ships as **two surfaces over one shared engine core**:
 - **Headless CLI** — `qa-touchstone-ci` (`src-tauri/cli/**`), no Tauri, no OS
   keychain, built for CI runners.
 
-Both call the same pure engine logic. In the desktop app that logic runs as
-TypeScript (`src/qa/*.ts`); in the CLI it runs as the Rust port
-(`src-tauri/core/src/**`). TS↔Rust behaviour parity is enforced by the golden
-fixtures in `src-tauri/core/tests/fixtures` (regenerated and diff-gated in CI —
-see [`scripts/gen-fixtures.mjs`](../scripts/gen-fixtures.mjs) and `.github/workflows/ci.yml`).
+The Rust core (`src-tauri/core/src/**`) is the source of truth for the analysis
+logic. The CLI calls it directly. The desktop is migrating to call it over Tauri
+IPC as well: the **RBAC matrix** engine already runs via the core on desktop
+(`run_security_matrix` → `core::security::runner::run_matrix`), with the
+TypeScript engine (`src/qa/*.ts`) kept as the **browser/dev fallback**; the other
+desktop engines still run as TypeScript pending later slices. TS↔Rust behaviour
+parity is enforced by the golden fixtures in `src-tauri/core/tests/fixtures`
+(regenerated and diff-gated in CI — see
+[`scripts/gen-fixtures.mjs`](../scripts/gen-fixtures.mjs) and `.github/workflows/ci.yml`).
 
 > **Why this file exists:** the two surfaces evolve on separate cadences, so a
 > feature can land on one before the other. This table is the single source of
