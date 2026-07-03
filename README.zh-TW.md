@@ -290,6 +290,16 @@ npm run tauri:dev
 npm test
 ```
 
+還有幾個值得認識的測試指令：
+
+- `npm run test:gui` — 跨引擎 UI 測試（Playwright：WebKit ≈ macOS
+  WKWebView、Chromium ≈ Windows WebView2），對 production bundle 執行，
+  含 4 種解析度的版面矩陣。詳見 `uitests/README.md`。
+- `npm run test:install:mac` — macOS 安裝鏈冒煙測試：建置 DMG、驗證
+  bundle、安裝到暫存目錄、以隔離的 `$HOME` 啟動（隔離 Rust 側的
+  config/data 路徑；WebView 內部儲存由 WebKit 自行管理）並確認 app
+  正常起來（僅限 macOS）。
+
 型別檢查、lint 與格式化：
 
 ```bash

@@ -6,6 +6,12 @@ One WebDriver-driven smoke path through the **packaged** Tauri app:
 > send a request → run the security suite → **export a JSON report and assert
 > the file actually lands on disk**.
 
+> **Sibling layer:** `uitests/` covers UI flows and resolutions in real
+> WebKit + Chromium (macOS/Windows **engine proxies**, no Tauri shell) and
+> runs anywhere in minutes. This harness stays the only layer that proves
+> the packaged app; `uitests/` is the fast cross-engine net. See
+> `uitests/README.md`.
+
 That last assertion is the point: in v0.21.1 every export silently failed in
 the packaged app (the Tauri WebView ignores blob `<a download>`). Unit tests
 mock the bridge, so only a real-app test can guard the full

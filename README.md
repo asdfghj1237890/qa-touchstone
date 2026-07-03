@@ -337,6 +337,16 @@ Run tests:
 npm test
 ```
 
+A few more test commands worth knowing about:
+
+- `npm run test:gui` — cross-engine UI tests (Playwright: WebKit ≈ macOS
+  WKWebView, Chromium ≈ Windows WebView2) against the production bundle;
+  includes a 4-resolution layout matrix. See `uitests/README.md`.
+- `npm run test:install:mac` — macOS install-chain smoke: builds the DMG,
+  verifies the bundle, installs to a temp dir, launches with `$HOME`
+  sandboxed (isolates the Rust-side config/data paths; WebView-internal
+  storage is WebKit-managed), and asserts the app comes up. (macOS only.)
+
 Type-check, lint, and format:
 
 ```bash

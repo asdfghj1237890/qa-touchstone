@@ -5,6 +5,15 @@ All notable changes to QA Touchstone are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+- Cross-engine UI test layer (`uitests/`, Playwright): WebKit + Chromium
+  engine proxies for macOS/Windows UI compatibility, deterministic offline
+  flows, and a multi-resolution layout matrix with screenshot artifacts.
+- macOS install verification script (`npm run test:install:mac`): DMG →
+  bundle integrity → isolated install → sandboxed launch smoke.
+- New inert `data-testid` hooks: `sec-mode-*` (Security mode switch) and a
+  `qa-dd--lang` class on the settings language dropdown.
+
 ### Changed
 - **Desktop RBAC-matrix security scan now runs on the Rust core over Tauri IPC**
   (`run_security_matrix` → `qa_touchstone_core`), with the TypeScript engine kept
