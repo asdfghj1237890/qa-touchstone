@@ -1,0 +1,16 @@
+{
+  "name": "qa-touchstone-uitests",
+  "private": true,
+  "description": "Cross-engine UI tests: real WebKit (macOS-engine proxy) + Chromium (Windows WebView2 proxy) against the production vite bundle. See README.md.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:webkit": "playwright test --project=webkit",
+    "test:chromium": "playwright test --project=chromium",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

@@ -81,6 +81,15 @@ export default [
       globals: { ...globals.node, ...globals.mocha },
     },
   },
+  {
+    // Cross-engine UI harness: Node ESM + Playwright test runner. window/
+    // document inside page.evaluate() callbacks are declared per-file with
+    // /* global */ headers (same convention as e2e/).
+    files: ['uitests/**/*.mjs'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
   // 放在最後：ts/tsx 用 @typescript-eslint 版 unused-vars，關掉 core 版
   // （否則上方 js block 的 core 規則會打在型別宣告上）。
   {

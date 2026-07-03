@@ -31,6 +31,7 @@
     "test:coverage-view": "(npm run test:coverage || true) && npx vite preview --outDir src/__tests__/test-report/coverage --open",
     "test:headless": "node scripts/headless-functional.mjs",
     "test:e2e": "npm --prefix e2e test",
+    "test:gui": "npm --prefix uitests test",
     "test:safe": "vitest run || true",
     "clean": "rm -rf node_modules/.cache && rm -rf build"
   },
