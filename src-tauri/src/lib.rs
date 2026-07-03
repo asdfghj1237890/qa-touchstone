@@ -65,6 +65,7 @@ pub fn run() {
             commands::postman::load_cached_postman_collections,
             commands::postman::save_postman_collection,
             commands::api::execute_postman_request,
+            commands::security::run_security_matrix,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

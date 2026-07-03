@@ -3095,6 +3095,7 @@ dependencies = [
  "tauri-plugin-log",
  "thiserror 2.0.18",
  "tokio",
+ "wiremock",
 ]
 
 [[package]]
