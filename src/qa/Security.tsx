@@ -76,6 +76,12 @@ import { downloadFile } from './download';
 import { isDefined } from './isDefined';
 import { buildReq } from './buildReq';
 import type { QaRequest } from './buildReq';
+import { isCoreAvailable } from './coreAvailable';
+import { buildCoreConfig } from './coreConfig';
+import type { CoreConfigInput } from './coreConfig';
+import { normalizeCoreFindings } from './coreFindings';
+import type { CoreFinding } from './coreFindings';
+import api from '../api/index';
 import type { QaCookie, QaEnv } from './state/WorkspaceContext';
 import type {
   BolaAttackCell,
@@ -464,6 +470,9 @@ function SecurityPage({
   const evidenceMapRef = useRef<Map<string, EvidenceArtifact> | null>(null);
   const [evidenceReady, setEvidenceReady] = useS(false);
   const [suiteUnion, setSuiteUnion] = useS<UnionFinding[]>([]);
+  // Which engine produced the last matrix run: the Rust core over IPC (desktop) or
+  // the TS fallback (browser/dev). Surfaced as a badge; null until the first run.
+  const [engineSource, setEngineSource] = useS<'core' | 'ts-fallback' | null>(null);
 
   // Normalize expectations to fill defaults for the current identities×endpoints.
   const state = useMemo(
@@ -682,10 +691,63 @@ function SecurityPage({
     return runOracles(cell, { baseline: baselines[reqId], config: oracleConfig });
   };
 
+  // Gather the core-config input from the current matrix state + saved requests.
+  // Templates stay intact; the Rust core substitutes variables (CLI parity). Every
+  // endpoint gets a requestsById entry (buildReq is total) so the core config's
+  // matrix.endpoints and requests never fall out of sync.
+  const gatherCoreInput = (target: typeof state): CoreConfigInput => {
+    const requestsById: CoreConfigInput['requestsById'] = {};
+    for (const ep of target.endpoints) requestsById[ep.reqId] = buildReq(ep.reqId);
+    type VarRow = { key: string; value: string; on?: boolean };
+    const root = (vars || window.QA.VARIABLES || {}) as {
+      globals?: VarRow[];
+      environments?: Record<string, VarRow[]>;
+    };
+    const flat = (rows: VarRow[] = []) =>
+      Object.fromEntries(rows.filter((r) => r.on !== false && r.key).map((r) => [r.key, r.value]));
+    return {
+      endpoints: target.endpoints,
+      requestsById,
+      identities: target.identities,
+      globals: flat(root.globals),
+      environments: Object.entries(root.environments || {}).map(([name, rows]) => ({
+        name,
+        variables: flat(rows),
+      })),
+      expect: target.expect,
+      denySet: target.denySet,
+      oracleConfig: target.oracleConfig,
+    };
+  };
+
   const run = async (rowReqId: string | null = null) => {
     const target = rowReqId
       ? { ...state, endpoints: state.endpoints.filter((e) => e.reqId === rowReqId) }
       : state;
+
+    // Desktop: run the matrix via the Rust core over IPC (the single source of
+    // truth). The core returns findings (not the per-cell grid), so we surface them
+    // in the Findings view and leave the interactive grid to the TS fallback path.
+    if (isCoreAvailable()) {
+      setRunning(true);
+      setSuiteUnion([]);
+      setResults(rowReqId ? { ...results } : {});
+      try {
+        const config = buildCoreConfig(gatherCoreInput(target));
+        const res = await api.runSecurityMatrix(config, env?.label ?? null);
+        setSuiteUnion(normalizeCoreFindings((res.findings as CoreFinding[]) || []));
+        setEngineSource('core');
+        setMode('findings');
+      } catch (e) {
+        setEngineSource('core');
+        window.alert?.(String((e as Error)?.message || e));
+      } finally {
+        setRunning(false);
+      }
+      return;
+    }
+
+    setEngineSource('ts-fallback');
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
@@ -1196,6 +1258,13 @@ function SecurityPage({
           {t('findings.tab')}
         </button>
       </div>
+
+      {engineSource && (
+        <div style={{ fontSize: 12, opacity: 0.7, margin: '4px 0 8px' }}>
+          engine: {engineSource === 'core' ? 'Rust core (IPC)' : 'TS fallback (browser)'}
+          {engineSource === 'core' && ' — per-cell grid runs on the TS engine'}
+        </div>
+      )}
 
       {mode === 'coverage' ? (
         <CoveragePanel model={coverageModel} />
