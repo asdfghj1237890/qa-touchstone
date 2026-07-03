@@ -21,7 +21,7 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +58,11 @@ let child = null;
 
 function cleanup() {
   if (child && child.exitCode === null) {
-    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      /* already gone */
+    }
   }
   if (mountPoint) {
     spawnSync('hdiutil', ['detach', mountPoint, '-quiet'], { stdio: 'ignore' });
@@ -72,6 +76,7 @@ process.on('exit', cleanup);
 process.on('SIGINT', () => process.exit(1));
 
 async function main() {
+  const t0 = Date.now();
   console.log(`\nmacOS install verification — v${pkg.version}\n`);
 
   if (process.platform !== 'darwin') {
@@ -100,17 +105,18 @@ async function main() {
           (skipBuild ? 'run without --skip-build.' : '')
       );
     }
+    // A single-arch local build yields exactly one DMG for the version-pinned
+    // prefix. If multi-arch DMGs ever coexist here, pick the newest by mtime
+    // instead (as scripts/package-portable.mjs does).
     dmgPath = join(dmgDir, candidates[0]);
     return candidates[0];
   });
 
   // 3. Mount read-only.
   step('mount DMG (read-only)', () => {
-    const out = execFileSync(
-      'hdiutil',
-      ['attach', dmgPath, '-nobrowse', '-readonly', '-plist'],
-      { encoding: 'utf8' }
-    );
+    const out = execFileSync('hdiutil', ['attach', dmgPath, '-nobrowse', '-readonly', '-plist'], {
+      encoding: 'utf8',
+    });
     const m = out.match(/<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/);
     if (!m) throw new Error('could not parse hdiutil mount point');
     mountPoint = m[1];
@@ -191,7 +197,10 @@ async function main() {
   try {
     const count = execFileSync(
       'osascript',
-      ['-e', `tell application "System Events" to count windows of (first process whose unix id is ${child.pid})`],
+      [
+        '-e',
+        `tell application "System Events" to count windows of (first process whose unix id is ${child.pid})`,
+      ],
       { encoding: 'utf8', timeout: 10_000 }
     ).trim();
     if (Number(count) >= 1) {
@@ -201,7 +210,10 @@ async function main() {
       warn('WebView window present', `window count = ${count}`);
     }
   } catch (e) {
-    warn('WebView window present', `System Events check unavailable (${String(e.message).split('\n')[0]}) — grant Automation permission to enable`);
+    warn(
+      'WebView window present',
+      `System Events check unavailable (${String(e.message).split('\n')[0]}) — grant Automation permission to enable`
+    );
   }
 
   // 8. Teardown + summary.
@@ -212,7 +224,10 @@ async function main() {
   if (child.exitCode === null) child.kill('SIGKILL');
 
   const failed = results.filter((r) => !r.ok);
-  console.log(`\n${failed.length === 0 ? 'PASS' : 'FAIL'} — ${results.length} steps, ${failed.length} failures\n`);
+  const secs = ((Date.now() - t0) / 1000).toFixed(0);
+  console.log(
+    `\n${failed.length === 0 ? 'PASS' : 'FAIL'} — ${results.length} steps, ${failed.length} failures — ${basename(dmgPath)} in ${secs}s\n`
+  );
   process.exit(failed.length === 0 ? 0 : 1);
 }
 
