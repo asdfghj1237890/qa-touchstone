@@ -579,7 +579,7 @@ function AppearanceSettings({ accent, setAccent }: AppearanceSettingsProps) {
         </div>
         <div className="qa-set-body">
           <FieldRow label={t('settings.appearance.languageLabel')}>
-            <Dropdown value={locale} options={LOCALES} onChange={setLocale} />
+            <Dropdown className="qa-dd--lang" value={locale} options={LOCALES} onChange={setLocale} />
           </FieldRow>
           <div className="qa-auth-note">
             <Icon name="shield" size={13} /> {t('settings.appearance.languageNote')}
