@@ -25,9 +25,14 @@ test('sidebar collection export produces a valid Postman JSON download', async (
   // Postman v2 collection shape (buildPostmanCollection, src/qa/ExportData.tsx).
   expect(exported).toHaveProperty('info');
   expect(exported.info).toHaveProperty('schema');
-  expect(String(exported.info.schema)).toContain('schema.getpostman.com');
+  expect(exported.info.schema).toContain('schema.getpostman.com');
   expect(Array.isArray(exported.item)).toBe(true);
   expect(exported.item.length).toBeGreaterThan(0);
+
+  // Provenance: the exported blob is the collection the menu showed (guards
+  // against a future menu-index bug exporting the wrong item).
+  const firstColName = (await page.locator('.qa-col-name').first().textContent()).trim();
+  expect(exported.info.name).toBe(firstColName);
 
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
