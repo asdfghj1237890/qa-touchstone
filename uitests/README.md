@@ -44,7 +44,8 @@ The production preview build fires the app's GitHub update check on boot;
 `mockNet` answers it with a deterministic 404 (the check fails closed). In
 this no-backend environment the AI policy also fail-closes
 (`AI_POLICY_DENY` → privacy mode locked to `local`); `settings.spec.mjs`
-asserts that locked behavior — see the as-built note in the plan.
+asserts that locked behavior rather than the free 3-state switch, which is
+unreachable here by design (see the comments in that spec).
 
 ## Resolution matrix
 
