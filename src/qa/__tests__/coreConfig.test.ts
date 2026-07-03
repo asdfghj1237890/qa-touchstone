@@ -34,9 +34,17 @@ describe('mapAuth', () => {
     expect(
       mapAuth({ type: 'apiKey', apiKey: { key: 'X', value: 'v', placement: 'query' } } as any)
     ).toEqual({ type: 'apikey', key: 'X', value: 'v', in: 'query' });
-    expect(mapAuth({ type: 'oauth2' } as any, 'resolved-tok')).toEqual({
+    // _oauthToken is an OAuthTokenResult OBJECT at runtime ({ token, type }); read .token.
+    expect(
+      mapAuth({ type: 'oauth2' } as any, { token: 'resolved-tok', type: 'Bearer' } as any)
+    ).toEqual({
       type: 'bearer',
       token: 'resolved-tok',
+    });
+    // back-compat: a bare string token is still accepted.
+    expect(mapAuth({ type: 'oauth2' } as any, 'str-tok')).toEqual({
+      type: 'bearer',
+      token: 'str-tok',
     });
   });
   it('returns null for aws (unrepresentable in core Auth)', () => {
@@ -106,5 +114,37 @@ describe('buildCoreConfig', () => {
       },
     }) as any;
     expect(c.requests[0].body).toEqual({ mode: 'json', content: '{"a":1}' });
+  });
+
+  it('drops endpoints whose reqId is missing from requestsById', () => {
+    const c = buildCoreConfig({
+      ...base,
+      endpoints: [...base.endpoints, { reqId: 'ghost', method: 'GET', path: '/ghost' }],
+    }) as any;
+    // The unresolved endpoint contributes no request object...
+    expect(c.requests.map((r: any) => r.id)).toEqual(['getU']);
+    // ...but the matrix endpoint list still enumerates it (reqId, not the request).
+    expect(c.security.matrix.endpoints).toEqual(['getU', 'ghost']);
+  });
+
+  it('omits oracles when oracleConfig is absent', () => {
+    const { oracleConfig: _drop, ...withoutOracles } = base;
+    const c = buildCoreConfig(withoutOracles) as any;
+    expect(c.security.oracles).toBeUndefined();
+    expect('oracles' in c.security).toBe(false);
+  });
+
+  it('defaults oracle flags on for an empty oracleConfig object', () => {
+    const c = buildCoreConfig({ ...base, oracleConfig: {} }) as any;
+    expect(c.security.oracles).toEqual({ sensitive: true, schema: true });
+  });
+
+  it('omits denySet when absent and preserves an explicit empty denySet', () => {
+    const { denySet: _drop, ...withoutDenySet } = base;
+    const absent = buildCoreConfig(withoutDenySet) as any;
+    expect('denySet' in absent.security.matrix).toBe(false);
+
+    const empty = buildCoreConfig({ ...base, denySet: [] }) as any;
+    expect(empty.security.matrix.denySet).toEqual([]);
   });
 });

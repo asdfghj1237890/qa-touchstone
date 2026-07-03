@@ -29,10 +29,16 @@ export interface CoreConfigInput {
  * Map the desktop QaAuth (+ runtime-resolved oauth token) → core Auth.
  * Returns null for auth the core matrix path cannot represent (aws) — the caller
  * drops such identities.
+ *
+ * `oauthToken` is the transient `_oauthToken` an identity carries after a fetch.
+ * At runtime it is an OAuthTokenResult object `{ token, type, ... }` (see
+ * Security.tsx:193 and executor.ts:162, which reads `.token`), NOT a bare string —
+ * so we read `.token` off the object. A plain string is also accepted for
+ * back-compat / direct callers.
  */
 export function mapAuth(
   auth: QaAuth | null | undefined,
-  oauthToken?: string | null
+  oauthToken?: { token?: string } | string | null
 ): CoreAuth | null {
   const a = auth || ({ type: 'none' } as QaAuth);
   switch (a.type) {
@@ -40,8 +46,10 @@ export function mapAuth(
       return { type: 'none' };
     case 'bearer':
       return { type: 'bearer', token: String(a.bearer ?? '') };
-    case 'oauth2':
-      return { type: 'bearer', token: String(oauthToken ?? '') };
+    case 'oauth2': {
+      const tok = typeof oauthToken === 'string' ? oauthToken : (oauthToken?.token ?? '');
+      return { type: 'bearer', token: tok };
+    }
     case 'basic':
       return {
         type: 'basic',
@@ -58,7 +66,9 @@ export function mapAuth(
     case 'aws':
       return null; // core Auth has no awsv4; aws identities stay on the TS fallback
     default:
-      return { type: 'none' };
+      // Unknown/future auth type: drop the identity (same as aws) rather than
+      // coerce it to an authenticated-as-anonymous `none`, which would be riskier.
+      return null;
   }
 }
 
@@ -73,12 +83,20 @@ function mapBody(r: QaRequest): CoreBody {
 }
 
 function mapRequest(reqId: string, r: QaRequest, ep: Endpoint): unknown {
+  // QaKVRow carries an `on` flag; the desktop executor drops disabled rows
+  // (executor.ts filters `h.on && h.key` / `p.on && p.key`). Mirror that here so a
+  // row the user toggled off is dropped by the TS path and never reaches the core.
+  // `on !== false` keeps rows where `on` is absent (buildReq always sets it true).
   return {
     id: reqId,
     method: r.method,
     url: r.url,
-    headers: (r.headers || []).filter((h) => h.key).map((h) => ({ key: h.key, value: h.value })),
-    query: (r.params || []).filter((p) => p.key).map((p) => ({ key: p.key, value: p.value })),
+    headers: (r.headers || [])
+      .filter((h) => h.on !== false && h.key)
+      .map((h) => ({ key: h.key, value: h.value })),
+    query: (r.params || [])
+      .filter((p) => p.on !== false && p.key)
+      .map((p) => ({ key: p.key, value: p.value })),
     body: mapBody(r),
     assertions: [],
     privileged: typeof ep.privileged === 'boolean' ? ep.privileged : null,
@@ -91,7 +109,7 @@ export function buildCoreConfig(input: CoreConfigInput): unknown {
     .map((id) => {
       const auth = mapAuth(
         id.auth as unknown as QaAuth,
-        (id as Record<string, unknown>)._oauthToken as string | undefined
+        (id as Record<string, unknown>)._oauthToken as { token?: string } | string | undefined
       );
       return auth ? { id: id.id, auth, privileged: !!id.privileged } : null;
     })
@@ -122,13 +140,17 @@ export function buildCoreConfig(input: CoreConfigInput): unknown {
       }
     : undefined;
 
-  const security: Record<string, unknown> = {
-    matrix: {
-      endpoints: input.endpoints.map((e) => e.reqId),
-      denySet: input.denySet && input.denySet.length ? input.denySet : [401, 403, 404],
-      expect,
-    },
+  // Emit denySet ONLY when the caller set it (pass through as-is, including an
+  // explicit []). The core's MatrixConfig.deny_set has serde(default) → omitting
+  // the key applies [401,403,404], while an explicit [] is honored verbatim
+  // (config.rs: default_deny_set + the bfla_config_empty_deny_set_honored test).
+  const matrix: Record<string, unknown> = {
+    endpoints: input.endpoints.map((e) => e.reqId),
+    expect,
   };
+  if (input.denySet !== undefined) matrix.denySet = input.denySet;
+
+  const security: Record<string, unknown> = { matrix };
   if (oracles) security.oracles = oracles;
 
   return {
