@@ -77,3 +77,14 @@ export async function seedFindings(page) {
     [SNAPSHOTS_KEY, JSON.stringify(SNAPSHOT_SEED)]
   );
 }
+
+/**
+ * Response-bar status pill locator. StatusPill (src/qa/components.tsx) is a
+ * class-less <span> rendering "<code> <statusText>" as the FIRST child of
+ * .qa-resp-stats; its siblings (elapsed time "1200 ms", size) all carry
+ * .qa-resp-stat. Scoping status asserts to this element keeps "200" from
+ * matching timing text. Assert with: expect(statusPill(page)).toHaveText(/\b200\b/)
+ */
+export function statusPill(page) {
+  return page.locator('.qa-resp-stats > span:not(.qa-resp-stat)');
+}

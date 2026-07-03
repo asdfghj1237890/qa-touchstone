@@ -3,7 +3,7 @@
 // assert the response panel renders the deterministic result.
 import { test, expect } from '@playwright/test';
 import { installMockNet } from '../helpers/mockNet.mjs';
-import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
+import { collectPageErrors, gotoApp, statusPill } from '../helpers/session.mjs';
 
 test('edit method+URL and send: response panel shows fixture 200', async ({ page }) => {
   const blocked = await installMockNet(page);
@@ -22,17 +22,16 @@ test('edit method+URL and send: response panel shows fixture 200', async ({ page
   await url.fill('https://mock.local/api/ping');
 
   await page.getByTestId('send-request').click();
-  // STATUS ASSERT: StatusPill (src/qa/components.tsx) renders a bare,
-  // class-less <span>"{code} {statusText}"</span> as the first child of
-  // .qa-resp-stats — its siblings (elapsed-time, size) all carry the
-  // .qa-resp-stat class. Scoping to "the .qa-resp-stats child that is NOT
-  // .qa-resp-stat" isolates the status text from the timing stat, so a
-  // "200 ms" elapsed reading can never satisfy this assertion.
-  await expect(page.locator('.qa-resp-stats > span:not(.qa-resp-stat)')).toHaveText(/\b200\b/, {
+  // STATUS ASSERT: see statusPill() in helpers/session.mjs for why this is
+  // scoped away from the elapsed-time/size stats.
+  await expect(statusPill(page)).toHaveText(/\b200\b/, {
     timeout: 20_000,
   });
   // Body assert: the fixture payload is rendered in the response panel.
   await expect(page.locator('.qa-app')).toContainText('mock.local');
+  // The response body echoes the request method — proves POST reached the
+  // network layer, not just the button label.
+  await expect(page.locator('.qa-app')).toContainText('"method": "POST"');
 
   expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);

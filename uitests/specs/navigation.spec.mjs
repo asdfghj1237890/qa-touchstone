@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 import { installMockNet } from '../helpers/mockNet.mjs';
 import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
 
-// key → identifying selector (null = rely on nav active-state + no errors).
+// key → identifying selector.
 const PAGES = [
   ['home', '.qa-home'],
   ['testgen', '.tg'],

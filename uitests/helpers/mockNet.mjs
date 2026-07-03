@@ -54,7 +54,10 @@ export async function installMockNet(page) {
         return fulfillJson(route, fixture('restcountries-name.json'));
       }
       if (url.hostname === 'mock.local') {
-        return fulfillJson(route, JSON.stringify({ ok: true, source: 'mock.local' }));
+        return fulfillJson(
+          route,
+          JSON.stringify({ ok: true, source: 'mock.local', method: route.request().method() })
+        );
       }
       if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
         // index.html unconditionally links a Google Fonts stylesheet (every
