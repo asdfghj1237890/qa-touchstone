@@ -174,6 +174,118 @@ The current public-facing scope is API testing only:
   alongside `tsc --noEmit`, ESLint, `npm audit`, and `cargo audit`, with
   workflow actions pinned to commit SHAs.
 
+## Data Model In Plain Words
+
+<details>
+<summary>How findings, fingerprints, baselines, the two engines, and the AI fit together — no jargon, demo story included</summary>
+
+**One standard form for every problem report.** Each security engine (matrix,
+BOLA, BFLA, rate-limit, conformance, fuzz) hunts for a different kind of
+problem, but every problem found is rewritten onto the same standard form — a
+`UnionFinding` (`src/qa/types.ts`) with fixed fields: which engine, how severe,
+which rule, where, and what the evidence is. Because every engine speaks the
+same format, the screens, reports, and run-to-run comparison are written once
+and work for all six engines — adding a new engine doesn't change any of them.
+
+**Every finding gets a fingerprint.** The app hashes the _identity_ of a
+problem (rule + place) into a fingerprint (`fp`), deliberately ignoring the
+parts that change between runs, like wording and evidence; those details get a
+second hash (`dfp`). That lets the app tell apart three situations: a
+brand-new problem, the same problem seen again, and the same problem whose
+details changed. Rule renames go through an alias table
+(`src/qa/findings.ts`), so a renamed rule keeps its old fingerprint forever.
+
+**Two save slots, honestly compared.** The app keeps exactly two snapshots:
+the pinned `baseline` (the state you approved) and `lastRun` (the newest run).
+Comparing fingerprints yields the new / carried / resolved badges. Each
+snapshot also stores a hash of _what was tested_ (`scopeHash`); if this run
+covered a different set of endpoints or identities than the baseline, the
+report says "scope changed" instead of pretending the missing findings were
+fixed.
+
+**Human judgment is never lost.** Triage decisions — suppress, severity
+override, owner, notes — live in their own table keyed by fingerprint, outside
+any single run, so re-scanning never erases them. On format upgrades, old
+triage data is quarantined into a `legacy` box rather than deleted; snapshots,
+which a re-scan can regenerate, are simply reset.
+
+**Two engines, one truth.** The matrix engine exists twice — in the Rust core
+(`src-tauri/core`, the source of truth used by desktop IPC and the headless
+CLI) and in TypeScript (the browser fallback). Two mechanisms stop them from
+drifting apart: the Rust side rejects any config JSON containing a field it
+doesn't recognize, and a CI _parity gate_ runs the TypeScript engine with a
+frozen clock and fixed random numbers to produce committed "answer sheets"
+(`scripts/gen-fixtures.mjs` → `src-tauri/core/tests/fixtures/`) that the Rust
+tests must reproduce exactly — CI fails if the answers go stale. Secrets enter
+configs only as env-var references (a missing variable is a hard error, not an
+empty string), and everything the core returns over IPC — findings _and_ error
+messages — passes one shared redaction step, because even a connection-refused
+error can leak a URL with an API key in it.
+
+**The AI is a passenger, not a driver.** The finding pipeline above is fully
+deterministic — the optional AI features sit at its edges. Data leaves for the
+LLM through one door only (`src/qa/llm.ts`), masked before the prompt is
+built; answers coming back are parsed defensively and collapse to an empty
+result rather than being retried. AI triage and review write their advice into
+their own types and never touch findings, snapshots, or triage records. The
+one deliberate exception is the on-demand AI sensitive-data scan: its results
+do enter the pipeline as real findings, but only when you click the button,
+and always tagged `source: 'llm'`. And because a finding's fingerprint ignores
+wording and evidence — exactly the fields an AI can influence — AI
+nondeterminism can never change a finding's identity across runs.
+
+**Demo story, day 1 — a problem gets caught.** You run an online shop. Its
+back office has a "view all orders" feature (at the address
+`GET /admin/orders`). You set up two test identities: a **visitor** (someone
+not logged in) and an **admin**. Then you write down your expectations in a
+table: the visitor should be blocked from this feature; the admin should get
+through. That identity-by-feature table of expectations is the **matrix**, and
+the **matrix engine** is an automated tester: for every cell in the table it
+really sends the request, then grades the actual result against your
+expectation. This time the grading finds that the admin can see orders (as
+expected) — but the visitor can see all orders too (not what you declared). So
+the engine writes up a **finding**: a problem report with fixed fields — which
+engine caught it, which rule was broken, where it happened, how severe, and
+the evidence (masked first). The app also gives every finding a
+**fingerprint** — like an ID number, computed from "which rule + where it
+happened" and never from the wording, so the same problem gets the same number
+whenever it is caught again. The same run also notices a customer email
+showing up in a response, so there are two findings in total. The whole batch
+is stored as a **snapshot** (a save file of this run, plus a `scopeHash` code
+recording exactly what was checked). You pin this save file as the
+**baseline** — the reference every later run is compared against — and make
+two human calls: assign the orders problem to a backend teammate, and mark the
+email one "false alarm, stop reporting it" (it is seeded test data). Those two
+decisions go into a separate notebook, indexed by each finding's fingerprint.
+
+**Demo story, day 2 — fingerprints do the comparing.** The backend teammate
+ships a half-fix: the visitor now sees a different-looking page but can still
+pull the order data. You scan again, and the app compares the new results
+against the baseline. The orders finding has the same fingerprint as yesterday
+(same rule, same place), so it is badged **carried** — an old problem, not a
+new one; a second number that tracks the details did change, so the app can
+also tell you "same problem, different look". The email finding is caught
+again, but its fingerprint is already marked "false alarm" in the notebook, so
+it stays silenced automatically. And one genuinely new problem appears: the
+site has no **rate limiting** (nothing stops someone hammering it with rapid
+requests). Its fingerprint is nowhere in the baseline, so it is badged
+**new** — and if a new problem is severe enough, the team's automated
+gatekeeper (CI) turns red and blocks the code change.
+
+**Demo story, day 3 — no fooling yourself.** To turn the light green, a
+teammate simply removes "view all orders" from the checklist. On the next scan
+the orders finding is gone, of course — but the app refuses to badge it
+**resolved**: this run's scope code no longer matches the baseline's, so the
+report is flagged "**scope changed**", making it clear the problem vanished
+because it was not checked, not because it was fixed. Finally you export the
+results as a standard security report (SARIF, which GitHub can display on its
+security page): the report layer merges the snapshot with the notebook of
+human decisions and prints evidence at the masking level you chose. That is
+the whole data design at work — from one web request to the team's red/green
+light.
+
+</details>
+
 ## Project Status
 
 Actively maintained. The frontend is fully strict TypeScript; every push runs
