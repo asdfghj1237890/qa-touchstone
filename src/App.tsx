@@ -26,6 +26,7 @@ import { loadAiPolicy } from './qa/aiPolicy';
 import { loadString, saveString } from './qa/storage';
 import { ErrorBoundary } from './qa/ErrorBoundary';
 import { Icon } from './qa/components';
+import { isCoreAvailable } from './qa/coreAvailable';
 import {
   checkForUpdate,
   detectUpdatePlatform,
@@ -43,8 +44,7 @@ const { useState: useStateApp, useEffect: useEffectApp, useRef: useRefApp } = Re
 // Custom window controls. The window is decoration-less (tauri.conf.json
 // `decorations: false`), so close/minimize/maximize are wired here to the Tauri
 // bridge. No-ops gracefully in the browser/dev/test.
-const tauriReady = () =>
-  typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+const tauriReady = () => isCoreAvailable();
 
 // Controls follow the host OS: Windows gets right-aligned square
 // minimize/maximize/close buttons (close hovers red); every other platform
