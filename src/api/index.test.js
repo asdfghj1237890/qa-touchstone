@@ -258,4 +258,12 @@ describe('api module', () => {
       expect(typeof api[name], `${name} 應為 function`).toBe('function');
     }
   });
+
+  it('runSecurityMatrix 轉呼 invoke run_security_matrix 帶 config + env', async () => {
+    invokeMock.mockResolvedValue({ findings: [], errors: [], engineSource: 'core' });
+    const cfg = { version: 1 };
+    const res = await api.runSecurityMatrix(cfg, 'staging');
+    expect(invokeMock).toHaveBeenCalledWith('run_security_matrix', { config: cfg, env: 'staging' });
+    expect(res.engineSource).toBe('core');
+  });
 });
