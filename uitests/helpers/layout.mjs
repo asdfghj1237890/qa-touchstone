@@ -33,11 +33,19 @@ export async function assertNavUsable(page, viewport, label) {
   }
 }
 
-/** Main content area must keep a workable width. */
+/**
+ * Main content area must keep a workable width. Measures .qa-content — the
+ * page mount below the titlebar (src/App.tsx) — NOT .qa-app: that outer
+ * shell is position:fixed inset:0 (qa.css), so its clientWidth always
+ * equals the viewport and the check could never fail. Floor calibration:
+ * content ≈ viewport − nav rail (~55px) → ≈844px at the 900×600 tauri
+ * minimum; 500 sits well below that (no false alarms) yet catches a real
+ * collapse of the content column.
+ */
 export async function assertContentWidth(page, label) {
   const width = await page.evaluate(() => {
-    const el = document.querySelector('.qa-app');
+    const el = document.querySelector('.qa-content');
     return el ? el.clientWidth : 0;
   });
-  expect(width, `${label}: app shell width`).toBeGreaterThan(300);
+  expect(width, `${label}: content area width`).toBeGreaterThan(500);
 }
