@@ -120,6 +120,13 @@ export const api = {
   executePostmanRequest: (details: any): Promise<any> => invoke('execute_postman_request', details),
   savePostmanCollection: (filePath: string, collectionData: unknown): Promise<unknown> =>
     invoke('save_postman_collection', { filePath, collectionData }),
+
+  // --- 安全掃描：呼叫 Rust core（desktop）。config 為 coreConfig.ts 產出的物件。 ---
+  runSecurityMatrix: (
+    config: unknown,
+    env: string | null
+  ): Promise<{ findings: unknown[]; errors: unknown[]; engineSource: string }> =>
+    invoke('run_security_matrix', { config, env }),
 };
 
 export default api;
