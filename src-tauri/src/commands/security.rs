@@ -7,6 +7,16 @@ use serde_json::{json, Value};
 pub(crate) async fn matrix_scan(config_json: &str, env: Option<&str>) -> Result<Value, String> {
     let cfg = qa_touchstone_core::config::load_config(config_json, &|k| std::env::var(k).ok())?;
     let (findings, errors) = qa_touchstone_core::security::runner::run_matrix(&cfg, env).await;
+    // run_matrix is deliberately non-redacting (see runner.rs) — the caller must scrub
+    // secrets before returning, the same contract the CLI `scan` honors (scan.rs). A
+    // resolved URL can carry an apikey-in-query value, and a connection error echoes that
+    // URL verbatim into EngineError.message, so redact findings AND errors with the union
+    // of the identities' auth secrets before they cross the IPC boundary.
+    let red = qa_touchstone_core::redact::RedactionSet::from_auths(
+        cfg.identities.iter().map(|i| &i.auth),
+    );
+    let findings = red.redact_value(&serde_json::to_value(&findings).unwrap_or(Value::Null));
+    let errors = red.redact_value(&serde_json::to_value(&errors).unwrap_or(Value::Null));
     Ok(json!({ "findings": findings, "errors": errors, "engineSource": "core" }))
 }
 
@@ -66,5 +76,48 @@ mod tests {
             "expect": { "getU": { "anon": "deny" } } }, "oracles": { "sensitive": true, "schema": true } }
         }"#;
         qa_touchstone_core::config::load_config(config, &|_| None).expect("config accepted");
+    }
+
+    #[tokio::test]
+    async fn apikey_in_query_secret_is_redacted_from_error_output() {
+        // A request that fails to connect echoes the resolved URL in its error; with an
+        // apikey-in-query identity that URL carries the plaintext key. run_matrix is
+        // non-redacting by contract (see runner.rs), so matrix_scan MUST scrub it before
+        // returning across the IPC boundary. Bind+drop a listener for a closed port so the
+        // request is refused immediately and deterministically.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let secret = "supersecretkey123";
+        let config = format!(
+            r#"{{
+              "version": 1,
+              "environments": [],
+              "identities": [{{ "id": "apiuser", "auth": {{ "type": "apikey", "key": "api_key", "value": "{secret}", "in": "query" }} }}],
+              "requests": [{{ "id": "getU", "method": "GET", "url": "http://127.0.0.1:{port}/u" }}],
+              "security": {{ "matrix": {{ "endpoints": ["getU"], "expect": {{ "getU": {{ "apiuser": "allow" }} }} }} }}
+            }}"#
+        );
+        let out = matrix_scan(&config, None).await.expect("scan runs");
+        let serialized = out.to_string();
+        let errors = out["errors"].as_array().expect("errors array");
+        assert!(
+            !errors.is_empty(),
+            "expected a connection-refused error to redact"
+        );
+        assert!(
+            !serialized.contains(secret),
+            "apikey secret leaked into the IPC payload: {serialized}"
+        );
+        // The error message carried the resolved URL, so redaction must have replaced the
+        // secret with the marker (guards against the assertion above passing vacuously).
+        assert!(
+            errors[0]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("***REDACTED***"),
+            "expected the redaction marker in the error message: {}",
+            errors[0]["message"]
+        );
     }
 }
