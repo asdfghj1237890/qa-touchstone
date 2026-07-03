@@ -37,20 +37,31 @@ export async function installMockNet(page) {
   const blocked = [];
   await page.route('**/*', (route) => {
     const url = new URL(route.request().url());
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      return route.continue(); // vite preview assets
-    }
-    if (url.hostname === 'api.github.com') {
-      // Production preview boots checkForUpdate() (src/App.tsx — only
-      // MODE==='test' skips it). 404 → the check fails closed and stays
-      // quiet, and the request never counts as an unmocked host.
-      return fulfillJson(route, JSON.stringify({ message: 'Not Found' }), 404);
-    }
-    if (url.hostname === 'restcountries.com') {
-      return fulfillJson(route, fixture('restcountries-name.json'));
-    }
-    if (url.hostname === 'mock.local') {
-      return fulfillJson(route, JSON.stringify({ ok: true, source: 'mock.local' }));
+    try {
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+        return route.continue(); // vite preview assets
+      }
+      if (url.hostname === 'api.github.com') {
+        // The harness serves the PRODUCTION build (vite preview, MODE=
+        // 'production'), so App.tsx's shouldSkipUpdateCheck() is false and
+        // checkForUpdate() fires on every boot — this mock is the only thing
+        // keeping that call offline/deterministic. 404 → the check fails
+        // closed and stays quiet, and the request never counts as an
+        // unmocked host.
+        return fulfillJson(route, JSON.stringify({ message: 'Not Found' }), 404);
+      }
+      if (url.hostname === 'restcountries.com') {
+        return fulfillJson(route, fixture('restcountries-name.json'));
+      }
+      if (url.hostname === 'mock.local') {
+        return fulfillJson(route, JSON.stringify({ ok: true, source: 'mock.local' }));
+      }
+    } catch (err) {
+      // A throwing handler would otherwise stall the request and kill the
+      // run with a playwright-internal stack. Record + abort instead so the
+      // failure surfaces attributably in the spec's blocked-list assertion.
+      blocked.push(`${url.href} (handler error: ${err && err.message})`);
+      return route.abort('failed');
     }
     blocked.push(url.href);
     return route.abort('blockedbyclient');
