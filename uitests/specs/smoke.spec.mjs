@@ -39,7 +39,15 @@ test('smoke: import → send → suite → export lands as a download', async ({
   await page.getByTestId('send-request').click();
   // Unlike the packaged-app e2e (tolerant, real network), the fixture makes
   // the outcome deterministic: expect a 200 in the response bar.
-  await expect(page.locator('.qa-resp-bar')).toContainText('200', { timeout: 20_000 });
+  // STATUS ASSERT: StatusPill (src/qa/components.tsx) renders a bare,
+  // class-less <span>"{code} {statusText}"</span> as the first child of
+  // .qa-resp-stats — its siblings (elapsed-time, size) all carry the
+  // .qa-resp-stat class. Scoping to "the .qa-resp-stats child that is NOT
+  // .qa-resp-stat" isolates the status text from the timing stat, so a
+  // "200 ms" elapsed reading can never satisfy this assertion.
+  await expect(page.locator('.qa-resp-stats > span:not(.qa-resp-stat)')).toHaveText(/\b200\b/, {
+    timeout: 20_000,
+  });
 
   // ── run the security suite to completion ──
   await page.getByTestId('nav-security').click();

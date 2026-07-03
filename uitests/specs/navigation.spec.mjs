@@ -7,18 +7,17 @@ import { test, expect } from '@playwright/test';
 import { installMockNet } from '../helpers/mockNet.mjs';
 import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
 
-// key → identifying selector (null = rely on nav active-state + no errors;
-// testgen/runner/perf have no single stable root class).
+// key → identifying selector (null = rely on nav active-state + no errors).
 const PAGES = [
   ['home', '.qa-home'],
-  ['testgen', null],
+  ['testgen', '.tg'],
   ['api', '.qa-urlbar'],
   ['realtime', '.qa-realtime'],
-  ['runner', null],
+  ['runner', '.rn'],
   ['security', '.qa-sec-tabs'],
   ['monitors', '.qa-monitors'],
   ['docs', '.qa-docs'],
-  ['perf', null],
+  ['perf', '.pf'],
   ['settings', '.qa-settings'],
 ];
 
