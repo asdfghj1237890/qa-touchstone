@@ -56,6 +56,15 @@ export async function installMockNet(page) {
       if (url.hostname === 'mock.local') {
         return fulfillJson(route, JSON.stringify({ ok: true, source: 'mock.local' }));
       }
+      if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+        // index.html unconditionally links a Google Fonts stylesheet (every
+        // boot, every spec) — not a mockable app fixture, just an inert
+        // static asset. Fulfilling empty/octet-stream lets @font-face fail
+        // soft (fallback font, non-fatal) without polluting the blocked list
+        // or exercising the abort path for a host with no test-relevant
+        // behavior.
+        return route.fulfill({ status: 200, contentType: 'text/css', body: '' });
+      }
     } catch (err) {
       // A throwing handler would otherwise stall the request and kill the
       // run with a playwright-internal stack. Record + abort instead so the
