@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { configDefaults } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { readFileSync } from 'node:fs';
@@ -56,6 +57,10 @@ export default defineConfig({
         url: 'http://localhost:3000',
       },
     },
+    // uitests/ 是 Playwright 規格(import '@playwright/test'),不能被 vitest
+    // 收集,否則 4 個檔案 collection error → npm test exit 1。Playwright 有自己
+    // 的 config(uitests/playwright.config.mjs),不受此排除影響。
+    exclude: [...configDefaults.exclude, 'uitests/**'],
     setupFiles: ['./src/setupTests.js'],
     reporters: ['verbose', 'html'],
     outputFile: {
