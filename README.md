@@ -147,6 +147,66 @@ The current public-facing scope is API testing only:
   interface, switchable in Settings, with a themeable dark UI (multiple accent
   palettes).
 
+## User Story
+
+One continuous journey that touches every capability above: you have just
+inherited your team's booking-service API, and you take it from first import
+all the way to a CI gate. For how findings, fingerprints, and baselines work
+underneath, see the three-day demo story in
+[Data Model In Plain Words](#data-model-in-plain-words).
+
+**Inherit — import, don't rebuild.** Your predecessor left a Postman
+collection and an OpenAPI spec. Import both as-is — requests, folders, and
+variables land in the workspace unchanged — and once you have tidied the
+collection up, export it back to Postman JSON for the team at any time.
+
+**First request through.** Switch the environment to staging, configure
+OAuth 2.0 (client-credentials), and send your first `GET /bookings` —
+response, timing, and call history all stay on your machine. A teammate asks
+how to call it: generate a cURL or Python snippet. The PM wants docs: export
+the full API documentation as standalone HTML.
+
+**Bring test data to life.** Dynamic values fabricate data for you —
+`{{$guid}}` as the booking code, `{{$randomInt}}` as the party size — and the
+cookie jar replays the session cookie from your login automatically. The
+reporting endpoint is GraphQL? Same client — switch over and test it.
+
+**Batch regression.** Save the smoke tests as a collection and hand it to the
+**Collection Runner** with a CSV for data iteration; assertions are scored
+against real live responses — a green light is a real green light, not canned
+data.
+
+**Let AI fill the gaps — without your data leaving home.** Feed the PRD or
+the OpenAPI spec to AI to generate classified test cases, review a suspicious
+response, and run a sensitive-data scan. The provider is yours to choose
+(OpenAI, or your company's self-managed compatible endpoint), and by default
+everything goes through **AI privacy mode** in `redacted`: URLs lose their
+host, values become type tokens, and you can preview the exact prompt before
+it is sent.
+
+**One-click security checkup.** Hit **Run full security suite** and the six
+engines take the stage in order — RBAC matrix, BOLA/IDOR, fuzzing, BFLA,
+conformance, with the noisy rate-limit tester deliberately last — recorded
+as a single run. Then let **AI security triage** condense the pile into a
+what-to-look-at-first shortlist.
+
+**Human judgment stays.** Assign the real issue to the backend teammate,
+suppress the false positive, adjust a severity — these decisions follow the
+fingerprints and survive every rescan. Pin this run as the baseline; from
+now on you only watch for new high/critical findings.
+
+**Pressure and streams before launch.** Simulate the holiday booking rush
+with **k6** — live metrics and SLO scoring tell you in real time whether the
+API holds up; booking-status pushes ride a WebSocket, so open **Realtime
+testing** and watch the stream to verify event order.
+
+**Hand it to CI and let it keep watch.** The **headless CLI** replays the
+collection and the security scan in your pipeline — JUnit into test reports,
+SARIF into GitHub code scanning, and "new high/critical findings" as the
+merge gate. After launch, **Monitors** patrol on their configured cadence.
+And all of it — from that first import until now — happened in one
+bilingual, themeable desktop app whose data never left your machine.
+
 ## Architecture
 
 ![Animated QA Touchstone architecture diagram](docs/architecture.svg)

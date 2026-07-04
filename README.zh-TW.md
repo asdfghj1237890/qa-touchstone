@@ -129,6 +129,54 @@ monitors、k6 效能測試、AI 測試案例產生與分流、可匯出的 API �
 - **雙語、可換主題的介面（Bilingual, themeable UI）**：完整的英文與繁體中文
   介面，可在設定切換；深色 UI 提供多組 accent 配色。
 
+## 使用者故事
+
+下面用一條完整旅程把上面每一項功能串起來：你剛接手團隊的訂房服務 API，
+從第一次匯入一路走到把整套檢查交給 CI。想知道 findings、指紋與 baseline
+在底層怎麼運作，見[資料模型（白話版）](#資料模型白話版)的三天示範故事。
+
+**接手——匯入而不是重建**。前人留下一份 Postman collection 和一份
+OpenAPI 規格。兩份檔案直接匯入，requests、資料夾與變數原樣進到
+workspace；之後整理乾淨了，也隨時能匯出成 Postman JSON 還給團隊。
+
+**打通第一發**。把 environment 切到 staging，設好 OAuth 2.0
+（client-credentials），送出第一個 `GET /bookings`——回應、耗時與 call
+history 都留在本機。同事問怎麼呼叫，直接產生 cURL 或 Python snippet
+貼給他；PM 要文件，就把整份 API docs 匯出成獨立 HTML。
+
+**把測試資料變活**。動態值幫你造資料——`{{$guid}}` 當訂位代碼、
+`{{$randomInt}}` 當人數——cookie jar 自動 replay 登入後的 session
+cookie。報表端點是 GraphQL？同一個 client 切過去就能測。
+
+**批次回歸**。把冒煙測試存成 collection，交給 **Collection Runner**
+搭配 CSV 做資料迭代，assertions 對著真實回應評分——綠燈是真的綠燈，
+不是罐頭資料。
+
+**讓 AI 補位，資料不出門**。把 PRD 或 OpenAPI 丟給 AI 產生分類好的
+測試案例、對可疑回應做 review、掃一輪敏感資料外洩。供應商由你指定
+（OpenAI 或公司自管的相容 endpoint），而且預設走 **AI 隱私模式**的
+`redacted`：URL 去 host、值轉成型別 token，送出前還能看完整 prompt
+預覽。
+
+**一鍵安全體檢**。按下「**執行完整安全掃描**」，六個引擎依序上場——
+RBAC 矩陣、BOLA/IDOR、fuzzing、BFLA、conformance，最吵的速率限制
+壓軸——整趟記成一次執行。掃完先讓 **AI 安全分流**把結果濃縮成
+「先看哪幾個」的優先清單。
+
+**人的判斷留下來**。真問題指派給後端同事、誤判抑制掉、嚴重度該調就調；
+這些決定跟著指紋走，重掃不會被洗掉。把這次結果釘成 baseline，之後
+只需要盯「新增的高/嚴重」。
+
+**上線前的壓力與串流**。用 **k6** 模擬連假訂房尖峰，live metrics 與
+SLO 評分即時告訴你撐不撐得住；訂位狀態推播走 WebSocket，開
+**Realtime testing** 盯著 stream 驗證事件順序。
+
+**交給 CI，放著讓它顧**。**headless CLI** 在 pipeline 裡重跑
+collection 與安全掃描，JUnit 進測試報告、SARIF 進 GitHub code
+scanning，「新增高/嚴重發現」就是 merge gate；上線後 **Monitors** 依
+cadence 自動巡檢。而這一切——從匯入第一份 collection 到現在——都在
+同一個雙語、可換主題、資料完全留在本機的桌面 app 裡完成。
+
 ## 架構
 
 ![QA Touchstone 動態架構圖](docs/architecture.svg)
