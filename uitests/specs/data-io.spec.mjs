@@ -8,7 +8,7 @@ import { installMockNet } from '../helpers/mockNet.mjs';
 import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
 
 test('sidebar collection export produces a valid Postman JSON download', async ({ page }) => {
-  await installMockNet(page);
+  const blocked = await installMockNet(page);
   const pageErrors = collectPageErrors(page);
   await gotoApp(page);
 
@@ -34,5 +34,6 @@ test('sidebar collection export produces a valid Postman JSON download', async (
   const firstColName = (await page.locator('.qa-col-name').first().textContent()).trim();
   expect(exported.info.name).toBe(firstColName);
 
+  expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });

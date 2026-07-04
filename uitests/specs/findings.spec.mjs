@@ -18,7 +18,7 @@ import {
 } from '../helpers/session.mjs';
 
 test('suppress, override severity, and annotate a seeded finding', async ({ page }) => {
-  await installMockNet(page);
+  const blocked = await installMockNet(page);
   const pageErrors = collectPageErrors(page);
   await seedFindings(page); // BEFORE gotoApp: addInitScript plants localStorage pre-boot
   await gotoApp(page);
@@ -79,5 +79,14 @@ test('suppress, override severity, and annotate a seeded finding', async ({ page
   await expect(row1Again.locator('.qa-find-suppressed')).toBeVisible();
   await expect(row1Again.locator('.qa-find-orig')).toBeVisible(); // severity-override display persists too
 
+  // Text-field lifecycle data (owner/note) also survives reload — re-open the
+  // detail row and re-assert both values, not just the badge/severity display.
+  await row1Again.click();
+  const detailAgain = page.locator('.qa-find-detail');
+  await expect(detailAgain).toBeVisible();
+  await expect(detailAgain.getByLabel('Owner')).toHaveValue('qa-team');
+  await expect(detailAgain.getByLabel('Note')).toHaveValue('tracked in QA-123');
+
+  expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });

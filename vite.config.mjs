@@ -58,8 +58,9 @@ export default defineConfig({
       },
     },
     // uitests/ 是 Playwright 規格(import '@playwright/test'),不能被 vitest
-    // 收集,否則 4 個檔案 collection error → npm test exit 1。Playwright 有自己
-    // 的 config(uitests/playwright.config.mjs),不受此排除影響。
+    // 收集,否則 uitests/ 的 Playwright spec 檔會 collection error → npm test
+    // exit 1。Playwright 有自己的 config(uitests/playwright.config.mjs),
+    // 不受此排除影響。
     exclude: [...configDefaults.exclude, 'uitests/**'],
     setupFiles: ['./src/setupTests.js'],
     reporters: ['verbose', 'html'],

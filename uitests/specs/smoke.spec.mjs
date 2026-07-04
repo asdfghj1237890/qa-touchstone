@@ -33,9 +33,7 @@ test('smoke: import → send → suite → export lands as a download', async ({
   await expect(page.locator('.qa-col-name', { hasText: COLLECTION_NAME })).toBeVisible();
 
   // ── send a request from the imported collection (fixture-backed, HARD assert) ──
-  await page
-    .locator('button.qa-req', { hasText: 'Search name: japan' })
-    .click();
+  await page.locator('button.qa-req', { hasText: 'Search name: japan' }).click();
   await page.getByTestId('send-request').click();
   // Unlike the packaged-app e2e (tolerant, real network), the fixture makes
   // the outcome deterministic: expect a 200 in the response bar.

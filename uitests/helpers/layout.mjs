@@ -22,14 +22,12 @@ export async function assertNavUsable(page, viewport, label) {
     expect(box, `${label}: nav button ${i} has a box`).not.toBeNull();
     expect(box.x, `${label}: nav button ${i} left edge`).toBeGreaterThanOrEqual(0);
     expect(box.y, `${label}: nav button ${i} top edge`).toBeGreaterThanOrEqual(0);
-    expect(
-      box.x + box.width,
-      `${label}: nav button ${i} right edge`
-    ).toBeLessThanOrEqual(viewport.width + 1);
-    expect(
-      box.y + box.height,
-      `${label}: nav button ${i} bottom edge`
-    ).toBeLessThanOrEqual(viewport.height + 1);
+    expect(box.x + box.width, `${label}: nav button ${i} right edge`).toBeLessThanOrEqual(
+      viewport.width + 1
+    );
+    expect(box.y + box.height, `${label}: nav button ${i} bottom edge`).toBeLessThanOrEqual(
+      viewport.height + 1
+    );
   }
 }
 

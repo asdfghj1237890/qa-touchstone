@@ -27,9 +27,10 @@ export async function gotoApp(page) {
 // as muted "resolved" rows, which still expand to the full lifecycle
 // controls (suppress / severity override / owner / note).
 //
-// NOTE: snapshots store no `title` — buildRows uses locationLabel as the
-// row title for snapshot-reconstructed rows, so specs assert on
-// locationLabel text. Item shape: SnapshotItem in src/qa/types.ts.
+// NOTE: SnapshotItem (src/qa/types.ts) DOES have a `title` field, and this
+// seed sets it — but FindingsPanel.buildRows() ignores it for
+// snapshot-reconstructed rows and uses locationLabel as the row title
+// instead, so specs assert on locationLabel text.
 export const SNAPSHOTS_KEY = 'qa_security_snapshots';
 export const SEED_LOCATION_1 = 'GET /api/users @admin';
 export const SEED_LOCATION_2 = 'bola:t1:userB->userA';

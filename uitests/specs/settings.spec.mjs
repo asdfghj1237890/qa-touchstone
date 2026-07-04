@@ -1,13 +1,16 @@
 // uitests/specs/settings.spec.mjs
 // Settings controls that must work identically in both engines:
-// AI privacy mode 3-state switch, and the zh-TW ↔ en-US language switch
-// (asserted via the settings nav label, which is translated live).
+// the AI privacy policy is locked to 'local' in this CI-safe harness (no
+// Tauri backend, no VITE_QA_ALLOW_EXTERNAL_AI flag), so this asserts the
+// lock is enforced and surfaced correctly rather than exercising a free
+// mode switch; plus the zh-TW ↔ en-US language switch (asserted via the
+// settings nav label, which is translated live).
 import { test, expect } from '@playwright/test';
 import { installMockNet } from '../helpers/mockNet.mjs';
 import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
 
-test('privacy mode switches and language round-trips', async ({ page }) => {
-  await installMockNet(page);
+test('privacy lock is enforced and language round-trips', async ({ page }) => {
+  const blocked = await installMockNet(page);
   const pageErrors = collectPageErrors(page);
   await gotoApp(page);
 
@@ -45,9 +48,7 @@ test('privacy mode switches and language round-trips', async ({ page }) => {
   // findings.spec): the lock banner and mode-description elements carry no
   // distinguishing class/testid today, so pinned en-US copy is the only
   // stable hook. Accepted trade-off: a copy tweak breaks this test loudly.
-  await expect(
-    page.getByText('External AI disabled by CI / organization policy.')
-  ).toBeVisible();
+  await expect(page.getByText('External AI disabled by CI / organization policy.')).toBeVisible();
   await expect(
     page.getByText(
       'Only a self-managed (loopback/private/attested) endpoint is allowed. Cloud providers are blocked.'
@@ -77,5 +78,6 @@ test('privacy mode switches and language round-trips', async ({ page }) => {
   await expect(lang.locator('.qa-dd-btn')).toContainText('English (US)');
   await expect(page.getByTestId('nav-settings')).toHaveAttribute('aria-label', 'Settings');
 
+  expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });

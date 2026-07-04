@@ -2,12 +2,12 @@
 // Resolution compatibility matrix: layout health assertions + screenshots
 // saved as human-review artifacts (NOT compared). Viewports approximate the
 // desktop window content area; 900x600 is the app's tauri.conf.json minimum.
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installMockNet } from '../helpers/mockNet.mjs';
-import { gotoApp } from '../helpers/session.mjs';
+import { collectPageErrors, gotoApp } from '../helpers/session.mjs';
 import {
   assertNoHorizontalOverflow,
   assertNavUsable,
@@ -35,7 +35,8 @@ const PAGES = [
 
 test('layout stays healthy across the resolution matrix', async ({ page, browserName }) => {
   mkdirSync(artifactsDir, { recursive: true });
-  await installMockNet(page);
+  const blocked = await installMockNet(page);
+  const pageErrors = collectPageErrors(page);
   await gotoApp(page);
 
   for (const viewport of VIEWPORTS) {
@@ -54,4 +55,7 @@ test('layout stays healthy across the resolution matrix', async ({ page, browser
       });
     }
   }
+
+  expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
+  expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });

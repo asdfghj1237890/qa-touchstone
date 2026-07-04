@@ -22,7 +22,7 @@ const PAGES = [
 ];
 
 test('every nav tab renders without page errors', async ({ page }) => {
-  await installMockNet(page);
+  const blocked = await installMockNet(page);
   const pageErrors = collectPageErrors(page);
   await gotoApp(page);
 
@@ -34,5 +34,6 @@ test('every nav tab renders without page errors', async ({ page }) => {
       await expect(page.locator(rootSel).first()).toBeVisible();
     }
   }
+  expect(blocked, `unmocked hosts requested:\n${blocked.join('\n')}`).toEqual([]);
   expect(pageErrors, `uncaught page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
