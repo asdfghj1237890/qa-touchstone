@@ -5,6 +5,8 @@ All notable changes to QA Touchstone are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-07-04
+
 ### Added
 - Cross-engine UI test layer (`uitests/`, Playwright): WebKit + Chromium
   engine proxies for macOS/Windows UI compatibility, deterministic offline
@@ -21,6 +23,10 @@ All notable changes to QA Touchstone are documented here. Versions follow
   share one Rust analysis path for the matrix engine (first slice of making the
   Rust core the single source of truth for security analysis).
 - **React 18 → 19** (`react` / `react-dom` 19.2, `@vitejs/plugin-react` 5.2).
+
+### Dependencies
+- Tauri 2.11.3 → 2.11.5; `rand` 0.9 → 0.10 (Rust); npm minor/patch group
+  (3 updates) and CI actions group (2 updates).
 
 ## [0.22.7] — 2026-06-29
 

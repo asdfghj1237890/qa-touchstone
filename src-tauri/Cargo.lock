@@ -3087,7 +3087,7 @@ dependencies = [
 
 [[package]]
 name = "qa-touchstone"
-version = "0.22.7"
+version = "0.23.0"
 dependencies = [
  "chrono",
  "hex",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "qa-touchstone-ci"
-version = "0.22.7"
+version = "0.23.0"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -3129,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "qa_touchstone_core"
-version = "0.22.7"
+version = "0.23.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
