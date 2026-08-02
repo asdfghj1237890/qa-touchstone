@@ -170,6 +170,14 @@ jobs:
         working-directory: e2e
         run: npm ci --ignore-scripts
 
+      # e2e/ 有自己的 lockfile，不在 frontend job 那支 npm audit 的範圍內 ——
+      # 少了這步，WDIO 依賴樹的漏洞永遠不會被 CI 擋下來（brace-expansion 與
+      # fast-xml-parser 就是這樣長期只出現在 Dependabot alerts、CI 卻全綠）。
+      # 擺在 build 之前：audit 只要幾秒，不必等 release build 跑完才失敗。
+      - name: Audit E2E dependencies
+        working-directory: e2e
+        run: npm audit --audit-level=high
+
       # rust-cache 會快取 ~/.cargo/bin，第二次起這步是 no-op。
       - name: Install tauri-driver
         run: command -v tauri-driver >/dev/null || cargo install tauri-driver --locked
