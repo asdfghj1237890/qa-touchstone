@@ -66,6 +66,13 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --audit-level=high
 
+      # uitests/ 的 playwright 樹沒有任何 job 會安裝（CI 不跑 GUI 測試），但
+      # npm audit 只讀 lockfile、不需要 node_modules，所以能在這裡免費補上第
+      # 四份 lockfile 的守門 —— 讓四份 lockfile 全部都有 audit 覆蓋。
+      - name: Audit UI test dependencies
+        working-directory: uitests
+        run: npm audit --audit-level=high
+
   rust:
     runs-on: ubuntu-latest
     steps:

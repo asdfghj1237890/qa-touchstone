@@ -29,6 +29,18 @@ updates:
       e2e-npm-minor-patch:
         update-types: ["minor", "patch"]
 
+  # uitests/ 有自己的 lockfile，但 CI 沒有任何 job 會跑它（playwright 只在本機
+  # 手動執行），所以在這裡補上更新來源 —— 否則它是四份 lockfile 裡唯一既沒有
+  # Dependabot alert、也沒有 audit gate 的一份，會無聲腐化。
+  - package-ecosystem: npm
+    directory: /uitests
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      uitests-npm-minor-patch:
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
