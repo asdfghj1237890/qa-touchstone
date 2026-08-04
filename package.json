@@ -96,6 +96,7 @@
     "svgo": ">=2.0.0",
     "css-select": ">=4.0.0",
     "js-yaml": "^4.3.0",
+    "undici": "^7.29.0",
     "minimatch@3": {
       "brace-expansion": "^1.1.17"
     },
