@@ -169,12 +169,17 @@ describe('BolaPanel — runs on the canned path', () => {
       timeout: 4000,
     });
     expect(spy).toHaveBeenCalled();
-    const last = spy.mock.calls.at(-1)[0];
-    expect(
-      last.some(
-        (x) => x.engine === 'bola' && x.ref && x.ref.testId && x.ref.attackerId && x.ref.ownerId
-      )
-    ).toBe(true);
+    // Same race as the rate-limit panel: onFindings fires from an effect keyed on results, so
+    // the last recorded call can trail the DOM commit by a render — retry instead of sampling
+    // once. This one has not been seen to flake, but the shape is identical.
+    await waitFor(() => {
+      const last = spy.mock.calls.at(-1)?.[0] ?? [];
+      expect(
+        last.some(
+          (x) => x.engine === 'bola' && x.ref && x.ref.testId && x.ref.attackerId && x.ref.ownerId
+        )
+      ).toBe(true);
+    });
   });
 
   it('warns when the marked id location cannot apply to the request (bad body path)', () => {

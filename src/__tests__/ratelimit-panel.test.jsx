@@ -154,8 +154,13 @@ describe('RateLimitPanel — runs on the canned path', () => {
       timeout: 4000,
     });
     expect(spy).toHaveBeenCalled();
-    const last = spy.mock.calls.at(-1)[0];
-    expect(last.some((x) => x.engine === 'ratelimit' && x.ref && x.ref.testId)).toBe(true);
+    // onFindings fires from an effect keyed on results, so the spy collects a call per update.
+    // The DOM verdict above and that effect need not flush in the same tick, so the last
+    // recorded call can trail the commit by a render — retry instead of sampling once.
+    await waitFor(() => {
+      const last = spy.mock.calls.at(-1)?.[0] ?? [];
+      expect(last.some((x) => x.engine === 'ratelimit' && x.ref && x.ref.testId)).toBe(true);
+    });
   });
 
   it('reports pass when a rate-limit header is present', async () => {
