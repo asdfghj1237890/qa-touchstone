@@ -21,5 +21,5 @@ reqwest = { version = "0.13", features = ["gzip", "deflate", "brotli"] }
 wiremock = "0.6"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde_json = "1"
-base64 = "0.22"
+base64 = "0.23"
 roxmltree = "0.21"
