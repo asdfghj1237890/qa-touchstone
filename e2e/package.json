@@ -7,7 +7,7 @@
     "test": "wdio run ./wdio.conf.mjs"
   },
   "engines": {
-    "node": ">=22.19.0"
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1"
   },
   "devDependencies": {
     "@wdio/cli": "^10.2.0",

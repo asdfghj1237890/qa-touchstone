@@ -16,6 +16,7 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,7 +29,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 26.12.1
           cache: npm
@@ -63,15 +64,53 @@ jobs:
       - name: Coverage gate
         run: npm run test:coverage:ci
 
-      - name: Audit production dependencies
+      - name: Audit npm dependencies (including development tools)
         run: npm audit --audit-level=high
 
-      # uitests/ 的 playwright 樹沒有任何 job 會安裝（CI 不跑 GUI 測試），但
-      # npm audit 只讀 lockfile、不需要 node_modules，所以能在這裡免費補上第
-      # 四份 lockfile 的守門 —— 讓四份 lockfile 全部都有 audit 覆蓋。
+      # Audit the isolated Playwright lockfile even when the UI job fails to install browsers.
       - name: Audit UI test dependencies
         working-directory: uitests
         run: npm audit --audit-level=high
+
+  ui-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 26.12.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            uitests/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm ci --prefix uitests --ignore-scripts
+
+      - name: Install browser engines and system dependencies
+        working-directory: uitests
+        run: npx --no-install playwright install --with-deps chromium webkit
+
+      - name: Run Chromium and WebKit UI tests
+        working-directory: uitests
+        run: npm test
+
+      - name: Upload UI failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-test-logs
+          path: |
+            uitests/test-results/
+            uitests/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
 
   rust:
     runs-on: ubuntu-latest
@@ -92,7 +131,7 @@ jobs:
           toolchain: stable
 
       - name: Cache Rust build
-        uses: swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        uses: swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           workspaces: src-tauri -> target
 
@@ -121,7 +160,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@b6b84cf49ebfe0176417bdce007c624f0db37f20 # v2
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2
         with:
           tool: cargo-audit
 
@@ -136,7 +175,9 @@ jobs:
   # Linux 不需要 k6：無 tauri.linux.conf.json → 無 bundle resources 宣告
   # （Windows 本機跑法見 e2e/README.md —— 那邊需要先 setup-k6）。
   e2e-smoke:
-    runs-on: ubuntu-latest
+    # ubuntu-latest now uses 26.04, where webkit2gtk-driver was replaced.
+    # Keep Tauri's GTK 3 / WebKit 4.1 application and driver on the tested image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       # webkit2gtk 在 Xvfb / software GL 下的已知渲染 workaround。
@@ -157,12 +198,12 @@ jobs:
           toolchain: stable
 
       - name: Cache Rust build
-        uses: swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        uses: swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
         with:
           workspaces: src-tauri -> target
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 26.12.1
           cache: npm
@@ -201,7 +242,7 @@ jobs:
 
       - name: Upload failure diagnostics (screenshots)
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-logs
           path: e2e/logs/
