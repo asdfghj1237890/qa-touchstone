@@ -33,7 +33,8 @@ npm run test:headed                      # watch it run
 npm run report                           # open last HTML report
 ```
 
-Or from the repo root: `npm run test:gui`.
+Or from the repo root: `npm run test:gui`. The `ui-tests` CI job runs both
+engines against the production bundle on Ubuntu 24.04 for every PR and master push.
 
 ## Determinism
 
