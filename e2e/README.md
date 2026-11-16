@@ -31,6 +31,9 @@ and a display server.** In practice that means:
 
 ## How it works
 
+Use Node 22.23.4+ within 22.x, 24.22.1+ within 24.x, or 26.12.1+.
+CI uses Node 26.12.1 on Ubuntu 24.04, matching WebdriverIO 10.2's runtime requirements.
+
 - [`tauri-driver`](https://crates.io/crates/tauri-driver) launches the release
   binary and proxies WebDriver to the platform's native driver
   (WebKitWebDriver on Linux, msedgedriver on Windows; **macOS unsupported**).
