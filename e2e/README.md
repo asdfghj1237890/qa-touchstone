@@ -94,6 +94,15 @@ seam, fs polling.
   `~/.cargo/bin` is on PATH.
 - Failure screenshots land in `e2e/logs/` (uploaded as a CI artifact).
 
+## Dependency maintenance
+
+`npm run test:dependencies` checks Mocha's brace-pattern discovery and ignore
+filters, Archiver's nested-file/dotfile output, safe JavaScript serialization,
+and WDIO CLI startup before CI builds the desktop binary. These exercise the
+callers affected by the scoped Mocha glob/minimatch and Archiver readdir-glob
+security overrides. Keep those overrides scoped to their consumers; remove
+them when the parent packages adopt the patched versions themselves.
+
 ## Deliberately out of scope
 
 Local stub server (send/scan offline determinism), driving the endpoint picker

@@ -1,19 +1,17 @@
 # cargo-audit configuration (read by the `cargo audit` CI job, which runs with
 # working-directory: src-tauri — see .github/workflows/ci.yml).
 
-[advisories]
-# Temporarily ignored, with rationale. Remove each ID once quick-xml ships a
-# fix and `plist` bumps to it (track via Dependabot / `cargo update -p plist`).
+# plist 1.10.4 uses patched quick-xml, so the former RUSTSEC-2026-0194 and
+# RUSTSEC-2026-0195 exceptions are no longer needed.
 #
-# RUSTSEC-2026-0194 / RUSTSEC-2026-0195 — quick-xml (high): quadratic attribute
-# parsing and unbounded namespace-declaration allocation, both DoS-via-malicious-
-# XML. quick-xml is pulled in ONLY at build time via plist -> tauri-utils ->
-# tauri-build (parsing the app's own Info.plist during desktop bundling). It is
-# NOT in the shipped headless CLI (`cargo tree -p qa-touchstone-ci` has no
-# quick-xml — enforced by the CI leak-gate) and QA Touchstone never parses
-# untrusted XML with it at runtime. plist 1.9.0 caps quick-xml at 0.39.4, so
-# there is no compatible lockfile bump yet. Real exposure: ~nil.
-ignore = [
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-]
+# Two informational warnings remain visible in Tauri's Linux GTK 0.18 graph:
+# - RUSTSEC-2024-0370: proc-macro-error, through glib-macros / gtk3-macros.
+# - RUSTSEC-2024-0429: glib 0.18's unsound VariantStrIter implementation.
+# The fixed GTK 0.19 / glib 0.22 stack requires coordinated upstream changes:
+# https://github.com/tauri-apps/wry/pull/1843
+# https://github.com/tauri-apps/tao/pull/1332
+# Revisit when those changes ship in stable Tauri. Keep these warnings visible;
+# do not add them to ignore or replace the stable backend with draft branches.
+
+[advisories]
+ignore = []
