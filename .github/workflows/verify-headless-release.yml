@@ -1,0 +1,67 @@
+name: verify-headless-release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  headless-install-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 26.12.1
+
+      - name: Resolve release version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/resolve-release-version.mjs
+
+      - name: Install QA Touchstone CI from release asset
+        id: setup
+        uses: ./setup-ci
+        with:
+          version: ${{ inputs.tag }}
+
+      - name: Smoke setup-ci output path
+        env:
+          QTC_BIN: ${{ steps.setup.outputs.path }}
+          QTC_EXPECT_VERSION: ${{ inputs.tag }}
+        run: |
+          node -e '
+            const { spawnSync } = require("node:child_process");
+            const expected = process.env.QTC_EXPECT_VERSION.replace(/^v/, "");
+            const r = spawnSync(process.env.QTC_BIN, ["--version"], { encoding: "utf8" });
+            if (r.status !== 0) {
+              process.stderr.write(r.stderr || r.stdout || "qa-touchstone-ci --version failed");
+              process.exit(r.status || 1);
+            }
+            const m = r.stdout.trim().match(/^qa-touchstone-ci\s+(\S+)$/);
+            if (!m || m[1] !== expected) {
+              process.stderr.write(`version mismatch: expected ${expected}, got ${r.stdout}`);
+              process.exit(1);
+            }
+          '
+
+      - name: Functional test setup-ci PATH CLI
+        env:
+          QA_TOUCHSTONE_CI_PATH_UNDER_TEST: '1'
+          QA_TOUCHSTONE_CI_SKIP_BUILD: '1'
+          QA_TOUCHSTONE_CI_EXPECT_VERSION: ${{ inputs.tag }}
+        run: node scripts/headless-functional.mjs
+

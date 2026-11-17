@@ -1,0 +1,70 @@
+name: verify-published-release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.snapshot.outputs.tag }}
+      state: ${{ steps.snapshot.outputs.state }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 26.12.1
+      - name: Verify published downloads and record immutable release state
+        id: snapshot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/verify-published-release.mjs capture
+
+  ci:
+    needs: inventory
+    uses: ./.github/workflows/ci.yml
+
+  desktop:
+    needs: [inventory, ci]
+    uses: ./.github/workflows/verify-desktop-release.yml
+    with:
+      tag: ${{ needs.inventory.outputs.tag }}
+
+  headless:
+    needs: [inventory, ci]
+    uses: ./.github/workflows/verify-headless-release.yml
+    with:
+      tag: ${{ needs.inventory.outputs.tag }}
+
+  npx:
+    needs: [inventory, ci]
+    if: ${{ vars.PUBLISH_NPM == 'true' }}
+    uses: ./.github/workflows/verify-npx-release.yml
+    with:
+      tag: ${{ needs.inventory.outputs.tag }}
+
+  preservation:
+    needs: [inventory, ci, desktop, headless, npx]
+    if: ${{ always() && needs.inventory.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 26.12.1
+      - name: Require all verification gates and unchanged tag and assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.inventory.outputs.tag }}
+          RELEASE_SNAPSHOT: ${{ needs.inventory.outputs.state }}
+          VERIFICATION_RESULTS: ${{ toJSON(needs) }}
+          EXPECT_NPX: ${{ vars.PUBLISH_NPM }}
+        run: node scripts/verify-published-release.mjs assert
