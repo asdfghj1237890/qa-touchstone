@@ -110,7 +110,8 @@ async function main() {
           (skipBuild ? 'run without --skip-build.' : '')
       );
     }
-    if (candidates.length !== 1) throw new Error(`ambiguous DMG selection: ${candidates.join(', ')}`);
+    if (candidates.length !== 1)
+      throw new Error(`ambiguous DMG selection: ${candidates.join(', ')}`);
     dmgPath = join(dmgDir, candidates[0]);
     return candidates[0];
   });
