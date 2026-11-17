@@ -8,15 +8,7 @@
 //       （放好 resources/k6.exe）。本腳本只組裝，不編譯。
 //
 // 用法：npm run package:portable
-import {
-  readFileSync,
-  existsSync,
-  rmSync,
-  mkdirSync,
-  copyFileSync,
-  readdirSync,
-  statSync,
-} from 'node:fs';
+import { readFileSync, existsSync, rmSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
@@ -38,17 +30,10 @@ function die(msg) {
 if (!existsSync(releaseDir)) die(`找不到 ${releaseDir}；請先執行 \`npm run tauri:build\``);
 if (!existsSync(k6)) die(`找不到 ${k6}；請先執行 \`npm run setup:k6:release\``);
 
-// 找 release exe（排除 NSIS 安裝檔 *setup*）。取「最新修改」的那個——
-// target/release 可能殘留改名前的舊 exe（如 qa-companion.exe），字母序會選到
-// 過期檔，按 mtime 才保證打包到本次 build 的產物。
-const candidates = readdirSync(releaseDir)
-  .filter((f) => f.toLowerCase().endsWith('.exe') && !/setup/i.test(f))
-  .map((f) => path.join(releaseDir, f));
-if (!candidates.length) die(`${releaseDir} 下找不到 portable exe（請先 \`npm run tauri:build\`）`);
-const exe = candidates.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
-console.log(
-  `portable: 使用 ${path.basename(exe)}（最新修改：${statSync(exe).mtime.toISOString()}）`
-);
+// 明確指定桌面程式，避免把同目錄下的 headless CLI 或舊版 EXE 打包進去。
+const exe = path.join(releaseDir, 'qa-touchstone.exe');
+if (!existsSync(exe)) die(`找不到 ${exe}（請先 \`npm run tauri:build\`）`);
+console.log(`portable: 使用 ${path.basename(exe)}`);
 
 const dist = path.join(root, 'dist');
 const stageRoot = path.join(dist, 'QA Touchstone');
