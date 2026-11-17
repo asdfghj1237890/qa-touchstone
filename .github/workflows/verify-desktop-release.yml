@@ -17,6 +17,8 @@ on:
       - '.github/workflows/verify-desktop-release.yml'
       - 'scripts/verify-macos-install.mjs'
       - 'scripts/compare-desktop-binaries.mjs'
+      - 'scripts/release-artifacts.mjs'
+      - 'scripts/resolve-release-version.mjs'
 
 permissions:
   contents: read
@@ -41,15 +43,7 @@ jobs:
           node-version: 26.12.1
 
       - name: Resolve release version
-        shell: bash
-        run: |
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          const tag = process.env.RELEASE_TAG || `v${pkg.version}`;
-          if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Expected vX.Y.Z release tag');
-          fs.appendFileSync(process.env.GITHUB_ENV, `RELEASE_TAG=${tag}\nQA_TOUCHSTONE_EXPECT_VERSION=${tag.slice(1)}\n`);
-          NODE
+        run: node scripts/resolve-release-version.mjs
 
       - name: Verify published macOS DMG installation and launch
         if: runner.os == 'macOS'

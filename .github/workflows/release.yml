@@ -1,4 +1,5 @@
 name: release
+run-name: release ${{ inputs.tag || github.ref_name }} ${{ github.event_name == 'workflow_dispatch' && '(verify existing)' || '(publish)' }}
 
 # Build the Tauri desktop app for Windows + macOS and publish a GitHub Release
 # whenever a version tag (vX.Y.Z) is pushed.
@@ -6,55 +7,23 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to verify without changing tag or assets (vX.Y.Z)
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  # 測試門檻：前端 + Rust 測試全綠才允許 build 發佈。
   test:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: 26.12.1
-          cache: npm
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: stable
-
-      - name: Cache Rust build
-        uses: swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Run frontend tests (vitest)
-        run: npm test
-
-      # Tauri's build script validates the bundle resources declared in
-      # tauri.windows.conf.json (resources/k6.exe), so materialize k6 before
-      # cargo test or the build.rs fails with "resource path doesn't exist".
-      - name: Fetch bundled k6 binary
-        run: npm run setup:k6
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Run headless functional test
-        env:
-          QA_TOUCHSTONE_CI_REAL_K6_BIN: src-tauri/resources/k6.exe
-        run: node scripts/headless-functional.mjs
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/ci.yml
 
   build:
+    if: ${{ github.event_name == 'push' }}
     needs: test
     strategy:
       fail-fast: false
@@ -183,12 +152,14 @@ jobs:
           gh release upload "${{ github.ref_name }}" "$zip" --clobber
 
   desktop-install-smoke:
+    if: ${{ github.event_name == 'push' }}
     needs: build
     uses: ./.github/workflows/verify-desktop-release.yml
     with:
       tag: ${{ github.ref_name }}
 
   headless-cli:
+    if: ${{ github.event_name == 'push' }}
     needs: build
     strategy:
       fail-fast: false
@@ -301,57 +272,14 @@ jobs:
 
   headless-install-smoke:
     needs: headless-cli
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: 26.12.1
-
-      - name: Install QA Touchstone CI from release asset
-        id: setup
-        uses: ./setup-ci
-        with:
-          version: ${{ github.ref_name }}
-
-      - name: Smoke setup-ci output path
-        env:
-          QTC_BIN: ${{ steps.setup.outputs.path }}
-          QTC_EXPECT_VERSION: ${{ github.ref_name }}
-        run: |
-          node -e '
-            const { spawnSync } = require("node:child_process");
-            const expected = process.env.QTC_EXPECT_VERSION.replace(/^v/, "");
-            const r = spawnSync(process.env.QTC_BIN, ["--version"], { encoding: "utf8" });
-            if (r.status !== 0) {
-              process.stderr.write(r.stderr || r.stdout || "qa-touchstone-ci --version failed");
-              process.exit(r.status || 1);
-            }
-            const m = r.stdout.trim().match(/^qa-touchstone-ci\s+(\S+)$/);
-            if (!m || m[1] !== expected) {
-              process.stderr.write(`version mismatch: expected ${expected}, got ${r.stdout}`);
-              process.exit(1);
-            }
-          '
-
-      - name: Functional test setup-ci PATH CLI
-        env:
-          QA_TOUCHSTONE_CI_PATH_UNDER_TEST: '1'
-          QA_TOUCHSTONE_CI_SKIP_BUILD: '1'
-          QA_TOUCHSTONE_CI_EXPECT_VERSION: ${{ github.ref_name }}
-        run: node scripts/headless-functional.mjs
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/verify-headless-release.yml
+    with:
+      tag: ${{ github.ref_name }}
 
   publish-npm:
-    needs: headless-install-smoke
-    if: ${{ vars.PUBLISH_NPM == 'true' }}
+    needs: [headless-install-smoke, desktop-install-smoke]
+    if: ${{ github.event_name == 'push' && vars.PUBLISH_NPM == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -383,28 +311,15 @@ jobs:
 
   npx-install-smoke:
     needs: publish-npm
-    if: ${{ vars.PUBLISH_NPM == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
+    if: ${{ github.event_name == 'push' && vars.PUBLISH_NPM == 'true' }}
+    uses: ./.github/workflows/verify-npx-release.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  verify-existing-release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: 26.12.1
-
-      - name: Functional test npx launcher
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          QA_TOUCHSTONE_CI_NPX_UNDER_TEST="$version" \
-          QA_TOUCHSTONE_CI_EXPECT_VERSION="$version" \
-            node scripts/headless-functional.mjs
+    uses: ./.github/workflows/verify-published-release.yml
+    with:
+      tag: ${{ inputs.tag }}

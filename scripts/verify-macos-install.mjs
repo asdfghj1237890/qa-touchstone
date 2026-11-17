@@ -23,6 +23,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { selectDmg } from './release-artifacts.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -97,23 +98,9 @@ async function main() {
   const dmgDir = join(root, 'src-tauri', 'target', 'release', 'bundle', 'dmg');
   let dmgPath = null;
   step(`locate DMG for v${expectedVersion}`, () => {
-    // Local bundles use spaces; published tauri-action assets use dots.
-    const prefixes = [`QA Touchstone_${expectedVersion}_`, `QA.Touchstone_${expectedVersion}_`];
-    const candidates = existsSync(dmgDir)
-      ? readdirSync(dmgDir).filter(
-          (f) => prefixes.some((prefix) => f.startsWith(prefix)) && f.endsWith('.dmg')
-        )
-      : [];
-    if (candidates.length === 0) {
-      throw new Error(
-        `no DMG matching v${expectedVersion} in ${dmgDir} — build failed or version mismatch? ` +
-          (skipBuild ? 'run without --skip-build.' : '')
-      );
-    }
-    if (candidates.length !== 1)
-      throw new Error(`ambiguous DMG selection: ${candidates.join(', ')}`);
-    dmgPath = join(dmgDir, candidates[0]);
-    return candidates[0];
+    const name = selectDmg(existsSync(dmgDir) ? readdirSync(dmgDir) : [], expectedVersion);
+    dmgPath = join(dmgDir, name);
+    return name;
   });
 
   // 3. Mount read-only.
