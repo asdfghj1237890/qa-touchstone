@@ -88,6 +88,22 @@ jobs:
       - name: Fetch bundled k6 binary
         run: npm run setup:k6:release
 
+      - name: Read changelog for this version
+        id: notes
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8').replace(/\r\n/g, '\n');
+          const start = changelog.indexOf(`## [${version}]`);
+          if (start < 0) throw new Error(`Missing changelog for ${version}`);
+          const section = changelog.slice(start).split('\n## [')[0];
+          const notes = section.slice(section.indexOf('\n') + 1).trim();
+          if (!notes) throw new Error('Release changelog is empty');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `body<<QA_TOUCHSTONE_NOTES\n${notes}\nQA_TOUCHSTONE_NOTES\n`);
+          NODE
+
       # tauri-action runs the config's beforeBuildCommand (npm run build), builds
       # the platform bundle (NSIS on Windows, DMG on macOS via the per-platform
       # tauri.<os>.conf.json), and publishes a GitHub Release with the installers.
@@ -101,6 +117,8 @@ jobs:
           releaseDraft: false
           prerelease: false
           releaseBody: |
+            ${{ steps.notes.outputs.body }}
+
             Desktop installers for **Windows** and **macOS**. These builds are **not code-signed**, so the OS warns on first launch — bypass steps below. English first, 中文 在後。
 
             ## English
@@ -157,14 +175,81 @@ jobs:
           $ver = "${{ github.ref_name }}" -replace '^v',''
           $stage = "portable/QA Touchstone"
           New-Item -ItemType Directory -Force -Path "$stage/resources" | Out-Null
-          $exe = Get-ChildItem "src-tauri/target/release/*.exe" |
-                 Where-Object { $_.Name -notlike '*setup*' } | Select-Object -First 1
-          if (-not $exe) { throw "No portable exe found under src-tauri/target/release" }
+          $exe = Get-Item -LiteralPath "src-tauri/target/release/qa-touchstone.exe" -ErrorAction Stop
           Copy-Item $exe.FullName "$stage/QA Touchstone.exe"
           Copy-Item "src-tauri/resources/k6.exe" "$stage/resources/k6.exe"
           $zip = "QA.Touchstone_${ver}_x64-portable.zip"
           Compress-Archive -Path "$stage" -DestinationPath $zip -Force
           gh release upload "${{ github.ref_name }}" "$zip" --clobber
+
+  desktop-install-smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: 26.12.1
+
+      - name: Verify published macOS DMG installation and launch
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p src-tauri/target/release/bundle/dmg
+          gh release download "${{ github.ref_name }}" --pattern '*.dmg' --dir src-tauri/target/release/bundle/dmg
+          npm run test:install:mac -- --skip-build
+
+      - name: Verify published Windows installer and portable application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          $downloads = Join-Path $env:RUNNER_TEMP 'qa-touchstone-downloads'
+          $installed = Join-Path $env:RUNNER_TEMP 'qa-touchstone-installed'
+          $portable = Join-Path $env:RUNNER_TEMP 'qa-touchstone-portable'
+          New-Item -ItemType Directory -Force -Path $downloads | Out-Null
+          gh release download "${{ github.ref_name }}" --pattern '*-setup.exe' --pattern '*-portable.zip' --dir $downloads
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
+          $setup = Get-Item -LiteralPath (Join-Path $downloads "QA.Touchstone_${ver}_x64-setup.exe")
+          $zip = Join-Path $downloads "QA.Touchstone_${ver}_x64-portable.zip"
+          Expand-Archive -LiteralPath $zip -DestinationPath $portable
+          $portableExe = Get-Item -LiteralPath (Join-Path $portable 'QA Touchstone/QA Touchstone.exe')
+          $setupProcess = Start-Process -FilePath $setup.FullName -ArgumentList '/S',"/D=$installed" -WindowStyle Hidden -Wait -PassThru
+          if ($setupProcess.ExitCode -ne 0) { throw "Installer exited with $($setupProcess.ExitCode)" }
+          $apps = @(Get-ChildItem -LiteralPath $installed -Filter '*.exe' -File | Where-Object { $_.Name -notlike '*uninstall*' })
+          if ($apps.Count -ne 1) { throw "Expected one installed app, got $($apps.Count)" }
+          $installedExe = $apps[0]
+          $expectedHash = (Get-FileHash -LiteralPath $portableExe.FullName -Algorithm SHA256).Hash
+          if ((Get-FileHash -LiteralPath $installedExe.FullName -Algorithm SHA256).Hash -ne $expectedHash) {
+            throw 'Installer and portable desktop binaries differ'
+          }
+          foreach ($exe in @($installedExe, $portableExe)) {
+            $actualVersion = (($exe.VersionInfo.FileVersion -split '\.')[0..2] -join '.')
+            if ($actualVersion -ne $ver) { throw "Desktop version mismatch: $actualVersion" }
+            $k6 = Join-Path $exe.DirectoryName 'resources/k6.exe'
+            & $k6 version
+            if ($LASTEXITCODE -ne 0) { throw 'Bundled k6 failed' }
+            $app = Start-Process -FilePath $exe.FullName -WindowStyle Hidden -PassThru
+            try {
+              Start-Sleep -Seconds 10
+              if ($app.HasExited) { throw "Desktop exited early: $($app.ExitCode)" }
+              Write-Host "PASS: $($exe.FullName) v$actualVersion launched with bundled k6"
+            } finally {
+              if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+            }
+          }
 
   headless-cli:
     needs: build

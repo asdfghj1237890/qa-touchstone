@@ -5,6 +5,35 @@ All notable changes to QA Touchstone are documented here. Versions follow
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-11-17
+
+### Security
+- Refresh frontend, test-tooling, and Rust dependencies to incorporate the
+  accumulated security patches since 0.23.0, including PDF.js, Zod, h2,
+  Quinn, rustls, WebPKI, minimatch, glob, and serialize-javascript.
+- Update plist / quick-xml and remove both resolved RustSec audit exceptions.
+  All three npm lockfiles now audit clean; Rust has no ignored advisories.
+- Keep stable Tauri and leave the two upstream GTK-chain warnings visible
+  (glib: RUSTSEC-2024-0429; proc-macro-error: RUSTSEC-2024-0370), with upgrade
+  tracking recorded in the Cargo audit configuration.
+
+### Fixed
+- Restore WebdriverIO 10.2 startup by resolving brace-expansion compatibly
+  with its minimatch consumers; verify Mocha, Archiver, and serializer behavior.
+- Select the desktop executable explicitly when packaging Windows portable
+  builds so a cached headless CLI cannot be included in its place.
+
+### Changed
+- Update stable Tauri to 2.12.6 and refresh the React 19, Vite, PDF.js,
+  Playwright, and WebdriverIO dependency groups.
+- Pin CI Node to 26.12.1 and document the supported patched Node versions
+  required by the WebdriverIO 10.2 harness.
+- Restore Linux desktop E2E on Ubuntu 24.04, make Chromium / WebKit UI tests
+  permanent CI gates, and verify real PDF imports with the bundled worker.
+- Add Windows / macOS Rust workspace and headless functional checks, plus
+  desktop release installation checks, while retaining the audit and coverage
+  thresholds.
+
 ## [0.23.0] — 2026-07-04
 
 ### Added

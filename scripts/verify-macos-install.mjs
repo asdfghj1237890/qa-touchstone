@@ -137,6 +137,14 @@ async function main() {
     if (bundleId !== BUNDLE_ID) {
       throw new Error(`CFBundleIdentifier is "${bundleId}", expected "${BUNDLE_ID}"`);
     }
+    const version = execFileSync(
+      '/usr/libexec/PlistBuddy',
+      ['-c', 'Print :CFBundleShortVersionString', plist],
+      { encoding: 'utf8' }
+    ).trim();
+    if (version !== pkg.version) {
+      throw new Error(`bundle version is "${version}", expected "${pkg.version}"`);
+    }
     binaryName = execFileSync(
       '/usr/libexec/PlistBuddy',
       ['-c', 'Print :CFBundleExecutable', plist],
@@ -147,7 +155,8 @@ async function main() {
     if (!(st.mode & 0o111)) throw new Error(`${binPath} is not executable`);
     const k6 = join(mountedApp, 'Contents', 'Resources', 'resources', 'k6');
     if (!existsSync(k6)) throw new Error(`bundled k6 missing at ${k6}`);
-    return `${bundleId}, bin=${binaryName}`;
+    const k6Version = execFileSync(k6, ['version'], { encoding: 'utf8' }).trim();
+    return `${bundleId}, v${version}, bin=${binaryName}, ${k6Version}`;
   });
 
   // 5. "Install": copy out of the DMG to a temp dir (not /Applications).

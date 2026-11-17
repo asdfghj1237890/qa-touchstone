@@ -542,7 +542,7 @@ jobs:
       contents: read
       security-events: write
     env:
-      QA_TOUCHSTONE_VERSION: v0.23.0
+      QA_TOUCHSTONE_VERSION: v0.23.1
       API_TOKEN: ${{ secrets.API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
