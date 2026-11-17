@@ -31,6 +31,8 @@ const APP_NAME = 'QA Touchstone.app';
 const ALIVE_SECONDS = 10;
 
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const expectedVersion = (process.env.QA_TOUCHSTONE_EXPECT_VERSION || pkg.version).replace(/^v/, '');
+if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)) throw new Error('Invalid expected release version');
 const skipBuild = process.argv.includes('--skip-build');
 
 const results = [];
@@ -77,7 +79,7 @@ process.on('SIGINT', () => process.exit(1));
 
 async function main() {
   const t0 = Date.now();
-  console.log(`\nmacOS install verification — v${pkg.version}\n`);
+  console.log(`\nmacOS install verification — v${expectedVersion}\n`);
 
   if (process.platform !== 'darwin') {
     console.error('This script only runs on macOS.');
@@ -94,20 +96,21 @@ async function main() {
   // (a pre-rename "QA Companion_0.13.1" DMG exists there today).
   const dmgDir = join(root, 'src-tauri', 'target', 'release', 'bundle', 'dmg');
   let dmgPath = null;
-  step(`locate DMG for v${pkg.version}`, () => {
-    const prefix = `QA Touchstone_${pkg.version}_`;
+  step(`locate DMG for v${expectedVersion}`, () => {
+    // Local bundles use spaces; published tauri-action assets use dots.
+    const prefixes = [`QA Touchstone_${expectedVersion}_`, `QA.Touchstone_${expectedVersion}_`];
     const candidates = existsSync(dmgDir)
-      ? readdirSync(dmgDir).filter((f) => f.startsWith(prefix) && f.endsWith('.dmg'))
+      ? readdirSync(dmgDir).filter(
+          (f) => prefixes.some((prefix) => f.startsWith(prefix)) && f.endsWith('.dmg')
+        )
       : [];
     if (candidates.length === 0) {
       throw new Error(
-        `no "${prefix}*.dmg" in ${dmgDir} — build failed or version mismatch? ` +
+        `no DMG matching v${expectedVersion} in ${dmgDir} — build failed or version mismatch? ` +
           (skipBuild ? 'run without --skip-build.' : '')
       );
     }
-    // A single-arch local build yields exactly one DMG for the version-pinned
-    // prefix. If multi-arch DMGs ever coexist here, pick the newest by mtime
-    // instead (as scripts/package-portable.mjs does).
+    if (candidates.length !== 1) throw new Error(`ambiguous DMG selection: ${candidates.join(', ')}`);
     dmgPath = join(dmgDir, candidates[0]);
     return candidates[0];
   });
@@ -142,8 +145,8 @@ async function main() {
       ['-c', 'Print :CFBundleShortVersionString', plist],
       { encoding: 'utf8' }
     ).trim();
-    if (version !== pkg.version) {
-      throw new Error(`bundle version is "${version}", expected "${pkg.version}"`);
+    if (version !== expectedVersion) {
+      throw new Error(`bundle version is "${version}", expected "${expectedVersion}"`);
     }
     binaryName = execFileSync(
       '/usr/libexec/PlistBuddy',
