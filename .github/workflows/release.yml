@@ -184,72 +184,9 @@ jobs:
 
   desktop-install-smoke:
     needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.platform }}
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: 26.12.1
-
-      - name: Verify published macOS DMG installation and launch
-        if: runner.os == 'macOS'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p src-tauri/target/release/bundle/dmg
-          gh release download "${{ github.ref_name }}" --pattern '*.dmg' --dir src-tauri/target/release/bundle/dmg
-          npm run test:install:mac -- --skip-build
-
-      - name: Verify published Windows installer and portable application
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $ver = "${{ github.ref_name }}" -replace '^v',''
-          $downloads = Join-Path $env:RUNNER_TEMP 'qa-touchstone-downloads'
-          $installed = Join-Path $env:RUNNER_TEMP 'qa-touchstone-installed'
-          $portable = Join-Path $env:RUNNER_TEMP 'qa-touchstone-portable'
-          New-Item -ItemType Directory -Force -Path $downloads | Out-Null
-          gh release download "${{ github.ref_name }}" --pattern '*-setup.exe' --pattern '*-portable.zip' --dir $downloads
-          if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
-          $setup = Get-Item -LiteralPath (Join-Path $downloads "QA.Touchstone_${ver}_x64-setup.exe")
-          $zip = Join-Path $downloads "QA.Touchstone_${ver}_x64-portable.zip"
-          Expand-Archive -LiteralPath $zip -DestinationPath $portable
-          $portableExe = Get-Item -LiteralPath (Join-Path $portable 'QA Touchstone/QA Touchstone.exe')
-          $setupProcess = Start-Process -FilePath $setup.FullName -ArgumentList '/S',"/D=$installed" -WindowStyle Hidden -Wait -PassThru
-          if ($setupProcess.ExitCode -ne 0) { throw "Installer exited with $($setupProcess.ExitCode)" }
-          $apps = @(Get-ChildItem -LiteralPath $installed -Filter '*.exe' -File | Where-Object { $_.Name -notlike '*uninstall*' })
-          if ($apps.Count -ne 1) { throw "Expected one installed app, got $($apps.Count)" }
-          $installedExe = $apps[0]
-          $expectedHash = (Get-FileHash -LiteralPath $portableExe.FullName -Algorithm SHA256).Hash
-          if ((Get-FileHash -LiteralPath $installedExe.FullName -Algorithm SHA256).Hash -ne $expectedHash) {
-            throw 'Installer and portable desktop binaries differ'
-          }
-          foreach ($exe in @($installedExe, $portableExe)) {
-            $actualVersion = (($exe.VersionInfo.FileVersion -split '\.')[0..2] -join '.')
-            if ($actualVersion -ne $ver) { throw "Desktop version mismatch: $actualVersion" }
-            $k6 = Join-Path $exe.DirectoryName 'resources/k6.exe'
-            & $k6 version
-            if ($LASTEXITCODE -ne 0) { throw 'Bundled k6 failed' }
-            $app = Start-Process -FilePath $exe.FullName -WindowStyle Hidden -PassThru
-            try {
-              Start-Sleep -Seconds 10
-              if ($app.HasExited) { throw "Desktop exited early: $($app.ExitCode)" }
-              Write-Host "PASS: $($exe.FullName) v$actualVersion launched with bundled k6"
-            } finally {
-              if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
-            }
-          }
+    uses: ./.github/workflows/verify-desktop-release.yml
+    with:
+      tag: ${{ github.ref_name }}
 
   headless-cli:
     needs: build
